@@ -11,6 +11,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using QuickNotes.Models;
+using QuickNotes.Views;
 using System.Text.RegularExpressions;
 
 namespace QuickNotes;
@@ -24,7 +25,7 @@ public partial class MainWindow : Window
     private Note? _deletedNote;
     private Note? _deletedBackup;
     private Note? _dragNote;
-    private Border? _dragCard;
+    private FrameworkElement? _dragCard;
     private Point _dragStart;
     private bool _isDragging;
     private int _tabCycleIndex;
@@ -67,6 +68,14 @@ public partial class MainWindow : Window
         };
         _undoTimer.Interval = TimeSpan.FromMilliseconds(5000);
         _undoTimer.Tick += (_, _) => FinalizeDelete();
+
+        // Wire NoteCard routed events
+        AddHandler(NoteCard.PinToggleEvent, new RoutedEventHandler(NoteCard_PinToggle));
+        AddHandler(NoteCard.ColorChangedEvent, new RoutedEventHandler(NoteCard_ColorChanged));
+        AddHandler(NoteCard.TitleChangedEvent, new RoutedEventHandler(NoteCard_TitleChanged));
+
+        // Handle action button clicks via standard Button.Click (reliable across DataTemplates)
+        AddHandler(Button.ClickEvent, new RoutedEventHandler(NoteCardAction_Click));
     }
 
     private void RestoreTabs(object? sender, RoutedEventArgs e)
@@ -149,73 +158,83 @@ public partial class MainWindow : Window
         TabBar.Instance.FocusNextTab(ref _tabCycleIndex);
     }
 
-    private void PopOutNote_Click(object sender, RoutedEventArgs e)
+    private void NoteCardAction_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.DataContext is Note note)
+        if (e.OriginalSource is Button btn && btn.DataContext is Note note)
         {
-            foreach (Window w in Application.Current.Windows)
+            switch (btn.Tag?.ToString())
             {
-                if (w is NoteWindow nw && nw.DataContext == note)
-                {
-                    nw.Show();
-                    nw.Activate();
-                    nw.WindowState = WindowState.Normal;
-                    statusText.Text = "Note opened";
-                    return;
-                }
+                case "PopOut":
+                    PopOutNote(note);
+                    break;
+                case "Copy":
+                    CopyNote(note);
+                    break;
+                case "Delete":
+                    DeleteNote(note, btn);
+                    break;
             }
-
-            var win = new NoteWindow(note, store);
-            win.Show();
-            statusText.Text = "Note popped out";
         }
     }
 
-    private void CopyNote_Click(object sender, RoutedEventArgs e)
+    private void PopOutNote(Note note)
     {
-        if (sender is Button btn && btn.DataContext is Note src)
+        foreach (Window w in Application.Current.Windows)
         {
-            var copy = new Note
+            if (w is NoteWindow nw && nw.DataContext == note)
             {
-                Title = src.Title + " (copia)",
-                Text = src.Text,
-                Color = src.Color,
-                LastModified = DateTime.Now,
-            };
-            store.Notes.Add(copy);
-            store.Save();
-            statusText.Text = "Nota duplicada";
-            UpdateStats();
-            scrollViewer.ScrollToBottom();
+                nw.Show();
+                nw.Activate();
+                nw.WindowState = WindowState.Normal;
+                statusText.Text = "Note opened";
+                return;
+            }
         }
+
+        var win = new NoteWindow(note, store);
+        win.Show();
+        statusText.Text = "Note popped out";
     }
 
-    private void DeleteNote_Click(object sender, RoutedEventArgs e)
+    private void CopyNote(Note src)
     {
-        if (sender is Button btn && btn.DataContext is Note note)
+        var copy = new Note
         {
-            _undoTimer.Stop();
-            if (_deletedNote != null) FinalizeDelete();
+            Title = src.Title + " (copia)",
+            Text = src.Text,
+            Color = src.Color,
+            LastModified = DateTime.Now,
+        };
+        store.Notes.Add(copy);
+        store.Save();
+        statusText.Text = "Nota duplicada";
+        UpdateStats();
+        scrollViewer.ScrollToBottom();
+    }
 
-            if (notesList.ItemContainerGenerator.ContainerFromItem(note) is ContentPresenter cp)
-            {
-                var card = FindChild<Border>(cp);
-                if (card != null)
+    private void DeleteNote(Note note, Button btn)
+    {
+        _undoTimer.Stop();
+        if (_deletedNote != null) FinalizeDelete();
+
+        if (notesList.ItemContainerGenerator.ContainerFromItem(note) is ContentPresenter cp)
+        {
+            var noteCard = FindChild<NoteCard>(cp);
+                if (noteCard != null)
                 {
-                    card.MaxHeight = card.ActualHeight;
+                    noteCard.MaxHeight = noteCard.ActualHeight;
                     var fade = AnimationHelper.MakeAnimation(0, 180);
                     var shrink = AnimationHelper.MakeAnimation(0, 180);
                     fade.Completed += (_, _) =>
                     {
-                        card.Visibility = Visibility.Collapsed;
+                        noteCard.Visibility = Visibility.Collapsed;
                         ShowUndo(note);
                     };
-                    card.BeginAnimation(OpacityProperty, fade);
-                    card.BeginAnimation(MaxHeightProperty, shrink);
+                    noteCard.BeginAnimation(OpacityProperty, fade);
+                    noteCard.BeginAnimation(MaxHeightProperty, shrink);
                     return;
                 }
             }
-        }
     }
 
     private void ShowUndo(Note note)
@@ -252,7 +271,7 @@ public partial class MainWindow : Window
         store.Save();
         if (notesList.ItemContainerGenerator.ContainerFromItem(_deletedNote) is ContentPresenter cp)
         {
-            var card = FindChild<Border>(cp);
+            var card = FindChild<NoteCard>(cp);
             if (card != null)
             {
                 card.Visibility = Visibility.Visible;
@@ -304,17 +323,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void NoteTitle_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (sender is TextBox { IsLoaded: false }) return;
-        if (sender is FrameworkElement fe && fe.DataContext is Note note)
-        {
-            note.LastModified = DateTime.Now;
-            note.IsDirty = true;
-        }
-        DebounceSave();
-    }
-
     public NotesStore GetStore() => store;
 
     public void DebounceSave()
@@ -331,67 +339,13 @@ public partial class MainWindow : Window
             : new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA));
     }
 
-    private void NoteCard_Loaded(object sender, RoutedEventArgs e)
-    {
-        if (sender is Border card)
-        {
-            var fade = AnimationHelper.MakeAnimation(0, 1, 220);
-            fade.EasingFunction = new QuadraticEase();
-            card.BeginAnimation(OpacityProperty, fade);
-            card.PreviewMouseLeftButtonDown += Card_MouseDown;
-            card.PreviewMouseMove += Card_MouseMove;
-            card.PreviewMouseLeftButtonUp += Card_MouseUp;
-            card.MouseEnter += Card_MouseEnter;
-            card.MouseLeave += Card_MouseLeave;
-
-            var btn = FindChild<Button>(card);
-            if (btn != null && btn.DataContext is Note note)
-                UpdatePinVisual(btn, note, false);
-        }
-    }
-
-    private void Card_MouseEnter(object sender, MouseEventArgs e)
-    {
-        if (sender is Border card)
-        {
-            var btn = FindChild<Button>(card);
-            if (btn != null && btn.DataContext is Note note)
-                UpdatePinVisual(btn, note, true);
-        }
-    }
-
-    private void Card_MouseLeave(object sender, MouseEventArgs e)
-    {
-        if (sender is Border card)
-        {
-            var btn = FindChild<Button>(card);
-            if (btn != null && btn.DataContext is Note note)
-                UpdatePinVisual(btn, note, false);
-        }
-    }
-
-    private void UpdatePinVisual(Button btn, Note note, bool cardHovered)
-    {
-        var dash = btn.Template.FindName("dashText", btn) as TextBlock;
-        var hover = btn.Template.FindName("pinHoverText", btn) as TextBlock;
-        var pin = btn.Template.FindName("pinText", btn) as TextBlock;
-        if (dash == null || hover == null || pin == null) return;
-
-        double toDash = 0, toHover = 0, toPin = 0;
-        if (note.IsPinned) { toPin = 1; }
-        else if (cardHovered) { toHover = 1; }
-        else { toDash = 1; }
-
-        dash.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(toDash, 150));
-        hover.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(toHover, 150));
-        pin.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(toPin, 150));
-    }
-
     private void Card_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed) return;
         if (e.OriginalSource is ButtonBase or TextBox or TextBlock) return;
-        if (sender is Border card && card.DataContext is Note note)
+
+        var card = FindParent<NoteCard>(e.OriginalSource as DependencyObject);
+        if (card != null && card.DataContext is Note note)
         {
             _dragNote = note;
             _dragCard = card;
@@ -456,63 +410,6 @@ public partial class MainWindow : Window
         _dragNote = null;
     }
 
-    private void PinNote_Changed(object sender, RoutedEventArgs e)
-    {
-        if (sender is ToggleButton tb && tb.DataContext is Note note)
-        {
-            note.IsPinned = tb.IsChecked == true;
-            note.LastModified = DateTime.Now;
-            note.IsDirty = false;
-            MoveNoteToCorrectPosition(note);
-            store.Save();
-        }
-    }
-
-    private void PinIndicator_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button btn && btn.DataContext is Note note)
-        {
-            bool wasPinned = note.IsPinned;
-            note.IsPinned = !wasPinned;
-            note.LastModified = DateTime.Now;
-            note.IsDirty = false;
-
-            var card = FindParent<Border>(btn);
-            UpdatePinVisual(btn, note, card?.IsMouseOver ?? false);
-
-            Point? oldPos = card != null
-                ? card.TranslatePoint(new Point(0, 0), notesList)
-                : null;
-
-            MoveNoteToCorrectPosition(note);
-            store.Save();
-
-            if (card != null && oldPos.HasValue)
-            {
-                card.UpdateLayout();
-                var newPos = card.TranslatePoint(new Point(0, 0), notesList);
-                var offset = oldPos.Value.Y - newPos.Y;
-                if (Math.Abs(offset) > 1)
-                {
-                    var tt = new TranslateTransform(0, offset);
-                    card.RenderTransform = tt;
-                    var slide = AnimationHelper.MakeAnimation(offset, 0, 200);
-                    slide.EasingFunction = new QuadraticEase();
-                    slide.Completed += (_, _) => card.RenderTransform = null;
-                    tt.BeginAnimation(TranslateTransform.YProperty, slide);
-                }
-            }
-
-            var st = new ScaleTransform(0.7, 0.7);
-            btn.RenderTransform = st;
-            btn.RenderTransformOrigin = new Point(0.5, 0.5);
-            var anim = AnimationHelper.MakeAnimation(0.7, 1.0, 150);
-            anim.EasingFunction = new QuadraticEase();
-            st.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
-            st.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
-        }
-    }
-
     private void MoveNoteToCorrectPosition(Note note)
     {
         int idx = store.Notes.IndexOf(note);
@@ -527,47 +424,38 @@ public partial class MainWindow : Window
             store.Notes.Move(idx, target);
     }
 
-    private void ColorDot_MouseDown(object sender, MouseButtonEventArgs e)
+    // === NoteCard routed event handlers ===
+
+    private void NoteCard_PinToggle(object sender, RoutedEventArgs e)
     {
-        if (sender is Border border && border.Tag is string color &&
-            border.DataContext is Note note)
+        if (e.Source is NoteCard card && card.DataContext is Note note)
         {
-            note.Color = color;
+            note.IsPinned = !note.IsPinned;
             note.LastModified = DateTime.Now;
             note.IsDirty = false;
+            MoveNoteToCorrectPosition(note);
             store.Save();
-            FlashElement(border);
-            statusText.Text = "Color updated";
-            CloseCardPopup(border);
         }
     }
 
-    private void CardCurrentColor_MouseDown(object sender, MouseButtonEventArgs e)
+    private void NoteCard_ColorChanged(object sender, RoutedEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Left || sender is not Border dot) return;
-        if (dot.Parent is Panel panel)
+        if (e.Source is NoteCard card && card.DataContext is Note note)
         {
-            foreach (var child in panel.Children)
-                if (child is Popup popup) { popup.IsOpen = !popup.IsOpen; break; }
+            note.LastModified = DateTime.Now;
+            store.Save();
+            statusText.Text = "Color actualizado";
         }
     }
 
-    private static void CloseCardPopup(DependencyObject child)
+    private void NoteCard_TitleChanged(object sender, RoutedEventArgs e)
     {
-        DependencyObject? p = child;
-        while (p != null)
+        if (e.Source is NoteCard card && card.DataContext is Note note)
         {
-            if (p is Popup pop) { pop.IsOpen = false; break; }
-            p = LogicalTreeHelper.GetParent(p);
+            note.LastModified = DateTime.Now;
+            note.IsDirty = true;
         }
-    }
-
-    private void FlashElement(UIElement el)
-    {
-        var down = AnimationHelper.MakeAnimation(0.7, 80);
-        var up = AnimationHelper.MakeAnimation(1, 120);
-        down.Completed += (_, _) => el.BeginAnimation(OpacityProperty, up);
-        el.BeginAnimation(OpacityProperty, down);
+        DebounceSave();
     }
 
     private void Topmost_Changed(object sender, RoutedEventArgs e)
