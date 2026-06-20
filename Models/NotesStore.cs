@@ -42,6 +42,14 @@ public class NotesStore
     {
         var conn = new SqliteConnection($"Data Source={dbPath}");
         conn.Open();
+
+        // WAL mode for better concurrent read/write performance
+        using (var pragma = conn.CreateCommand())
+        {
+            pragma.CommandText = "PRAGMA journal_mode=WAL";
+            pragma.ExecuteNonQuery();
+        }
+
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             CREATE TABLE IF NOT EXISTS notes (

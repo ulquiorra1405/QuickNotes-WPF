@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -76,6 +77,17 @@ public partial class MainWindow : Window
 
         // Handle action button clicks via standard Button.Click (reliable across DataTemplates)
         AddHandler(Button.ClickEvent, new RoutedEventHandler(NoteCardAction_Click));
+
+        // Save on critical events for data safety
+        Deactivated += (_, _) => { store.Save(); };
+        StateChanged += (_, _) =>
+        {
+            if (WindowState == WindowState.Minimized)
+            {
+                store.Save();
+                store.SaveSettings();
+            }
+        };
     }
 
     private void RestoreTabs(object? sender, RoutedEventArgs e)
@@ -109,6 +121,15 @@ public partial class MainWindow : Window
                 }
             }
         }
+
+        // Clean up stale IDs that no longer exist
+        var validIds = new List<string>();
+        foreach (var idStr in ids)
+        {
+            if (Guid.TryParse(idStr, out var id) && store.Notes.Any(n => n.Id == id))
+                validIds.Add(idStr);
+        }
+        store.OpenNoteIds = string.Join(",", validIds);
     }
 
     private void AddNote_Click(object sender, RoutedEventArgs e)
