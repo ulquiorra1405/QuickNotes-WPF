@@ -1,0 +1,69 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# Rider
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.pdb
+*.tmp
+*.bak
+*.cache
+*.obj
+*.log
+*.ilk
+*.aps
+*.bsc
+*.sbr
+*.res
+*.pch
+*.exp
+*.lib
+*.ncb
+*.opts
+*.opensdf
+*.sdf
+*.vsscc
+*.vssscc
+*.vspscc
+*.vspccc
+*.build.log
+*.log
+
+# NuGet
+.nuget/
+NuGet.exe
+NuGet.config
+packages/
+
+# Project files
+*.csproj.user
+*.vcxproj.user
+*.sln.docstates
+
+# Publish output
+publish/
+
+# Local databases and logs
+notes.db
+error.log
+*.json.bak
+*.db.bak
+backups/
+
+# Other
+Thumbs.db
+ehthumbs.db
+.DS_Store
+*.swp
+*.~
+
+# For generated PowerShell files (my own cleanup)
+*.ps1

@@ -1,0 +1,532 @@
+﻿<Window x:Class="QuickNotes.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:QuickNotes"
+        mc:Ignorable="d"
+        Title="QN" Height="420" Width="380"
+        Topmost="True"
+        ResizeMode="CanResize"
+        WindowStartupLocation="Manual"
+        Left="100" Top="100"
+        Background="#1E1E1E"
+        FontFamily="Segoe UI"
+        KeyDown="Window_KeyDown">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="5"
+                      CornerRadius="12"
+                      UseAeroCaptionButtons="False" GlassFrameThickness="0"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <Style x:Key="ColorDot" TargetType="Border">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="Margin" Value="3,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="BorderBrush" Value="#40000000"/>
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="#80000000"/>
+                    <Setter Property="RenderTransform">
+                        <Setter.Value>
+                            <ScaleTransform ScaleX="1.22" ScaleY="1.22"/>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="NoteCard" TargetType="Border">
+            <Setter Property="Margin" Value="10,5,0,5"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+
+        <Style x:Key="TitleBox" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="12,8,12,2"/>
+            <Setter Property="MaxLength" Value="60"/>
+        </Style>
+
+        <Style x:Key="NoteTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontFamily" Value="Calibri"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="AcceptsReturn" Value="True"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Padding" Value="12,2,3,6"/>
+            <Setter Property="MinHeight" Value="40"/>
+            <Setter Property="TextBlock.LineHeight" Value="18"/>
+            <Setter Property="TextBlock.LineStackingStrategy" Value="BlockLineHeight"/>
+        </Style>
+
+        <Style x:Key="HeaderBtn" TargetType="ButtonBase">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#CCFFFFFF"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ButtonBase">
+                        <Border x:Name="bg" Background="{TemplateBinding Background}"
+                                CornerRadius="6" Padding="0"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="scaleTf" ScaleX="1" ScaleY="1"/>
+                            </Border.RenderTransform>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#3FFFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#6FFFFFFF"/>
+                            </Trigger>
+                            <EventTrigger RoutedEvent="ButtonBase.Click">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="scaleTf" Storyboard.TargetProperty="ScaleX"
+                                                        From="0.7" To="1" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="scaleTf" Storyboard.TargetProperty="ScaleY"
+                                                        From="0.7" To="1" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CardBtn" TargetType="ButtonBase">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ButtonBase">
+                        <Border x:Name="bg" Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="0">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#20000000"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MenuItemBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#CCFFFFFF"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bg" Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#3FFFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#6FFFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </Window.Resources>
+
+    <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="40"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="26"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title Bar -->
+            <Border x:Name="titleBar" Grid.Row="0" Background="#262626" Padding="10,0"
+                    MouseDown="TitleBar_MouseDown">
+                <Grid x:Name="titleBarGrid">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="menuBtn" Grid.Column="0"
+                            Style="{StaticResource HeaderBtn}"
+                            FontSize="12" FontWeight="SemiBold"
+                            Foreground="#BBFFFFFF"
+                            Content="QN"
+                            Click="MenuBtn_Click"/>
+                    <Popup x:Name="menuPopup" Placement="Bottom"
+                           PlacementTarget="{Binding ElementName=menuBtn}"
+                           StaysOpen="False" AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Background="#2A2A2A" CornerRadius="8" Padding="4"
+                                BorderBrush="#40FFFFFF" BorderThickness="1">
+                            <StackPanel>
+                                <Button Style="{StaticResource MenuItemBtn}" Click="About_Click">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="24"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="ℹ" FontWeight="Normal"
+                                                   Foreground="#CCFFFFFF" FontSize="13"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="Acerca de"
+                                                   Foreground="#CCFFFFFF" FontSize="13"/>
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource MenuItemBtn}" Click="Settings_Click">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="24"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="⚙" FontWeight="Normal"
+                                                   Foreground="#CCFFFFFF" FontSize="13"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="Ajustes"
+                                                   Foreground="#CCFFFFFF" FontSize="13"/>
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource MenuItemBtn}" Click="MenuExit_Click">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="24"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="✕" FontWeight="Normal"
+                                                   Foreground="#CCFFFFFF" FontSize="13"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="Salir"
+                                                   Foreground="#CCFFFFFF" FontSize="13"/>
+                                    </Grid>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                    <Grid Grid.Column="1" Width="120"
+                          Margin="12,0,12,0"
+                          VerticalAlignment="Center" Height="26">
+                        <Border x:Name="searchBorder" BorderBrush="#40FFFFFF" BorderThickness="1" CornerRadius="4"
+                                Background="Transparent"/>
+                        <TextBlock x:Name="searchHint" Text="Búsqueda rápida"
+                                   Foreground="#44FFFFFF" FontSize="12"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   IsHitTestVisible="False"
+                                   Visibility="Visible"/>
+                        <TextBox x:Name="searchBox"
+                                 Background="Transparent" BorderThickness="0"
+                                 Foreground="#DDDDDD" FontSize="12"
+                                 VerticalAlignment="Center"
+                                 Padding="8,0,0,0"
+                                 CaretBrush="#DDDDDD"
+                                 TextChanged="Search_TextChanged"
+                                 GotFocus="Search_GotFocus"
+                                 LostFocus="Search_LostFocus"/>
+                    </Grid>
+                    <ToggleButton x:Name="pinBtn" Grid.Column="2"
+                                  FontSize="12"
+                                  IsChecked="True"
+                                  Checked="Topmost_Changed"
+                                  Unchecked="Topmost_Changed">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton" BasedOn="{StaticResource HeaderBtn}">
+                                <Setter Property="Content" Value="📌"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter Property="Content" Value="📍"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+                    <Button x:Name="addBtn" Grid.Column="3"
+                            Style="{StaticResource HeaderBtn}"
+                            FontSize="20" FontWeight="Light"
+                            Click="AddNote_Click"
+                            Content="+"/>
+                    <Button x:Name="minBtn" Grid.Column="4"
+                            Style="{StaticResource HeaderBtn}"
+                            Click="Minimize_Click"
+                            Content="─"/>
+
+                </Grid>
+            </Border>
+
+            <!-- Notes List -->
+            <ScrollViewer x:Name="scrollViewer" Grid.Row="1"
+                          Background="#1E1E1E"
+                          VerticalScrollBarVisibility="Visible"
+                          CanContentScroll="False"
+                          Padding="0,2,0,0">
+                <ItemsControl x:Name="notesList" Margin="0,0,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                              <Border Style="{DynamicResource NoteCard}"
+                                    Background="{Binding Color}"
+                                    BorderBrush="#30FFFFFF" BorderThickness="1"
+                                    Opacity="0" AllowDrop="True"
+                                    Loaded="NoteCard_Loaded">
+                                 <Grid AllowDrop="True">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*" MaxHeight="95"/>
+                                        <RowDefinition Height="36"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Title with dash -->
+                                      <Grid Grid.Row="0" Margin="6,6,3,0" AllowDrop="True">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="16"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="pinBtn" Grid.Column="0" Width="16" Height="18"
+                                                Background="Transparent" Cursor="Hand"
+                                                BorderThickness="0"
+                                                VerticalAlignment="Center"
+                                                Padding="0"
+                                                Click="PinIndicator_Click">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Foreground" Value="{Binding TextForeground}"/>
+                                                    <Setter Property="FontSize" Value="13"/>
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border x:Name="bg"
+                                                                        Background="{TemplateBinding Background}"
+                                                                        BorderThickness="0"
+                                                                        CornerRadius="3"
+                                                                        Padding="0">
+                                                                    <Grid>
+                                                                        <TextBlock x:Name="dashText" Text="-"
+                                                                                   HorizontalAlignment="Center"
+                                                                                   VerticalAlignment="Center"
+                                                                                   Foreground="{TemplateBinding Foreground}"
+                                                                                   FontSize="{TemplateBinding FontSize}"/>
+                                                                        <TextBlock x:Name="pinHoverText" Text="📌"
+                                                                                   HorizontalAlignment="Center"
+                                                                                   VerticalAlignment="Center"
+                                                                                   Foreground="{TemplateBinding Foreground}"
+                                                                                   FontSize="{TemplateBinding FontSize}"
+                                                                                   Opacity="0"/>
+                                                                        <TextBlock x:Name="pinText" Text="📍"
+                                                                                   HorizontalAlignment="Center"
+                                                                                   VerticalAlignment="Center"
+                                                                                   Foreground="{TemplateBinding Foreground}"
+                                                                                   FontSize="{TemplateBinding FontSize}"
+                                                                                   Opacity="0"/>
+                                                                    </Grid>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="bg" Property="Background" Value="#20000000"/>
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                        <Ellipse Grid.Column="1" Width="6" Height="6" Fill="#FF4444"
+                                                 VerticalAlignment="Center" Margin="0,2,4,2"
+                                                 IsHitTestVisible="False">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsDirty}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+                                        <TextBox Grid.Column="2" Style="{DynamicResource TitleBox}"
+                                                 Foreground="{Binding TextForeground}"
+                                                 Padding="0,2,0,2"
+                                                 Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"
+                                                 TextChanged="NoteTitle_TextChanged"/>
+                                        <TextBlock Grid.Column="3"
+                                                   Text="{Binding LastModifiedDisplay}"
+                                                   Foreground="{Binding TextForeground}" Opacity="0.53"
+                                                   FontSize="10" VerticalAlignment="Center"
+                                                   Margin="0,0,4,0"
+                                                   IsHitTestVisible="False"/>
+                                    </Grid>
+
+                                    <!-- Separator -->
+                                    <Rectangle Grid.Row="0" Fill="#20000000" Height="1"
+                                                Margin="12,0,3,0" VerticalAlignment="Bottom"/>
+
+                                    <!-- Body -->
+                                     <TextBox Grid.Row="1" Style="{DynamicResource NoteTextBox}"
+                                              Foreground="{Binding TextForeground}"
+                                              Text="{Binding PlainText, Mode=OneWay}"
+                                              IsReadOnly="True"
+                                              VerticalScrollBarVisibility="Auto"/>
+
+                                    <!-- Bottom bar: color dots + actions -->
+                                        <Border Grid.Row="2" Background="#18000000"
+                                             CornerRadius="0,0,10,10" AllowDrop="True">
+                                        <Grid Margin="6,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                                        VerticalAlignment="Center">
+                                                 <Border x:Name="cardCurrentColor" Style="{StaticResource ColorDot}"
+                                                         Background="{Binding Color}"
+                                                         MouseDown="CardCurrentColor_MouseDown"/>
+                                                 <Popup Placement="Top"
+                                                        PlacementTarget="{Binding ElementName=cardCurrentColor}"
+                                                        StaysOpen="True" AllowsTransparency="True"
+                                                        PopupAnimation="Fade">
+                                                     <Border Background="{Binding Color}" CornerRadius="6" Padding="5"
+                                                             BorderBrush="#40000000" BorderThickness="1">
+                                                         <StackPanel>
+                                                             <StackPanel Orientation="Horizontal">
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#F8F9FA"
+                                                                         Tag="#F8F9FA" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#FDDED7"
+                                                                         Tag="#FDDED7" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#FDE8C8"
+                                                                         Tag="#FDE8C8" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#FEF3C4"
+                                                                         Tag="#FEF3C4" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#D4EDDA"
+                                                                         Tag="#D4EDDA" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#C8F0EA"
+                                                                         Tag="#C8F0EA" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#D0E4F5"
+                                                                         Tag="#D0E4F5" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#E2D5F6"
+                                                                         Tag="#E2D5F6" MouseDown="ColorDot_MouseDown"/>
+                                                             </StackPanel>
+                                                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#3A3A3A"
+                                                                         Tag="#3A3A3A" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#4A3030"
+                                                                         Tag="#4A3030" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#304A30"
+                                                                         Tag="#304A30" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#4A4A30"
+                                                                         Tag="#4A4A30" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#304A4A"
+                                                                         Tag="#304A4A" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#4A304A"
+                                                                         Tag="#4A304A" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#30304A"
+                                                                         Tag="#30304A" MouseDown="ColorDot_MouseDown"/>
+                                                                 <Border Style="{StaticResource ColorDot}" Background="#4A3A30"
+                                                                         Tag="#4A3A30" MouseDown="ColorDot_MouseDown"/>
+                                                             </StackPanel>
+                                                         </StackPanel>
+                                                     </Border>
+                                                 </Popup>
+                                             </StackPanel>
+
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                <Button Content="↗" Style="{StaticResource CardBtn}"
+                                                        FontSize="13" Foreground="{Binding TextForeground}" Click="PopOutNote_Click"/>
+                                                <Button Content="⧉" Style="{StaticResource CardBtn}"
+                                                        FontSize="11" Foreground="{Binding TextForeground}" Click="CopyNote_Click"/>
+                                                <Button Content="✕" Style="{StaticResource CardBtn}"
+                                                        FontSize="11" Foreground="{Binding TextForeground}" Click="DeleteNote_Click"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Status Bar -->
+            <Border x:Name="statusBar" Grid.Row="2" Background="#262626" Padding="10,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="statusText" Grid.Column="0"
+                               Foreground="#55FFFFFF" FontSize="10"
+                               VerticalAlignment="Center"/>
+                    <TextBlock x:Name="statsText" Grid.Column="1"
+                               Foreground="#44FFFFFF" FontSize="10"
+                               VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <TextBlock x:Name="undoLink" Grid.Column="2"
+                               Foreground="#88FFDD" FontSize="10"
+                               VerticalAlignment="Center" Margin="0,0,12,0"
+                               Visibility="Collapsed"
+                               TextDecorations="Underline"
+                               Cursor="Hand"
+                               MouseDown="Undo_Click">Deshacer</TextBlock>
+                    <TextBlock Grid.Column="3" Foreground="#44FFFFFF" FontSize="10"
+                               VerticalAlignment="Center">
+                        <Hyperlink x:Name="clearAllLink" NavigateUri=""
+                                   Foreground="#55FFFFFF"
+                                   Click="ClearAll_Click"
+                                   TextDecorations="None">Clear all</Hyperlink>
+                    </TextBlock>
+                </Grid>
+            </Border>
+        </Grid>
+</Window>
