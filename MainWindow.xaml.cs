@@ -1064,7 +1064,8 @@ public partial class MainWindow : Window
         var newStyle = new Style(targetType, oldStyle.BasedOn);
         foreach (var s in oldStyle.Setters.OfType<Setter>())
         {
-            var clone = new Setter(s.Property, s.Value);
+            object clonedValue = (s.Value is Thickness t) ? new Thickness(t.Left, t.Top, t.Right, t.Bottom) : s.Value;
+            var clone = new Setter(s.Property, clonedValue);
             modifier(clone);
             newStyle.Setters.Add(clone);
         }
@@ -1376,128 +1377,40 @@ public partial class MainWindow : Window
 
     private static Style MakeBtnStyle(Color fg, Color bg, Color fgHover, Color bgHover)
     {
-        var xaml = $@"
-<Style xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
-       TargetType=""Button"">
-    <Setter Property=""Foreground"" Value=""#{fg.R:X2}{fg.G:X2}{fg.B:X2}""/>
-    <Setter Property=""Background"" Value=""#{bg.R:X2}{bg.G:X2}{bg.B:X2}""/>
-    <Setter Property=""BorderThickness"" Value=""0""/>
-    <Setter Property=""Template"">
-        <Setter.Value>
-            <ControlTemplate TargetType=""Button"">
-                <Border Background=""{{TemplateBinding Background}}""
-                        BorderThickness=""0""
-                        SnapsToDevicePixels=""True""
-                        CornerRadius=""4"">
-                    <ContentPresenter HorizontalAlignment=""Center""
-                                      VerticalAlignment=""Center""
-                                      SnapsToDevicePixels=""True""
-                                      Content=""{{TemplateBinding Content}}""
-                                      ContentTemplate=""{{TemplateBinding ContentTemplate}}""/>
-                </Border>
-                <ControlTemplate.Triggers>
-                    <Trigger Property=""IsMouseOver"" Value=""True"">
-                        <Setter Property=""Background""
-                                Value=""#{bgHover.R:X2}{bgHover.G:X2}{bgHover.B:X2}""/>
-                        <Setter Property=""Foreground""
-                                Value=""#{fgHover.R:X2}{fgHover.G:X2}{fgHover.B:X2}""/>
-                    </Trigger>
-                </ControlTemplate.Triggers>
-            </ControlTemplate>
-        </Setter.Value>
-    </Setter>
-</Style>";
-        return (Style)System.Windows.Markup.XamlReader.Parse(xaml);
+        var style = new Style(typeof(Button));
+        style.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(fg)));
+        style.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(bg)));
+        style.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
+
+        var template = new ControlTemplate(typeof(Button));
+        var border = new FrameworkElementFactory(typeof(Border));
+        border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+        border.SetValue(Border.BorderThicknessProperty, new Thickness(0));
+        border.SetValue(Border.SnapsToDevicePixelsProperty, true);
+        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+
+        var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+        presenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        presenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+        presenter.SetValue(ContentPresenter.SnapsToDevicePixelsProperty, true);
+        presenter.SetValue(ContentPresenter.ContentProperty, new TemplateBindingExtension(ContentControl.ContentProperty));
+        presenter.SetValue(ContentPresenter.ContentTemplateProperty, new TemplateBindingExtension(ContentControl.ContentTemplateProperty));
+        border.AppendChild(presenter);
+
+        template.VisualTree = border;
+
+        var hover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+        hover.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(bgHover)));
+        hover.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(fgHover)));
+        template.Triggers.Add(hover);
+
+        style.Setters.Add(new Setter(Control.TemplateProperty, template));
+        return style;
     }
 
     private static Style MakeComboStyle()
     {
-        var xaml = @"
-<Style xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
-       xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
-       TargetType=""ComboBox"">
-    <Setter Property=""Foreground"" Value=""#DDDDDD""/>
-    <Setter Property=""Background"" Value=""#3A3A3A""/>
-    <Setter Property=""BorderBrush"" Value=""#40FFFFFF""/>
-    <Setter Property=""BorderThickness"" Value=""0""/>
-    <Setter Property=""Padding"" Value=""8,0,0,0""/>
-    <Setter Property=""FontSize"" Value=""13""/>
-    <Setter Property=""Template"">
-        <Setter.Value>
-            <ControlTemplate TargetType=""ComboBox"">
-                <Grid Background=""Transparent"">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width=""*""/>
-                        <ColumnDefinition Width=""Auto""/>
-                    </Grid.ColumnDefinitions>
-                    <Border Grid.ColumnSpan=""2"" x:Name=""bg""
-                            Background=""{TemplateBinding Background}""
-                            CornerRadius=""4"" IsHitTestVisible=""False""/>
-                    <ContentPresenter Grid.Column=""0"" Margin=""{TemplateBinding Padding}""
-                                      HorizontalAlignment=""Left"" VerticalAlignment=""Center""
-                                      Content=""{TemplateBinding SelectionBoxItem}""
-                                      ContentTemplate=""{TemplateBinding SelectionBoxItemTemplate}""/>
-                    <Border Grid.Column=""1"" Width=""24"" Background=""Transparent""
-                            HorizontalAlignment=""Center"">
-                        <Path Data=""M0,0 L10,0 L5,6 Z"" Fill=""#88FFFFFF""
-                              VerticalAlignment=""Center"" HorizontalAlignment=""Center""/>
-                    </Border>
-                    <Popup Grid.ColumnSpan=""2"" x:Name=""PART_Popup""
-                           IsOpen=""{TemplateBinding IsDropDownOpen}""
-                           Placement=""Bottom"" AllowsTransparency=""True""
-                           Focusable=""False"" PopupAnimation=""Fade"">
-                        <Border Background=""#2A2A2A"" BorderBrush=""#40FFFFFF""
-                                BorderThickness=""1"" CornerRadius=""4"" Padding=""2""
-                                MaxHeight=""200"">
-                            <ScrollViewer>
-                                <ItemsPresenter SnapsToDevicePixels=""True""/>
-                            </ScrollViewer>
-                        </Border>
-                    </Popup>
-                </Grid>
-                <ControlTemplate.Triggers>
-                    <Trigger Property=""IsMouseOver"" Value=""True"">
-                        <Setter TargetName=""bg"" Property=""Background"" Value=""#555555""/>
-                    </Trigger>
-                    <Trigger Property=""IsDropDownOpen"" Value=""True"">
-                        <Setter TargetName=""bg"" Property=""Background"" Value=""#555555""/>
-                    </Trigger>
-                </ControlTemplate.Triggers>
-            </ControlTemplate>
-        </Setter.Value>
-    </Setter>
-    <Setter Property=""ItemContainerStyle"">
-        <Setter.Value>
-            <Style TargetType=""ComboBoxItem"">
-                <Setter Property=""Background"" Value=""Transparent""/>
-                <Setter Property=""Foreground"" Value=""#CCCCCC""/>
-                <Setter Property=""FontSize"" Value=""13""/>
-                <Setter Property=""Height"" Value=""26""/>
-                <Setter Property=""Padding"" Value=""6,0""/>
-                <Setter Property=""BorderThickness"" Value=""0""/>
-                <Setter Property=""Template"">
-                    <Setter.Value>
-                        <ControlTemplate TargetType=""ComboBoxItem"">
-                            <Border x:Name=""ibg"" Background=""{TemplateBinding Background}""
-                                    CornerRadius=""3"" Padding=""{TemplateBinding Padding}"">
-                                <ContentPresenter HorizontalAlignment=""Left"" VerticalAlignment=""Center""/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property=""IsMouseOver"" Value=""True"">
-                                    <Setter TargetName=""ibg"" Property=""Background"" Value=""#3FFFFFFF""/>
-                                </Trigger>
-                                <Trigger Property=""IsSelected"" Value=""True"">
-                                    <Setter TargetName=""ibg"" Property=""Background"" Value=""#5FFFFFFF""/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
-        </Setter.Value>
-    </Setter>
-</Style>";
-        return (Style)System.Windows.Markup.XamlReader.Parse(xaml);
+        return (Style)System.Windows.Application.Current.FindResource("SettingsComboBoxStyle");
     }
 
     private static T? FindChild<T>(DependencyObject parent) where T : DependencyObject

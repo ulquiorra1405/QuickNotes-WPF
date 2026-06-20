@@ -123,87 +123,30 @@ public class NotesStore
 
     private void SaveSettingsToDb(SqliteConnection conn)
     {
+        SaveSetting(conn, "MainLeft", MainLeft.ToString(CultureInfo.InvariantCulture));
+        SaveSetting(conn, "MainTop", MainTop.ToString(CultureInfo.InvariantCulture));
+        SaveSetting(conn, "MainWidth", MainWidth.ToString(CultureInfo.InvariantCulture));
+        SaveSetting(conn, "MainHeight", MainHeight.ToString(CultureInfo.InvariantCulture));
+        SaveSetting(conn, "Theme", Theme);
+        SaveSetting(conn, "StartWithWindows", StartWithWindows ? "1" : "0");
+        SaveSetting(conn, "AutoSaveInterval", AutoSaveInterval.ToString(CultureInfo.InvariantCulture));
+        SaveSetting(conn, "BackupEnabled", BackupEnabled ? "1" : "0");
+        SaveSetting(conn, "ConfirmOnExit", ConfirmOnExit ? "1" : "0");
+        SaveSetting(conn, "DefaultColor", DefaultColor ?? "");
+        SaveSetting(conn, "NoteFontSize", NoteFontSize.ToString(CultureInfo.InvariantCulture));
+        SaveSetting(conn, "TabBarPosition", TabBarPosition ?? "right");
+        SaveSetting(conn, "CompactMode", CompactMode ? "1" : "0");
+        SaveSetting(conn, "NoteFontFamily", NoteFontFamily ?? "Calibri");
+        SaveSetting(conn, "AnimationsEnabled", AnimationsEnabled ? "1" : "0");
+        SaveSetting(conn, "OpenNoteIds", OpenNoteIds ?? "");
+    }
+
+    private static void SaveSetting(SqliteConnection conn, string key, string? value)
+    {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "INSERT OR REPLACE INTO settings (Key, Value) VALUES ($k, $v)";
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "MainLeft");
-        cmd.Parameters.AddWithValue("$v", MainLeft.ToString(CultureInfo.InvariantCulture));
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "MainTop");
-        cmd.Parameters.AddWithValue("$v", MainTop.ToString(CultureInfo.InvariantCulture));
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "MainWidth");
-        cmd.Parameters.AddWithValue("$v", MainWidth.ToString(CultureInfo.InvariantCulture));
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "MainHeight");
-        cmd.Parameters.AddWithValue("$v", MainHeight.ToString(CultureInfo.InvariantCulture));
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "Theme");
-        cmd.Parameters.AddWithValue("$v", Theme);
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "StartWithWindows");
-        cmd.Parameters.AddWithValue("$v", StartWithWindows ? "1" : "0");
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "AutoSaveInterval");
-        cmd.Parameters.AddWithValue("$v", AutoSaveInterval.ToString(CultureInfo.InvariantCulture));
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "BackupEnabled");
-        cmd.Parameters.AddWithValue("$v", BackupEnabled ? "1" : "0");
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "ConfirmOnExit");
-        cmd.Parameters.AddWithValue("$v", ConfirmOnExit ? "1" : "0");
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "DefaultColor");
-        cmd.Parameters.AddWithValue("$v", DefaultColor ?? "");
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "NoteFontSize");
-        cmd.Parameters.AddWithValue("$v", NoteFontSize.ToString(CultureInfo.InvariantCulture));
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "TabBarPosition");
-        cmd.Parameters.AddWithValue("$v", TabBarPosition ?? "right");
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "CompactMode");
-        cmd.Parameters.AddWithValue("$v", CompactMode ? "1" : "0");
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "NoteFontFamily");
-        cmd.Parameters.AddWithValue("$v", NoteFontFamily ?? "Calibri");
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "AnimationsEnabled");
-        cmd.Parameters.AddWithValue("$v", AnimationsEnabled ? "1" : "0");
-        cmd.ExecuteNonQuery();
-
-        cmd.Parameters.Clear();
-        cmd.Parameters.AddWithValue("$k", "OpenNoteIds");
-        cmd.Parameters.AddWithValue("$v", OpenNoteIds ?? "");
+        cmd.Parameters.AddWithValue("$k", key);
+        cmd.Parameters.AddWithValue("$v", value ?? "");
         cmd.ExecuteNonQuery();
     }
 
