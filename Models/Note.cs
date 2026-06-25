@@ -42,8 +42,6 @@ public class Note : INotifyPropertyChanged
         set { _color = value; OnPropertyChanged(); OnPropertyChanged(nameof(TextForeground)); }
     }
 
-    public bool IsMinimized { get; set; }
-
     private bool _isDirty;
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsDirty

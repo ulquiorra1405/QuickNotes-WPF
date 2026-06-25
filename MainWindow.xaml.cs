@@ -29,7 +29,6 @@ public partial class MainWindow : Window
     private FrameworkElement? _dragCard;
     private Point _dragStart;
     private bool _isDragging;
-    private int _tabCycleIndex;
 
     public MainWindow()
     {
@@ -50,6 +49,10 @@ public partial class MainWindow : Window
         Top = store.MainTop;
         Width = store.MainWidth;
         Height = store.MainHeight;
+        // Clamp to visible screen
+        var mr = MonitorHelper.ClampToScreen(Left, Top, Width, Height);
+        Left = mr.Left;
+        Top = mr.Top;
 
         statusText.Text = "Ready";
         UpdateStats();
@@ -92,15 +95,7 @@ public partial class MainWindow : Window
 
     private void RestoreTabs(object? sender, RoutedEventArgs e)
     {
-        TabBar bar = TabBar.Instance;
-        bar.SetPosition(store.TabBarPosition);
-        foreach (var note in store.Notes.Where(n => n.IsMinimized))
-        {
-            var win = new NoteWindow(note, store);
-            bar.AddTab(win, note);
-            win.Hide();
-        }
-        bar.ShowTabBar();
+        // No-op: Tab restoration removed in cleanup.
     }
 
     private void RestoreOpenWindows(object? sender, RoutedEventArgs e)
@@ -112,7 +107,7 @@ public partial class MainWindow : Window
             if (Guid.TryParse(idStr, out var id))
             {
                 var note = store.Notes.FirstOrDefault(n => n.Id == id);
-                if (note == null || note.IsMinimized) continue;
+                if (note == null) continue;
                 bool alreadyOpen = Application.Current.Windows.OfType<NoteWindow>().Any(w => w.DataContext == note);
                 if (!alreadyOpen)
                 {
@@ -156,7 +151,6 @@ public partial class MainWindow : Window
                 case Key.F: searchBox.Focus(); e.Handled = true; break;
                 case Key.S: store.Save(); store.SaveSettings(); statusText.Text = "Saved"; e.Handled = true; break;
                 case Key.Z: UndoLastDelete(); e.Handled = true; break;
-                case Key.Tab: CycleTabBar(); e.Handled = true; break;
                 case Key.D1: Topmost = !Topmost; pinBtn.IsChecked = Topmost; e.Handled = true; break;
             }
         }
@@ -171,12 +165,6 @@ public partial class MainWindow : Window
     private void UndoLastDelete()
     {
         if (_deletedNote != null) Undo_Click(null!, null!);
-    }
-
-    private void CycleTabBar()
-    {
-        if (TabBar.Instance.TabCount == 0) return;
-        TabBar.Instance.FocusNextTab(ref _tabCycleIndex);
     }
 
     private void NoteCardAction_Click(object sender, RoutedEventArgs e)
@@ -267,7 +255,6 @@ public partial class MainWindow : Window
             Title = note.Title,
             Text = note.Text,
             Color = note.Color,
-            IsMinimized = note.IsMinimized,
             LastModified = note.LastModified,
             Order = note.Order,
             IsPinned = note.IsPinned,
@@ -276,7 +263,12 @@ public partial class MainWindow : Window
             WinWidth = note.WinWidth,
             WinHeight = note.WinHeight,
         };
-        TabBar.Instance.RemoveTabsByNote(note);
+        // Close any NoteWindows for this note (in Mini or Normal mode)
+        for (int i = Application.Current.Windows.Count - 1; i >= 0; i--)
+        {
+            if (Application.Current.Windows[i] is NoteWindow nw && nw.DataContext == note)
+                nw.Close();
+        }
         store.Notes.Remove(note);
         store.Save();
         statusText.Text = "Nota eliminada";
@@ -814,7 +806,12 @@ public partial class MainWindow : Window
         if (_deletedNote != null) FinalizeDelete();
         _undoTimer.Stop();
         store.Save();
-        TabBar.CloseIfOpen();
+        // Close all NoteWindows except MainWindow
+        for (int i = Application.Current.Windows.Count - 1; i >= 0; i--)
+        {
+            if (Application.Current.Windows[i] is NoteWindow nw)
+                nw.Close();
+        }
 
         for (int i = Application.Current.Windows.Count - 1; i >= 0; i--)
             if (Application.Current.Windows[i] is not MainWindow)

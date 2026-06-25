@@ -27,7 +27,6 @@ public class NotesStore
     public bool ConfirmOnExit { get; set; } = true;
     public string DefaultColor { get; set; } = "";
     public int NoteFontSize { get; set; } = 13;
-    public string TabBarPosition { get; set; } = "right";
     public bool CompactMode { get; set; }
     public string NoteFontFamily { get; set; } = "Calibri";
     public bool AnimationsEnabled { get; set; } = true;
@@ -72,6 +71,18 @@ public class NotesStore
             );
             """;
         cmd.ExecuteNonQuery();
+
+        // Migration: drop IsMinimized if present (legacy column from old mini-notes)
+        using var check = conn.CreateCommand();
+        check.CommandText = "SELECT COUNT(*) FROM pragma_table_info('notes') WHERE name='IsMinimized'";
+        var hasMinimized = (long)(check.ExecuteScalar() ?? 0) > 0;
+        if (hasMinimized)
+        {
+            using var migrate = conn.CreateCommand();
+            migrate.CommandText = "ALTER TABLE notes DROP COLUMN IsMinimized";
+            migrate.ExecuteNonQuery();
+        }
+
         return conn;
     }
 
@@ -106,9 +117,9 @@ public class NotesStore
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT OR REPLACE INTO notes
-                (Id, Title, Text, Color, IsMinimized, IsPinned, OrderNum, LastModified,
+                (Id, Title, Text, Color, IsPinned, OrderNum, LastModified,
                  WinLeft, WinTop, WinWidth, WinHeight)
-            VALUES ($id, $title, $text, $color, $min, $pin, $ord, $mod,
+            VALUES ($id, $title, $text, $color, $pin, $ord, $mod,
                     $wl, $wt, $ww, $wh)
             """;
 
@@ -142,7 +153,6 @@ public class NotesStore
         SaveSetting(conn, "ConfirmOnExit", ConfirmOnExit ? "1" : "0");
         SaveSetting(conn, "DefaultColor", DefaultColor ?? "");
         SaveSetting(conn, "NoteFontSize", NoteFontSize.ToString(CultureInfo.InvariantCulture));
-        SaveSetting(conn, "TabBarPosition", TabBarPosition ?? "right");
         SaveSetting(conn, "CompactMode", CompactMode ? "1" : "0");
         SaveSetting(conn, "NoteFontFamily", NoteFontFamily ?? "Calibri");
         SaveSetting(conn, "AnimationsEnabled", AnimationsEnabled ? "1" : "0");
@@ -180,7 +190,6 @@ public class NotesStore
                 case "ConfirmOnExit": ConfirmOnExit = val == "1"; break;
                 case "DefaultColor": DefaultColor = val; break;
                 case "NoteFontSize": if (int.TryParse(val, NumberStyles.Any, CultureInfo.InvariantCulture, out var nfs)) NoteFontSize = Math.Clamp(nfs, 8, 48); break;
-                case "TabBarPosition": TabBarPosition = val is "left" or "right" or "top" or "bottom" ? val : "right"; break;
                 case "CompactMode": CompactMode = val == "1"; break;
                 case "NoteFontFamily": NoteFontFamily = val; break;
                 case "AnimationsEnabled": AnimationsEnabled = val == "1"; break;
@@ -191,21 +200,20 @@ public class NotesStore
 
     private static Note ReadNote(SqliteDataReader r)
     {
-        var dt = DateTime.Parse(r.GetString(7), CultureInfo.InvariantCulture);
+        var dt = DateTime.Parse(r.GetString(6), CultureInfo.InvariantCulture);
         return new Note
         {
             Id = Guid.Parse(r.GetString(0)),
             Title = r.IsDBNull(1) ? "" : r.GetString(1),
             Text = r.IsDBNull(2) ? "" : r.GetString(2),
             Color = r.IsDBNull(3) ? "#F8F9FA" : r.GetString(3),
-            IsMinimized = r.GetInt32(4) != 0,
-            IsPinned = r.GetInt32(5) != 0,
-            Order = r.GetInt32(6),
+            IsPinned = r.GetInt32(4) != 0,
+            Order = r.GetInt32(5),
             LastModified = dt,
-            WinLeft = r.IsDBNull(8) ? double.NaN : r.GetDouble(8),
-            WinTop = r.IsDBNull(9) ? double.NaN : r.GetDouble(9),
-            WinWidth = r.IsDBNull(10) ? double.NaN : r.GetDouble(10),
-            WinHeight = r.IsDBNull(11) ? double.NaN : r.GetDouble(11),
+            WinLeft = r.IsDBNull(7) ? double.NaN : r.GetDouble(7),
+            WinTop = r.IsDBNull(8) ? double.NaN : r.GetDouble(8),
+            WinWidth = r.IsDBNull(9) ? double.NaN : r.GetDouble(9),
+            WinHeight = r.IsDBNull(10) ? double.NaN : r.GetDouble(10),
         };
     }
 
@@ -216,7 +224,6 @@ public class NotesStore
         cmd.Parameters.AddWithValue("$title", note.Title ?? "");
         cmd.Parameters.AddWithValue("$text", note.Text ?? "");
         cmd.Parameters.AddWithValue("$color", note.Color ?? "#F8F9FA");
-        cmd.Parameters.AddWithValue("$min", note.IsMinimized ? 1 : 0);
         cmd.Parameters.AddWithValue("$pin", note.IsPinned ? 1 : 0);
         cmd.Parameters.AddWithValue("$ord", note.Order);
         cmd.Parameters.AddWithValue("$mod", note.LastModified.ToString("O"));
@@ -243,9 +250,9 @@ public class NotesStore
             using var cmd = conn.CreateCommand();
             cmd.CommandText = """
                 INSERT INTO notes
-                    (Id, Title, Text, Color, IsMinimized, IsPinned, OrderNum, LastModified,
+                    (Id, Title, Text, Color, IsPinned, OrderNum, LastModified,
                      WinLeft, WinTop, WinWidth, WinHeight)
-                VALUES ($id, $title, $text, $color, $min, $pin, $ord, $mod,
+                VALUES ($id, $title, $text, $color, $pin, $ord, $mod,
                         $wl, $wt, $ww, $wh)
                 """;
 
