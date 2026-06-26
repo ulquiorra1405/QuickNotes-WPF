@@ -1018,26 +1018,43 @@ public partial class NoteWindow : Window
     {
         try
         {
-            if (img == null) return;
+            if (img == null) { Log($"InsertImageFromClipboard: img is null"); return; }
+
+            Log($"InsertImageFromClipboard: {img.Width}x{img.Height}");
 
             Directory.CreateDirectory(_imageFolder);
             var fileName = $"{Guid.NewGuid()}.png";
             var filePath = System.IO.Path.Combine(_imageFolder, fileName);
 
-            using var fs = new FileStream(filePath, FileMode.Create);
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(img));
-            encoder.Save(fs);
+            Log($"Saving to {filePath}");
+            {
+                using var fs = new FileStream(filePath, FileMode.Create);
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(img));
+                encoder.Save(fs);
+            }
+            Log($"Saved {new FileInfo(filePath).Length} bytes");
 
             InsertImageBlock(filePath);
+            Log($"InsertImageBlock completed");
         }
-        catch (Exception ex) { ErrorLog.Write(ex, "InsertImageFromClipboard"); }
+        catch (Exception ex) { Log($"InsertImageFromClipboard error: {ex}"); ErrorLog.Write(ex, "InsertImageFromClipboard"); }
     }
 
     private void InsertImageBlock(string fullPath)
     {
+        Log($"InsertImageBlock: {fullPath}");
+        Log($"File exists: {System.IO.File.Exists(fullPath)}");
         var img = new System.Windows.Controls.Image();
-        img.Source = new BitmapImage(new Uri(fullPath));
+        try
+        {
+            img.Source = new BitmapImage(new Uri(fullPath));
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to load image: {ex.Message}");
+            return;
+        }
         img.MaxWidth = Math.Max(Width - 40, 200);
         img.Margin = new Thickness(0, 4, 0, 4);
         img.Stretch = Stretch.Uniform;
@@ -1047,19 +1064,25 @@ public partial class NoteWindow : Window
         // Insert at caret position
         var caretPos = noteText.CaretPosition;
         var caretPara = caretPos.Paragraph;
+        Log($"caretPara != null: {caretPara != null}");
 
         if (caretPara != null && caretPara.Parent is FlowDocument doc)
         {
+            Log("Inserting after paragraph in FlowDocument");
             doc.Blocks.InsertAfter(caretPara, container);
+            Log("Inserted OK");
         }
         else if (caretPara != null && caretPara.Parent is Section sec)
         {
+            Log("Inserting after paragraph in Section");
             sec.Blocks.InsertAfter(caretPara, container);
         }
         else
         {
             // Fallback: add to the end of document
+            Log("Fallback: adding to end of document");
             noteText.Document.Blocks.Add(container);
+            Log("Added to end OK");
         }
 
         // Place caret after the image block
@@ -1293,5 +1316,18 @@ public partial class NoteWindow : Window
     {
         if (!string.IsNullOrEmpty(fontFamily))
             noteText.FontFamily = new FontFamily(fontFamily);
+    }
+
+    private void Log(string message)
+    {
+        try
+        {
+            var logFile = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "QuickNotes", "paste_debug.log");
+            System.IO.File.AppendAllText(logFile,
+                $"[{DateTime.Now:HH:mm:ss}] {message}\n");
+        }
+        catch { }
     }
 }
