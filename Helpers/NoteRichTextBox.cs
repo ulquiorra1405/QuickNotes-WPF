@@ -10,58 +10,69 @@ namespace QuickNotes.Helpers;
 
 /// <summary>
 /// RichTextBox that intercepts Ctrl+V in PreviewKeyDown for images.
+/// Fires ImagePastedWithData instead of ImagePasted to pass the image directly.
 /// </summary>
 public class NoteRichTextBox : RichTextBox
 {
-    public event Action? ImagePasted;
+    /// <summary>Fired with the pasted BitmapSource (Snipping Tool, screenshots, etc.).</summary>
+    public event Action<BitmapSource>? ImagePastedWithData;
+
+    /// <summary>Fired when an image file is pasted.</summary>
     public event Action<string>? ImageFilePasted;
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.V)
         {
-            // Try every possible image detection
-
-            // 1. Check from Clipboard object directly
             try
             {
                 var data = Clipboard.GetDataObject();
                 if (data != null)
                 {
-                    // Check all known image formats
-                    string[] imgFormats = [DataFormats.Bitmap, DataFormats.Dib, "PNG",
-                        "System.Drawing.Bitmap", "System.Windows.Media.Imaging.BitmapSource",
-                        "Bitmap", "DeviceIndependentBitmap"];
-
-                    foreach (var fmt in imgFormats)
+                    // Check for BitmapSource (WPF native format)
+                    if (data.GetDataPresent(typeof(BitmapSource)))
                     {
-                        if (data.GetDataPresent(fmt))
+                        var img = data.GetData(typeof(BitmapSource)) as BitmapSource;
+                        if (img != null)
                         {
                             e.Handled = true;
-                            var img = Clipboard.GetImage();
-                            if (img != null)
-                            {
-                                ImagePasted?.Invoke();
-                            }
+                            ImagePastedWithData?.Invoke(img);
                             return;
                         }
                     }
-                }
 
-                // 2. Check for image files in clipboard
-                if (Clipboard.ContainsFileDropList())
-                {
-                    var files = Clipboard.GetFileDropList();
-                    if (files.Count > 0 && files[0] != null)
+                    // Check for Bitmap / DIB (Snipping Tool, screenshots)
+                    if (data.GetDataPresent(DataFormats.Bitmap))
                     {
-                        var ext = Path.GetExtension(files[0]).ToLowerInvariant();
-                        var validExts = new HashSet<string>
-                            { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
-                        if (validExts.Contains(ext))
+                        // Try to convert to BitmapSource
+                        try
                         {
-                            e.Handled = true;
-                            ImageFilePasted?.Invoke(files[0]);
-                            return;
+                            var img = Clipboard.GetImage();
+                            if (img != null)
+                            {
+                                e.Handled = true;
+                                ImagePastedWithData?.Invoke(img);
+                                return;
+                            }
+                        }
+                        catch { }
+                    }
+
+                    // Check for image files
+                    if (data.GetDataPresent(DataFormats.FileDrop))
+                    {
+                        var files = data.GetData(DataFormats.FileDrop) as string[];
+                        if (files != null && files.Length > 0 && files[0] != null)
+                        {
+                            var ext = Path.GetExtension(files[0]).ToLowerInvariant();
+                            var validExts = new HashSet<string>
+                                { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
+                            if (validExts.Contains(ext))
+                            {
+                                e.Handled = true;
+                                ImageFilePasted?.Invoke(files[0]);
+                                return;
+                            }
                         }
                     }
                 }

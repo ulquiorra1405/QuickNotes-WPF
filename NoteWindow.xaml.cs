@@ -108,11 +108,11 @@ public partial class NoteWindow : Window
             highlightPopup.IsOpen = false;
         };
 
-        // Image paste via NoteRichTextBox.OnPaste override
+        // Image paste via NoteRichTextBox.OnPreviewKeyDown
         var rtb = noteText as Helpers.NoteRichTextBox;
         if (rtb != null)
         {
-            rtb.ImagePasted += InsertImageFromClipboard;
+            rtb.ImagePastedWithData += InsertImageFromClipboard;
             rtb.ImageFilePasted += (path) => InsertImageFromFile(path);
         }
         noteText.AllowDrop = true;
@@ -974,11 +974,10 @@ public partial class NoteWindow : Window
         catch (Exception ex) { ErrorLog.Write(ex, "InsertImageFromFile"); }
     }
 
-    private void InsertImageFromClipboard()
+    private void InsertImageFromClipboard(BitmapSource img)
     {
         try
         {
-            var img = Clipboard.GetImage();
             if (img == null) return;
 
             Directory.CreateDirectory(_imageFolder);
