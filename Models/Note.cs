@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text;
+using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Markup;
 
@@ -93,10 +95,10 @@ public class Note : INotifyPropertyChanged
             if (!t.StartsWith("<")) return t;
             try
             {
-                var doc = (System.Windows.Documents.FlowDocument)System.Windows.Markup.XamlReader.Parse(t);
-                using var sw = new StringWriter();
-                var range = new System.Windows.Documents.TextRange(
-                    doc.ContentStart, doc.ContentEnd);
+                var doc = new System.Windows.Documents.FlowDocument();
+                var range = new System.Windows.Documents.TextRange(doc.ContentStart, doc.ContentEnd);
+                using var ms = new MemoryStream(Encoding.UTF8.GetBytes(t));
+                range.Load(ms, DataFormats.Xaml);
                 return range.Text.TrimEnd('\r', '\n');
             }
             catch (Exception ex) { ErrorLog.Write(ex, "PlainText"); return t; }
