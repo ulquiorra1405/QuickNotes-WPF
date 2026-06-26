@@ -23,7 +23,7 @@
         <Grid>
             <!-- Custom tooltip popup: fixed to the left of the hovered icon -->
             <Popup x:Name="tooltipPopup" AllowsTransparency="True" StaysOpen="True"
-                   Placement="Left" HorizontalOffset="-6"
+                   Placement="Left" HorizontalOffset="-12"
                    PopupAnimation="None">
                 <Border x:Name="tooltipBorder" CornerRadius="6"
                         Background="#2A2A2A" BorderBrush="#444" BorderThickness="1"
@@ -45,7 +45,7 @@
                                    Fill="#F8F9FA"/>
                         <TextBlock x:Name="tooltipEmoji" Grid.Column="1"
                                    FontSize="16" VerticalAlignment="Center"
-                                   Margin="8,0,6,0"/>
+                                   Margin="8,0,6,0" Foreground="#EEEEEE"/>
                         <StackPanel Grid.Column="2" VerticalAlignment="Center"
                                     Margin="0,0,10,0">
                             <TextBlock x:Name="tooltipTitle" FontSize="13"

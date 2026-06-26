@@ -90,7 +90,7 @@ public partial class DockWindow : Window
 
         // Position the popup to the left of this icon
         tooltipPopup.PlacementTarget = border;
-        tooltipPopup.HorizontalOffset = -6;
+        tooltipPopup.HorizontalOffset = -12;
 
         // Update tooltip content
         tooltipEmoji.Text = item.Label.Length <= 2 ? "📝" : item.Label;
