@@ -88,12 +88,21 @@ public partial class DockWindow : Window
         var item = border.DataContext as DockNoteItem;
         if (item == null) return;
 
+        // Update tooltip content and colors (always, before any open/reopen)
+        tooltipTitle.Text = item.FullTitle;
+        tooltipBorder.Background = border.Background;
+        tooltipTitle.Foreground = new SolidColorBrush(item.IsNoteDark ? Colors.White : Color.FromArgb(0xCC, 0x1A, 0x1A, 0x1A));
+
         // Position the popup to the left of this icon
         // When switching icons while popup is open, close & reopen to force repositioning
         bool needsReopen = tooltipPopup.IsOpen && tooltipPopup.PlacementTarget != border;
         if (needsReopen)
         {
             tooltipPopup.IsOpen = false;
+            // Stop any running animations that could cause a flash
+            tooltipBorder.BeginAnimation(UIElement.OpacityProperty, null);
+            var tt = (TranslateTransform)tooltipBorder.RenderTransform;
+            tt.BeginAnimation(TranslateTransform.XProperty, null);
             // Force close to render, then reopen via BeginInvoke
             Dispatcher.BeginInvoke(() =>
             {
@@ -110,11 +119,6 @@ public partial class DockWindow : Window
 
         tooltipPopup.PlacementTarget = border;
         tooltipPopup.HorizontalOffset = -16;
-
-        // Update tooltip content and colors
-        tooltipTitle.Text = item.FullTitle;
-        tooltipBorder.Background = border.Background;
-        tooltipTitle.Foreground = new SolidColorBrush(item.IsNoteDark ? Colors.White : Color.FromArgb(0xCC, 0x1A, 0x1A, 0x1A));
 
         // Open (or reopen) — animation covers the brief close
         if (!tooltipPopup.IsOpen)
