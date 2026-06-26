@@ -143,6 +143,25 @@
                          TextChanged="Title_TextChanged"/>
 
                 <StackPanel x:Name="titleRightPanel" HorizontalAlignment="Right" Orientation="Horizontal">
+                    <Button x:Name="emojiBtn" Width="24" Height="24"
+                            Style="{StaticResource TitleBtn}"
+                            WindowChrome.IsHitTestVisibleInChrome="True"
+                            ToolTip="Icono para el dock"
+                            Click="EmojiBtn_Click"
+                            Content="📝"/>
+                    <Popup x:Name="emojiPopup" Placement="Bottom"
+                           PlacementTarget="{Binding ElementName=emojiBtn}"
+                           StaysOpen="True" AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Background="{Binding Color}"
+                                CornerRadius="6" Padding="5"
+                                BorderBrush="#40000000" BorderThickness="1"
+                                MaxHeight="200">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" TextElement.Foreground="{Binding TextForeground}">
+                                <UniformGrid x:Name="emojiPanel" Columns="6"/>
+                            </ScrollViewer>
+                        </Border>
+                    </Popup>
                     <ToggleButton x:Name="pinNoteBtn" FontSize="10" IsChecked="True"
                                    WindowChrome.IsHitTestVisibleInChrome="True"
                                    Checked="PinNote_Click" Unchecked="PinNote_Click">

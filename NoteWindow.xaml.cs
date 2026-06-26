@@ -30,6 +30,10 @@ public partial class NoteWindow : Window
         _store = store ?? new NotesStore();
 
         DataContext = note;
+
+        // Init emoji button
+        emojiBtn.Content = note.Icon;
+        BuildEmojiPicker();
         if (_store.NoteFontSize != 13)
             noteText.FontSize = _store.NoteFontSize;
         if (!string.IsNullOrEmpty(_store.NoteFontFamily) && _store.NoteFontFamily != "Calibri")
@@ -64,9 +68,14 @@ public partial class NoteWindow : Window
         PreviewKeyDown += NoteWindow_PreviewKeyDown;
         PreviewMouseDown += (_, e) =>
         {
-            if (!colorPopup.IsOpen) return;
-            if (e.OriginalSource is DependencyObject src && FindParent<Border>(src) == currentColorDot) return;
+            if (!colorPopup.IsOpen && !emojiPopup.IsOpen) return;
+            if (e.OriginalSource is DependencyObject src)
+            {
+                if (colorPopup.IsOpen && FindParent<Border>(src) == currentColorDot) return;
+                if (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn) return;
+            }
             colorPopup.IsOpen = false;
+            emojiPopup.IsOpen = false;
         };
     }
 
@@ -242,6 +251,15 @@ public partial class NoteWindow : Window
         _note.IsDirty = false;
         _store.Save();
         base.OnClosing(e);
+
+        // Refresh dock indicators (safe after close)
+        try
+        {
+            foreach (Window w in Application.Current.Windows)
+                if (w is Views.DockWindow dw)
+                    dw.Dispatcher.BeginInvoke(() => dw.RefreshNotes());
+        }
+        catch { }
     }
 
     private static T? FindParent<T>(DependencyObject child) where T : DependencyObject
@@ -265,9 +283,20 @@ public partial class NoteWindow : Window
 
     private void MinimizeNote_Click(object sender, RoutedEventArgs e)
     {
-        // ⏳ Función próximamente
-        System.Windows.MessageBox.Show("Esta función estará disponible próximamente.", "Próximamente",
-            MessageBoxButton.OK, MessageBoxImage.Information);
+        SaveRichText();
+        _note.WinLeft = Left;
+        _note.WinTop = Top;
+        _note.WinWidth = Width;
+        _note.WinHeight = Height;
+        _note.LastModified = DateTime.Now;
+        _note.IsDirty = false;
+        _store.Save();
+        Hide();
+
+        // Notify dock to refresh indicators
+        foreach (Window w in Application.Current.Windows)
+            if (w is Views.DockWindow dw)
+                dw.RefreshNotes();
     }
 
     public void OnTabOpened()
@@ -296,6 +325,61 @@ public partial class NoteWindow : Window
     {
         if (e.ChangedButton == MouseButton.Left)
             colorPopup.IsOpen = !colorPopup.IsOpen;
+    }
+
+    private void BuildEmojiPicker()
+    {
+        emojiPanel.Children.Clear();
+        foreach (var emoji in Note.EmojiPalette)
+        {
+            var border = new Border
+            {
+                Height = 28,
+                CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(2),
+                Cursor = Cursors.Hand,
+                Background = Brushes.Transparent,
+            };
+            var text = new TextBlock
+            {
+                Text = emoji,
+                FontSize = 13,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            border.Child = text;
+            border.MouseDown += (s, e) =>
+            {
+                if (e.LeftButton == MouseButtonState.Pressed)
+                    SelectEmoji(emoji, border);
+            };
+            border.MouseEnter += (_, _) =>
+                border.Background = new SolidColorBrush(Color.FromArgb(0x3F, 0xFF, 0xFF, 0xFF));
+            border.MouseLeave += (_, _) =>
+                border.Background = Brushes.Transparent;
+            emojiPanel.Children.Add(border);
+        }
+    }
+
+    private void EmojiBtn_Click(object sender, RoutedEventArgs e)
+    {
+        emojiPopup.IsOpen = !emojiPopup.IsOpen;
+    }
+
+    private void SelectEmoji(string emoji, Border selectedBorder)
+    {
+        _note.Icon = emoji;
+        emojiBtn.Content = emoji;
+        _note.LastModified = DateTime.Now;
+        _note.IsDirty = false;
+        _store.Save();
+        emojiPopup.IsOpen = false;
+
+        // Flash feedback
+        var down = AnimationHelper.MakeAnimation(0.7, 80);
+        var up = AnimationHelper.MakeAnimation(1, 120);
+        down.Completed += (_, _) => emojiBtn.BeginAnimation(OpacityProperty, up);
+        emojiBtn.BeginAnimation(OpacityProperty, down);
     }
 
     private void UpdateButtonForegrounds()

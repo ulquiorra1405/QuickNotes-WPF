@@ -76,6 +76,13 @@ public class Note : INotifyPropertyChanged
         }
     }
 
+    private string _icon = "📝";
+    public string Icon
+    {
+        get => _icon;
+        set { _icon = value; OnPropertyChanged(); }
+    }
+
     [System.Text.Json.Serialization.JsonIgnore]
     public string PlainText
     {
@@ -120,6 +127,18 @@ public class Note : INotifyPropertyChanged
     private static readonly Random _rng = new();
 
     public static string RandomColor() => Palette[_rng.Next(Palette.Length)];
+
+    public static readonly string[] EmojiPalette =
+    [
+        "📝", "📌", "💡", "🎯", "✅",
+        "🛒", "💻", "🎵", "📅", "🔖",
+        "❤️", "🔥", "⚡", "🎨", "🏠",
+        "💰", "📋", "🎁", "🗓️", "🔗",
+        "⭐", "🚀", "🎉", "🔔", "👀",
+        "💊", "🧠", "📂", "🔐", "📎"
+    ];
+
+    public static string RandomIcon() => EmojiPalette[_rng.Next(EmojiPalette.Length)];
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null)

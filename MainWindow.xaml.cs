@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     private FrameworkElement? _dragCard;
     private Point _dragStart;
     private bool _isDragging;
+    private DockWindow? _dockWindow;
 
     public MainWindow()
     {
@@ -488,7 +489,28 @@ public partial class MainWindow : Window
 
     private void Minimize_Click(object sender, RoutedEventArgs e)
     {
-        WindowState = WindowState.Minimized;
+        if (_dockWindow == null || !_dockWindow.IsVisible)
+        {
+            var bounds = Helpers.MonitorHelper.GetMonitorWorkingArea(this);
+
+            _dockWindow = new DockWindow(store, bounds, () =>
+            {
+                Show();
+                Focus();
+                RestoreFromDock();
+            });
+            _dockWindow.RefreshNotes();
+            _dockWindow.Show();
+        }
+        Hide();
+    }
+
+    public void RestoreFromDock()
+    {
+        Show();
+        Focus();
+        _view?.Refresh();
+        _dockWindow?.RefreshNotes();
     }
 
     private void Close_Click(object sender, RoutedEventArgs e)
@@ -806,6 +828,8 @@ public partial class MainWindow : Window
         if (_deletedNote != null) FinalizeDelete();
         _undoTimer.Stop();
         store.Save();
+        // Close DockWindow if open
+        _dockWindow?.Close();
         // Close all NoteWindows except MainWindow
         for (int i = Application.Current.Windows.Count - 1; i >= 0; i--)
         {

@@ -56,6 +56,7 @@ public class NotesStore
                 Title TEXT NOT NULL DEFAULT '',
                 Text TEXT NOT NULL DEFAULT '',
                 Color TEXT NOT NULL DEFAULT '#F8F9FA',
+                Icon TEXT NOT NULL DEFAULT '',
                 IsMinimized INTEGER NOT NULL DEFAULT 0,
                 IsPinned INTEGER NOT NULL DEFAULT 0,
                 OrderNum INTEGER NOT NULL DEFAULT 0,
@@ -81,6 +82,17 @@ public class NotesStore
             using var migrate = conn.CreateCommand();
             migrate.CommandText = "ALTER TABLE notes DROP COLUMN IsMinimized";
             migrate.ExecuteNonQuery();
+        }
+
+        // Migration: add Icon column if missing
+        using var checkIcon = conn.CreateCommand();
+        checkIcon.CommandText = "SELECT COUNT(*) FROM pragma_table_info('notes') WHERE name='Icon'";
+        var hasIcon = (long)(checkIcon.ExecuteScalar() ?? 0) > 0;
+        if (!hasIcon)
+        {
+            using var addIcon = conn.CreateCommand();
+            addIcon.CommandText = "ALTER TABLE notes ADD COLUMN Icon TEXT NOT NULL DEFAULT ''";
+            addIcon.ExecuteNonQuery();
         }
 
         return conn;
@@ -111,15 +123,22 @@ public class NotesStore
         using var conn = OpenDb();
         using var tx = conn.BeginTransaction();
 
+        // Delete all existing notes first so removed notes don't linger in DB
+        using (var del = conn.CreateCommand())
+        {
+            del.CommandText = "DELETE FROM notes";
+            del.ExecuteNonQuery();
+        }
+
         for (int i = 0; i < Notes.Count; i++)
             Notes[i].Order = i;
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT OR REPLACE INTO notes
-                (Id, Title, Text, Color, IsPinned, OrderNum, LastModified,
+            INSERT INTO notes
+                (Id, Title, Text, Color, Icon, IsPinned, OrderNum, LastModified,
                  WinLeft, WinTop, WinWidth, WinHeight)
-            VALUES ($id, $title, $text, $color, $pin, $ord, $mod,
+            VALUES ($id, $title, $text, $color, $icon, $pin, $ord, $mod,
                     $wl, $wt, $ww, $wh)
             """;
 
@@ -200,20 +219,34 @@ public class NotesStore
 
     private static Note ReadNote(SqliteDataReader r)
     {
-        var dt = DateTime.Parse(r.GetString(6), CultureInfo.InvariantCulture);
+        var idxId = r.GetOrdinal("Id");
+        var idxTitle = r.GetOrdinal("Title");
+        var idxText = r.GetOrdinal("Text");
+        var idxColor = r.GetOrdinal("Color");
+        var idxIcon = r.GetOrdinal("Icon");
+        var idxPinned = r.GetOrdinal("IsPinned");
+        var idxOrder = r.GetOrdinal("OrderNum");
+        var idxMod = r.GetOrdinal("LastModified");
+        var idxWl = r.GetOrdinal("WinLeft");
+        var idxWt = r.GetOrdinal("WinTop");
+        var idxWw = r.GetOrdinal("WinWidth");
+        var idxWh = r.GetOrdinal("WinHeight");
+
+        var dt = DateTime.Parse(r.GetString(idxMod), CultureInfo.InvariantCulture);
         return new Note
         {
-            Id = Guid.Parse(r.GetString(0)),
-            Title = r.IsDBNull(1) ? "" : r.GetString(1),
-            Text = r.IsDBNull(2) ? "" : r.GetString(2),
-            Color = r.IsDBNull(3) ? "#F8F9FA" : r.GetString(3),
-            IsPinned = r.GetInt32(4) != 0,
-            Order = r.GetInt32(5),
+            Id = Guid.Parse(r.GetString(idxId)),
+            Title = r.IsDBNull(idxTitle) ? "" : r.GetString(idxTitle),
+            Text = r.IsDBNull(idxText) ? "" : r.GetString(idxText),
+            Color = r.IsDBNull(idxColor) ? "#F8F9FA" : r.GetString(idxColor),
+            Icon = r.IsDBNull(idxIcon) ? "" : r.GetString(idxIcon),
+            IsPinned = r.GetInt32(idxPinned) != 0,
+            Order = r.GetInt32(idxOrder),
             LastModified = dt,
-            WinLeft = r.IsDBNull(7) ? double.NaN : r.GetDouble(7),
-            WinTop = r.IsDBNull(8) ? double.NaN : r.GetDouble(8),
-            WinWidth = r.IsDBNull(9) ? double.NaN : r.GetDouble(9),
-            WinHeight = r.IsDBNull(10) ? double.NaN : r.GetDouble(10),
+            WinLeft = r.IsDBNull(idxWl) ? double.NaN : r.GetDouble(idxWl),
+            WinTop = r.IsDBNull(idxWt) ? double.NaN : r.GetDouble(idxWt),
+            WinWidth = r.IsDBNull(idxWw) ? double.NaN : r.GetDouble(idxWw),
+            WinHeight = r.IsDBNull(idxWh) ? double.NaN : r.GetDouble(idxWh),
         };
     }
 
@@ -224,6 +257,7 @@ public class NotesStore
         cmd.Parameters.AddWithValue("$title", note.Title ?? "");
         cmd.Parameters.AddWithValue("$text", note.Text ?? "");
         cmd.Parameters.AddWithValue("$color", note.Color ?? "#F8F9FA");
+        cmd.Parameters.AddWithValue("$icon", note.Icon ?? "");
         cmd.Parameters.AddWithValue("$pin", note.IsPinned ? 1 : 0);
         cmd.Parameters.AddWithValue("$ord", note.Order);
         cmd.Parameters.AddWithValue("$mod", note.LastModified.ToString("O"));
