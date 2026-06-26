@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace QuickNotes.Helpers;
@@ -9,24 +8,15 @@ namespace QuickNotes.Helpers;
 /// <summary>
 /// Reads image data from clipboard using raw Win32 P/Invoke,
 /// bypassing WPF's limited clipboard format detection.
+/// Handles CF_DIBV5 and CF_DIB (the formats used by Snipping Tool,
+/// PrintScreen, browser image copy, etc.).
 /// </summary>
 internal static class ClipboardImageReader
 {
     // Win32 Clipboard Format Constants
-    private const uint CF_BITMAP = 2;
     private const uint CF_DIB = 8;
     private const uint CF_DIBV5 = 17;
-    private const uint CF_ENHMETAFILE = 14;
-
-    // BITMAPFILEHEADER for constructing a BMP from DIB data
-    private struct BITMAPFILEHEADER
-    {
-        public ushort bfType;      // 'BM'
-        public uint bfSize;
-        public ushort bfReserved1;
-        public ushort bfReserved2;
-        public uint bfOffBits;
-    }
+    private const uint CF_BITMAP = 2;
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool OpenClipboard(IntPtr hWndNewOwner);
@@ -49,7 +39,6 @@ internal static class ClipboardImageReader
     /// <summary>
     /// Attempts to read a BitmapSource from clipboard using Win32 APIs.
     /// Tries CF_DIBV5, CF_DIB, and CF_BITMAP formats.
-    /// Returns null if no image is available.
     /// </summary>
     public static BitmapSource? GetImageFromClipboard()
     {
@@ -58,18 +47,19 @@ internal static class ClipboardImageReader
 
         try
         {
-            // Try formats in order of preference
-            BitmapSource? result;
-
-            result = ReadDibFormat(CF_DIBV5);
+            // Try DIBV5 first (newer, common on Win10+)
+            var result = ReadDibFormat(CF_DIBV5);
             if (result != null) return result;
 
+            // Try standard DIB
             result = ReadDibFormat(CF_DIB);
             if (result != null) return result;
 
-            result = ReadBitmapFormat();
-            if (result != null) return result;
-
+            // Try HBITMAP (less common)
+            return ReadHBitmapFormat();
+        }
+        catch
+        {
             return null;
         }
         finally
@@ -79,7 +69,8 @@ internal static class ClipboardImageReader
     }
 
     /// <summary>
-    /// Reads CF_DIB or CF_DIBV5 format data and converts to BitmapSource.
+    /// Reads CF_DIB or CF_DIBV5 from clipboard, wraps in BMP file header,
+    /// and loads as BitmapImage.
     /// </summary>
     private static BitmapSource? ReadDibFormat(uint format)
     {
@@ -93,69 +84,70 @@ internal static class ClipboardImageReader
 
         try
         {
-            uint size = GlobalSize(hData);
-            if (size == 0) return null;
+            uint totalSize = GlobalSize(hData);
+            if (totalSize < 40) return null; // minimum BITMAPINFOHEADER
 
-            // Read DIB data
-            byte[] dibData = new byte[size];
-            Marshal.Copy(locked, dibData, 0, (int)size);
+            byte[] dibData = new byte[totalSize];
+            Marshal.Copy(locked, dibData, 0, (int)totalSize);
 
-            // DIB data is: BITMAPINFOHEADER (or BITMAPV5HEADER) + pixel data
-            // We need to wrap it in a BMP file structure for BitmapImage or BitmapSource.Create
-
-            // Get header info
+            // Parse BITMAPINFOHEADER fields
             int biSize = BitConverter.ToInt32(dibData, 0);
+            if (biSize < 40) return null;
+
             int width = Math.Abs(BitConverter.ToInt32(dibData, 4));
             int height = Math.Abs(BitConverter.ToInt32(dibData, 8));
-            short planes = BitConverter.ToInt16(dibData, 12);
             short bitCount = BitConverter.ToInt16(dibData, 14);
-            int compression = (biSize >= 40) ? BitConverter.ToInt32(dibData, 16) : 0;
+            int compression = BitConverter.ToInt32(dibData, 16);
+            uint sizeImage = (uint)BitConverter.ToInt32(dibData, 20);
+            uint clrUsed = (uint)BitConverter.ToInt32(dibData, 32);
 
-            // Calculate stride
-            int stride = ((width * bitCount + 31) / 32) * 4;
+            // Calculate pixel data offset within DIB
+            int pixelOffset = biSize;
 
-            // Calculate offset to pixel data
-            // If biSize > 40 (e.g., BITMAPV5HEADER = 124), header is larger
-            uint headerSize = (uint)biSize;
+            // BI_BITFIELDS adds 3 DWORD color masks
+            if (compression == 3)
+                pixelOffset += 12;
 
-            // For BI_BITFIELDS compression, there are 3 DWORD masks after header
-            if (compression == 3) // BI_BITFIELDS
+            // Color table for <= 8bpp (when not using BITFIELDS masks area)
+            if (bitCount <= 8 && compression != 3)
             {
-                headerSize += 12; // 3 color masks
+                uint paletteCount = clrUsed > 0 ? clrUsed : (uint)(1 << bitCount);
+                pixelOffset += (int)paletteCount * 4;
             }
 
-            // Check if we have valid pixel data
-            if (headerSize >= size) return null;
+            int stride = ((width * bitCount + 31) / 32) * 4;
+            int absHeight = Math.Abs(height);
 
-            // Create BMP file in memory
-            int pixelDataOffset = (int)(14 + headerSize); // 14 = BITMAPFILEHEADER size
-            int bmpFileSize = pixelDataOffset + (stride * height);
+            // Pixel data size (use biSizeImage if provided, else calculate)
+            int pixelDataSize = sizeImage > 0 ? (int)sizeImage : stride * absHeight;
 
-            byte[] bmpData = new byte[bmpFileSize];
+            // Sanity check
+            if (pixelOffset + pixelDataSize > totalSize)
+                pixelDataSize = (int)(totalSize - pixelOffset);
+
+            if (pixelDataSize <= 0)
+                return null;
+
+            // Build BMP file: BITMAPFILEHEADER (14) + DIB header + pixel data
+            int bmpSize = 14 + pixelOffset + pixelDataSize;
+            byte[] bmp = new byte[bmpSize];
 
             // BITMAPFILEHEADER
-            bmpData[0] = (byte)'B';
-            bmpData[1] = (byte)'M';
-            BitConverter.GetBytes((uint)bmpFileSize).CopyTo(bmpData, 2);
-            BitConverter.GetBytes((uint)pixelDataOffset).CopyTo(bmpData, 10);
+            bmp[0] = (byte)'B';
+            bmp[1] = (byte)'M';
+            WriteLE32(bmp, 2, bmpSize);               // bfSize
+            WriteLE32(bmp, 10, 14 + pixelOffset);     // bfOffBits
 
-            // DIB header + pixel data
-            Array.Copy(dibData, 0, bmpData, 14, (int)Math.Min(headerSize, size));
+            // Copy DIB header (biSize bytes)
+            Array.Copy(dibData, 0, bmp, 14, pixelOffset);
 
-            // Copy pixel data (handling top-down vs bottom-up)
-            // DIB is typically bottom-up (negative height in header = top-down)
-            int dibHeight = BitConverter.ToInt32(dibData, 8);
-            int dibPixelOffset = (int)headerSize;
-            int dibPixelSize = (int)(size - headerSize);
+            // Copy pixel data
+            Array.Copy(dibData, pixelOffset, bmp, 14 + pixelOffset, pixelDataSize);
 
-            // The pixel data from clipboard might be complete or partial
-            int copySize = Math.Min(dibPixelSize, stride * height);
-            Array.Copy(dibData, dibPixelOffset, bmpData, pixelDataOffset, copySize);
-
-            // Load as BitmapImage
+            // Load BitmapImage from stream
             var bi = new BitmapImage();
             bi.BeginInit();
-            bi.StreamSource = new MemoryStream(bmpData);
+            bi.StreamSource = new MemoryStream(bmp);
             bi.CacheOption = BitmapCacheOption.OnLoad;
             bi.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
             bi.EndInit();
@@ -173,10 +165,9 @@ internal static class ClipboardImageReader
     }
 
     /// <summary>
-    /// Reads CF_BITMAP (HBITMAP) format by converting to DIB first.
-    /// This is less commonly used but serves as a last resort.
+    /// Reads CF_BITMAP (HBITMAP) format. Only used as last resort.
     /// </summary>
-    private static BitmapSource? ReadBitmapFormat()
+    private static BitmapSource? ReadHBitmapFormat()
     {
         IntPtr hData = GetClipboardData(CF_BITMAP);
         if (hData == IntPtr.Zero)
@@ -184,8 +175,6 @@ internal static class ClipboardImageReader
 
         try
         {
-            // Use WPF's built-in conversion from HBITMAP
-            // GetImageSourceFromHbitmap handles the conversion
             var source = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
                 hData,
                 IntPtr.Zero,
@@ -198,5 +187,13 @@ internal static class ClipboardImageReader
         {
             return null;
         }
+    }
+
+    private static void WriteLE32(byte[] buffer, int offset, int value)
+    {
+        buffer[offset] = (byte)(value & 0xFF);
+        buffer[offset + 1] = (byte)((value >> 8) & 0xFF);
+        buffer[offset + 2] = (byte)((value >> 16) & 0xFF);
+        buffer[offset + 3] = (byte)((value >> 24) & 0xFF);
     }
 }
