@@ -12,7 +12,6 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
-using Microsoft.Win32;
 using QuickNotes.Models;
 
 namespace QuickNotes;
@@ -953,17 +952,6 @@ public partial class NoteWindow : Window
     }
 
     // ── Image support ──
-
-    private void ImageBtn_Click(object sender, RoutedEventArgs e)
-    {
-        var dlg = new OpenFileDialog
-        {
-            Filter = "Imágenes (*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp)|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp",
-            Title = "Insertar imagen"
-        };
-        if (dlg.ShowDialog() == true)
-            InsertImageFromFile(dlg.FileName);
-    }
 
     private void InsertImageFromFile(string sourcePath)
     {
