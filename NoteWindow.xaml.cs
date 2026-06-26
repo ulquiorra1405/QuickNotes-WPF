@@ -1367,5 +1367,4 @@ public partial class NoteWindow : Window
     }
 
     private bool _isResizingImage;
-    private bool _isProcessingAutoText;
 }
