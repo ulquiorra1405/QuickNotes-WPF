@@ -89,27 +89,24 @@ public partial class DockWindow : Window
         if (item == null) return;
 
         // Position the popup to the left of this icon
-        // When switching icons while popup is open, force a position recalculation
-        bool needsReposition = tooltipPopup.IsOpen && tooltipPopup.PlacementTarget != border;
+        // When switching icons while popup is open, close & reopen to force repositioning
+        bool needsReopen = tooltipPopup.IsOpen && tooltipPopup.PlacementTarget != border;
+        if (needsReopen)
+        {
+            tooltipPopup.IsOpen = false;
+            // Force the close to be processed (next frame) before reopening
+            tooltipPopup.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+        }
 
         tooltipPopup.PlacementTarget = border;
         tooltipPopup.HorizontalOffset = -12;
-
-        // Force WPF to recalculate popup position without closing it
-        if (needsReposition)
-        {
-            var oldPlacement = tooltipPopup.Placement;
-            tooltipPopup.Placement = System.Windows.Controls.Primitives.PlacementMode.Absolute;
-            tooltipPopup.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
-            tooltipPopup.Placement = oldPlacement;
-        }
 
         // Update tooltip content and colors
         tooltipTitle.Text = item.FullTitle;
         tooltipBorder.Background = border.Background;
         tooltipTitle.Foreground = new SolidColorBrush(item.IsNoteDark ? Colors.White : Color.FromArgb(0xCC, 0x1A, 0x1A, 0x1A));
 
-        // Open and animate in
+        // Open (or reopen) — animation covers the brief close
         if (!tooltipPopup.IsOpen)
         {
             tooltipPopup.IsOpen = true;
