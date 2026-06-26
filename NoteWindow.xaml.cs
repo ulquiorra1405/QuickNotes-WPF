@@ -1028,95 +1028,42 @@ public partial class NoteWindow : Window
     private void InsertImageBlock(string fullPath)
     {
         var img = new System.Windows.Controls.Image();
+        BitmapImage bi;
         try
         {
-            var bi = new BitmapImage();
+            bi = new BitmapImage();
             bi.BeginInit();
             bi.UriSource = new Uri(fullPath);
             bi.CacheOption = BitmapCacheOption.OnLoad;
             bi.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
             bi.EndInit();
             img.Source = bi;
-            img.Width = Math.Min(bi.PixelWidth, Math.Max(Width - 40, 200));
         }
-        catch
-        {
-            return;
-        }
+        catch { return; }
+
         img.Margin = new Thickness(0, 4, 0, 4);
         img.Stretch = Stretch.Uniform;
+        img.Cursor = Cursors.Hand;
 
-        // Resize handle (small triangle at bottom-right)
-        var resizeThumb = new System.Windows.Controls.Primitives.Thumb();
-        resizeThumb.Width = 14;
-        resizeThumb.Height = 14;
-        resizeThumb.HorizontalAlignment = HorizontalAlignment.Right;
-        resizeThumb.VerticalAlignment = VerticalAlignment.Bottom;
-        resizeThumb.Cursor = Cursors.SizeNWSE;
-        resizeThumb.Opacity = 0;
+        // Size levels: 100%, 75%, 50% of note content width
+        double noteContentWidth = Math.Max(Width - 60, 200);
+        var levels = new[] { noteContentWidth, noteContentWidth * 0.75, noteContentWidth * 0.5 };
+        int currentLevel = 0;
+        img.Width = levels[0];
 
-        // Triangle path
-        var tri = new System.Windows.Shapes.Path
-        {
-            Data = System.Windows.Media.Geometry.Parse("M2,12 L12,2 L12,12 Z"),
-            Fill = new SolidColorBrush(Color.FromArgb(160, 60, 60, 60)),
-            Stroke = System.Windows.Media.Brushes.White,
-            StrokeThickness = 0.5,
-            IsHitTestVisible = false
-        };
-
-        // Hover: show handle
-        var border = new Border
-        {
-            BorderThickness = new Thickness(1),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0, 60, 60, 60)),
-            Child = img
-        };
-
-        border.MouseEnter += (_, _) =>
-        {
-            border.BorderBrush = new SolidColorBrush(Color.FromArgb(60, 60, 60, 60));
-            resizeThumb.Opacity = 1;
-        };
-        border.MouseLeave += (_, _) =>
-        {
-            // Don't hide if dragging
-            if (!_isResizingImage)
-            {
-                border.BorderBrush = new SolidColorBrush(Color.FromArgb(0, 60, 60, 60));
-                resizeThumb.Opacity = 0;
-            }
-        };
-
+        // Grid wraps the image tightly
         var grid = new Grid();
-        grid.Children.Add(border);
-        grid.Children.Add(tri);
-        grid.Children.Add(resizeThumb);
+        grid.HorizontalAlignment = HorizontalAlignment.Left;
+        grid.Children.Add(img);
 
-        resizeThumb.DragStarted += (_, _) => _isResizingImage = true;
-        resizeThumb.DragDelta += (_, e) =>
+        // Click on image cycles size
+        img.MouseDown += (_, e) =>
         {
-            double newW = Math.Max(50, img.Width + e.HorizontalChange);
-            double newH = Math.Max(50, img.Height + e.VerticalChange);
-            img.Width = newW;
-            img.Height = newH;
-        };
-        resizeThumb.DragCompleted += (_, _) =>
-        {
-            _isResizingImage = false;
-            border.BorderBrush = new SolidColorBrush(Color.FromArgb(0, 60, 60, 60));
-            resizeThumb.Opacity = 0;
-            MarkDirtyAndDebounce();
-        };
-
-        // Double-click to reset size
-        grid.MouseDown += (_, e) =>
-        {
-            if (e.ClickCount == 2 && img.Source is BitmapImage bmp)
+            if (e.ChangedButton == MouseButton.Left && e.ClickCount == 1)
             {
                 e.Handled = true;
-                img.Width = Math.Min(bmp.PixelWidth, Math.Max(Width - 40, 200));
-                img.Height = double.NaN;
+                currentLevel = (currentLevel + 1) % levels.Length;
+                img.Width = levels[currentLevel];
                 MarkDirtyAndDebounce();
             }
         };
@@ -1366,5 +1313,4 @@ public partial class NoteWindow : Window
             noteText.FontFamily = new FontFamily(fontFamily);
     }
 
-    private bool _isResizingImage;
 }
