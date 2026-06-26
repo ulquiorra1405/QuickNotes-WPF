@@ -9,7 +9,8 @@
         AllowsTransparency="True"
         Background="Transparent"
         ShowInTaskbar="False"
-        Loaded="DockWindow_Loaded">
+        Loaded="DockWindow_Loaded"
+        MouseMove="DockWindow_MouseMove">
 
     <Border x:Name="dockBorder" Opacity="0"
             CornerRadius="10" BorderBrush="#3A3A3A" BorderThickness="1"
@@ -18,8 +19,48 @@
         <Border.Effect>
             <DropShadowEffect ShadowDepth="4" Color="#000000" Opacity="0.5" BlurRadius="12" Direction="270"/>
         </Border.Effect>
+
         <Grid>
-            <Grid.RowDefinitions>
+            <!-- Custom tooltip popup: fixed to the left of the hovered icon -->
+            <Popup x:Name="tooltipPopup" AllowsTransparency="True" StaysOpen="True"
+                   Placement="Left" HorizontalOffset="-6"
+                   PopupAnimation="None">
+                <Border x:Name="tooltipBorder" CornerRadius="6"
+                        Background="#2A2A2A" BorderBrush="#444" BorderThickness="1"
+                        Padding="0" MinWidth="130" MaxWidth="220"
+                        RenderTransformOrigin="0.5,0.5"
+                        MouseEnter="Tooltip_MouseEnter" MouseLeave="Tooltip_MouseLeave"
+                        Opacity="0">
+                    <Border.RenderTransform>
+                        <TranslateTransform X="6" Y="0"/>
+                    </Border.RenderTransform>
+                    <Grid Height="32">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="4"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Rectangle x:Name="tooltipColorBar" Grid.Column="0"
+                                   RadiusX="1" RadiusY="1" Margin="0,4"
+                                   Fill="#F8F9FA"/>
+                        <TextBlock x:Name="tooltipEmoji" Grid.Column="1"
+                                   FontSize="16" VerticalAlignment="Center"
+                                   Margin="8,0,6,0"/>
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center"
+                                    Margin="0,0,10,0">
+                            <TextBlock x:Name="tooltipTitle" FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="#EEEEEE"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="tooltipDate" FontSize="11"
+                                       Foreground="#888888"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Popup>
+
+            <Grid>
+                <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
@@ -40,7 +81,8 @@
                                         Opacity="{Binding IconOpacity}"
                                         Tag="{Binding NoteId}"
                                         MouseDown="NoteIcon_MouseDown"
-                                        ToolTip="{Binding TooltipContent}"
+                                        MouseEnter="NoteIcon_MouseEnter"
+                                        MouseLeave="NoteIcon_MouseLeave"
                                         RenderTransformOrigin="0.5,0.5">
                                     <Border.RenderTransform>
                                         <ScaleTransform ScaleX="1" ScaleY="1"/>
@@ -227,5 +269,6 @@
                 </Button.Style>
             </Button>
         </Grid>
-    </Border>
+    </Grid>
+</Border>
 </Window>

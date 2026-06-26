@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using QuickNotes.Models;
 
 namespace QuickNotes.Views;
@@ -16,6 +17,8 @@ public partial class DockWindow : Window
     private readonly Action _onExit;
     private readonly Rect _monitorBounds;
     private readonly SolidColorBrush _dockBgBrush;
+    private readonly DispatcherTimer _tooltipTimer;
+    private Border? _hoveredIcon;
 
     public DockWindow(NotesStore store, Rect monitorBounds, Action onExit)
     {
@@ -25,9 +28,16 @@ public partial class DockWindow : Window
         _onExit = onExit;
         AnimationHelper.Enabled = _store.AnimationsEnabled;
 
-        // Create an unfrozen brush so we can animate its alpha on hover
+        // Create an unfrozen brush for hover-to-opaque animation
         _dockBgBrush = new SolidColorBrush(Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A));
         dockBorder.Background = _dockBgBrush;
+
+        // Timer for delayed tooltip hide (avoids flicker when moving to/from popup)
+        _tooltipTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(200),
+        };
+        _tooltipTimer.Tick += TooltipTimer_Tick;
 
         // Position: right edge of the correct monitor, vertically centered
         Left = monitorBounds.Right - 70;
@@ -36,8 +46,16 @@ public partial class DockWindow : Window
 
     private void DockWindow_Loaded(object sender, RoutedEventArgs e)
     {
-        // Fade in from opacity 0 (set in XAML)
         dockBorder.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(0, 1, 200));
+    }
+
+    private void DockWindow_MouseMove(object sender, MouseEventArgs e)
+    {
+        // If mouse moves over the dock (but not over any icon), hide tooltip
+        if (tooltipPopup.IsOpen && _hoveredIcon == null && !IsMouseOverTooltip())
+        {
+            StartTooltipHideTimer();
+        }
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -53,11 +71,156 @@ public partial class DockWindow : Window
             .Select(n => new DockNoteItem(n, _store)).ToList();
         notesList.ItemsSource = items;
 
-        // Auto-size height: up to 6 items + button row
         int count = items.Count;
         double h = 8 + Math.Min(count, 6) * 38 + 32 + 8;
         Height = Math.Max(h, 80);
     }
+
+    // ── Note icon hover (custom tooltip) ──
+
+    private void NoteIcon_MouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is not Border border) return;
+
+        _tooltipTimer.Stop();
+        _hoveredIcon = border;
+
+        var item = border.DataContext as DockNoteItem;
+        if (item == null) return;
+
+        // Position the popup to the left of this icon
+        tooltipPopup.PlacementTarget = border;
+        tooltipPopup.HorizontalOffset = -6;
+
+        // Update tooltip content
+        tooltipEmoji.Text = item.Label.Length <= 2 ? "📝" : item.Label;
+        tooltipTitle.Text = item.FullTitle;
+        tooltipDate.Text = item.TooltipDate;
+        tooltipColorBar.Fill = border.Background;
+
+        // Open and animate in
+        if (!tooltipPopup.IsOpen)
+        {
+            tooltipPopup.IsOpen = true;
+            tooltipBorder.Opacity = 0;
+            var tt = (TranslateTransform)tooltipBorder.RenderTransform;
+            tt.X = 6;
+        }
+
+        AnimateTooltipIn();
+    }
+
+    private void NoteIcon_MouseLeave(object sender, MouseEventArgs e)
+    {
+        _hoveredIcon = null;
+        StartTooltipHideTimer();
+    }
+
+    private void Tooltip_MouseEnter(object sender, MouseEventArgs e)
+    {
+        // Mouse entered the popup itself — keep it open
+        _tooltipTimer.Stop();
+    }
+
+    private void Tooltip_MouseLeave(object sender, MouseEventArgs e)
+    {
+        StartTooltipHideTimer();
+    }
+
+    private void TooltipTimer_Tick(object? sender, EventArgs e)
+    {
+        _tooltipTimer.Stop();
+
+        if (_hoveredIcon != null || IsMouseOverTooltip())
+            return;
+
+        AnimateTooltipOut(() =>
+        {
+            tooltipPopup.IsOpen = false;
+        });
+    }
+
+    private void StartTooltipHideTimer()
+    {
+        _tooltipTimer.Stop();
+        _tooltipTimer.Start();
+    }
+
+    private bool IsMouseOverTooltip()
+    {
+        if (!tooltipPopup.IsOpen || tooltipBorder.Visibility != Visibility.Visible)
+            return false;
+
+        var pos = Mouse.GetPosition(tooltipBorder);
+        return pos.X >= 0 && pos.X < tooltipBorder.ActualWidth &&
+               pos.Y >= 0 && pos.Y < tooltipBorder.ActualHeight;
+    }
+
+    // ── Tooltip animations ──
+
+    private void AnimateTooltipIn()
+    {
+        if (!AnimationHelper.Enabled)
+        {
+            tooltipBorder.Opacity = 1;
+            var tt = (TranslateTransform)tooltipBorder.RenderTransform;
+            tt.X = 0;
+            return;
+        }
+
+        var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120));
+        fadeIn.EasingFunction = new QuadraticEase();
+        tooltipBorder.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+
+        var slideIn = new DoubleAnimation(6, 0, TimeSpan.FromMilliseconds(120));
+        slideIn.EasingFunction = new QuadraticEase();
+        var tt2 = (TranslateTransform)tooltipBorder.RenderTransform;
+        tt2.BeginAnimation(TranslateTransform.XProperty, slideIn);
+    }
+
+    private void AnimateTooltipOut(Action? onComplete = null)
+    {
+        if (!AnimationHelper.Enabled)
+        {
+            tooltipBorder.Opacity = 0;
+            onComplete?.Invoke();
+            return;
+        }
+
+        var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(100));
+        fadeOut.EasingFunction = new QuadraticEase();
+        fadeOut.Completed += (_, _) => onComplete?.Invoke();
+        tooltipBorder.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+
+        var slideOut = new DoubleAnimation(0, 6, TimeSpan.FromMilliseconds(100));
+        slideOut.EasingFunction = new QuadraticEase();
+        var tt = (TranslateTransform)tooltipBorder.RenderTransform;
+        tt.BeginAnimation(TranslateTransform.XProperty, slideOut);
+    }
+
+    // ── Dock background animation (hover-to-opaque) ──
+
+    private void DockBorder_MouseEnter(object sender, MouseEventArgs e)
+    {
+        var anim = new ColorAnimation(
+            Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A),
+            Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A),
+            AnimationHelper.Dur(200));
+        if (AnimationHelper.Enabled) anim.EasingFunction = new QuadraticEase();
+        _dockBgBrush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
+    }
+
+    private void DockBorder_MouseLeave(object sender, MouseEventArgs e)
+    {
+        var anim = new ColorAnimation(
+            Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A),
+            Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A),
+            AnimationHelper.Dur(200));
+        if (AnimationHelper.Enabled) anim.EasingFunction = new QuadraticEase();
+        _dockBgBrush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
+    }
+
+    // ── Note opening ──
 
     private void NoteIcon_MouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -80,7 +243,6 @@ public partial class DockWindow : Window
         {
             if (!existing.IsVisible)
             {
-                // Restore minimized
                 if (!double.IsNaN(note.WinLeft) && note.WinLeft > 0) existing.Left = note.WinLeft;
                 if (!double.IsNaN(note.WinTop) && note.WinTop > 0) existing.Top = note.WinTop;
                 existing.Show();
@@ -88,7 +250,6 @@ public partial class DockWindow : Window
             }
             else
             {
-                // Reposition next to dock
                 existing.Left = Left - existing.Width - 10;
                 existing.Top = Top;
                 existing.Focus();
@@ -105,6 +266,8 @@ public partial class DockWindow : Window
 
         RefreshNotes();
     }
+
+    // ── Exit ──
 
     private void ExitDock_Click(object sender, RoutedEventArgs e)
     {
@@ -125,26 +288,6 @@ public partial class DockWindow : Window
         }
     }
 
-    private void DockBorder_MouseEnter(object sender, MouseEventArgs e)
-    {
-        var anim = new ColorAnimation(
-            Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A),
-            Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A),
-            AnimationHelper.Dur(200));
-        if (AnimationHelper.Enabled) anim.EasingFunction = new QuadraticEase();
-        _dockBgBrush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
-    }
-
-    private void DockBorder_MouseLeave(object sender, MouseEventArgs e)
-    {
-        var anim = new ColorAnimation(
-            Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A),
-            Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A),
-            AnimationHelper.Dur(200));
-        if (AnimationHelper.Enabled) anim.EasingFunction = new QuadraticEase();
-        _dockBgBrush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
-    }
-
     public void Cleanup()
     {
         Close();
@@ -160,6 +303,7 @@ public class DockNoteItem : INotifyPropertyChanged
     public string Label { get; }
     public string FullTitle { get; }
     public string TooltipContent { get; }
+    public string TooltipDate { get; }
     public Brush BgColor { get; }
     public Brush FgColor { get; }
     public double OpenIndicatorOpacity { get; private set; }
@@ -175,11 +319,12 @@ public class DockNoteItem : INotifyPropertyChanged
         NoteId = note.Id;
         FullTitle = string.IsNullOrWhiteSpace(note.Title) ? "(sin título)" : note.Title;
 
-        // Tooltip: title + last modified
+        // Tooltip text (kept for backward compat) + formatted date for custom tooltip
         var dateStr = note.LastModified.Date == DateTime.Today
             ? note.LastModified.ToString("t")
             : note.LastModified.ToString("d");
         TooltipContent = $"{FullTitle}\n{dateStr}";
+        TooltipDate = dateStr;
 
         // Emoji icon or fallback to 2-letter label
         if (!string.IsNullOrEmpty(note.Icon))
@@ -203,7 +348,6 @@ public class DockNoteItem : INotifyPropertyChanged
         BgColor = new SolidColorBrush(bgColor);
         FgColor = new SolidColorBrush(IsDark(bgColor) ? Colors.White : Color.FromArgb(0xCC, 0x1A, 0x1A, 0x1A));
 
-        // State indicator
         RefreshState();
     }
 
