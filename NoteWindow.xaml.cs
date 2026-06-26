@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -109,11 +110,13 @@ public partial class NoteWindow : Window
 
         try
         {
-            var doc = (FlowDocument)XamlReader.Parse(text);
-            noteText.Document = doc;
+            var range = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd);
+            using var ms = new MemoryStream(Encoding.UTF8.GetBytes(text));
+            range.Load(ms, DataFormats.Xaml);
         }
         catch
         {
+            // Fallback: plain text (existing notes or corrupt data)
             var para = new Paragraph(new Run(text));
             noteText.Document.Blocks.Clear();
             noteText.Document.Blocks.Add(para);
