@@ -1041,34 +1041,17 @@ public partial class NoteWindow : Window
         }
         catch { return; }
 
+        // Natural size
+        double naturalW = bi.PixelWidth;
+        double noteContentW = Math.Max(Width - 60, 200);
+
+        // Fit to note width, but never exceed natural size (no pixelation)
+        img.MaxWidth = Math.Min(naturalW, noteContentW);
+        img.HorizontalAlignment = HorizontalAlignment.Center;
         img.Margin = new Thickness(0, 4, 0, 4);
         img.Stretch = Stretch.Uniform;
-        img.Cursor = Cursors.Hand;
 
-        // Size levels: 100%, 75%, 50% of note content width
-        double noteContentWidth = Math.Max(Width - 60, 200);
-        var levels = new[] { noteContentWidth, noteContentWidth * 0.75, noteContentWidth * 0.5 };
-        int currentLevel = 0;
-        img.Width = levels[0];
-
-        // Grid wraps the image tightly
-        var grid = new Grid();
-        grid.HorizontalAlignment = HorizontalAlignment.Left;
-        grid.Children.Add(img);
-
-        // Click on image cycles size
-        img.MouseDown += (_, e) =>
-        {
-            if (e.ChangedButton == MouseButton.Left && e.ClickCount == 1)
-            {
-                e.Handled = true;
-                currentLevel = (currentLevel + 1) % levels.Length;
-                img.Width = levels[currentLevel];
-                MarkDirtyAndDebounce();
-            }
-        };
-
-        var container = new BlockUIContainer(grid);
+        var container = new BlockUIContainer(img);
 
         // Insert at caret position
         var caretPos = noteText.CaretPosition;
