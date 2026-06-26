@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using QuickNotes.Models;
 
 namespace QuickNotes.Views;
@@ -14,6 +15,7 @@ public partial class DockWindow : Window
     private readonly NotesStore _store;
     private readonly Action _onExit;
     private readonly Rect _monitorBounds;
+    private readonly SolidColorBrush _dockBgBrush;
 
     public DockWindow(NotesStore store, Rect monitorBounds, Action onExit)
     {
@@ -21,10 +23,21 @@ public partial class DockWindow : Window
         _store = store;
         _monitorBounds = monitorBounds;
         _onExit = onExit;
+        AnimationHelper.Enabled = _store.AnimationsEnabled;
+
+        // Create an unfrozen brush so we can animate its alpha on hover
+        _dockBgBrush = new SolidColorBrush(Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A));
+        dockBorder.Background = _dockBgBrush;
 
         // Position: right edge of the correct monitor, vertically centered
         Left = monitorBounds.Right - 70;
         Top = monitorBounds.Top + (monitorBounds.Height - 300) / 2;
+    }
+
+    private void DockWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        // Fade in from opacity 0 (set in XAML)
+        dockBorder.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(0, 1, 200));
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -42,7 +55,7 @@ public partial class DockWindow : Window
 
         // Auto-size height: up to 6 items + button row
         int count = items.Count;
-        double h = 8 + Math.Min(count, 6) * 38 + 28 + 8;
+        double h = 8 + Math.Min(count, 6) * 38 + 32 + 8;
         Height = Math.Max(h, 80);
     }
 
@@ -95,8 +108,41 @@ public partial class DockWindow : Window
 
     private void ExitDock_Click(object sender, RoutedEventArgs e)
     {
-        Hide();
-        _onExit();
+        if (AnimationHelper.Enabled)
+        {
+            var fadeOut = AnimationHelper.MakeAnimation(0, 150);
+            fadeOut.Completed += (_, _) =>
+            {
+                Hide();
+                _onExit();
+            };
+            dockBorder.BeginAnimation(OpacityProperty, fadeOut);
+        }
+        else
+        {
+            Hide();
+            _onExit();
+        }
+    }
+
+    private void DockBorder_MouseEnter(object sender, MouseEventArgs e)
+    {
+        var anim = new ColorAnimation(
+            Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A),
+            Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A),
+            AnimationHelper.Dur(200));
+        if (AnimationHelper.Enabled) anim.EasingFunction = new QuadraticEase();
+        _dockBgBrush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
+    }
+
+    private void DockBorder_MouseLeave(object sender, MouseEventArgs e)
+    {
+        var anim = new ColorAnimation(
+            Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A),
+            Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A),
+            AnimationHelper.Dur(200));
+        if (AnimationHelper.Enabled) anim.EasingFunction = new QuadraticEase();
+        _dockBgBrush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
     }
 
     public void Cleanup()
@@ -113,13 +159,13 @@ public class DockNoteItem : INotifyPropertyChanged
     public Guid NoteId { get; }
     public string Label { get; }
     public string FullTitle { get; }
+    public string TooltipContent { get; }
     public Brush BgColor { get; }
     public Brush FgColor { get; }
-    public Visibility OpenIndicatorVisibility { get; private set; }
-    public Visibility MinIndicatorVisibility { get; private set; } = Visibility.Collapsed;
+    public double OpenIndicatorOpacity { get; private set; }
+    public double MinIndicatorOpacity { get; private set; }
     public double IconSize { get; private set; }
     public double IconOpacity { get; private set; }
-    public Thickness VerticalMargin { get; private set; }
 
     private bool _isMinimized;
     private bool _isOpen;
@@ -128,6 +174,12 @@ public class DockNoteItem : INotifyPropertyChanged
     {
         NoteId = note.Id;
         FullTitle = string.IsNullOrWhiteSpace(note.Title) ? "(sin título)" : note.Title;
+
+        // Tooltip: title + last modified
+        var dateStr = note.LastModified.Date == DateTime.Today
+            ? note.LastModified.ToString("t")
+            : note.LastModified.ToString("d");
+        TooltipContent = $"{FullTitle}\n{dateStr}";
 
         // Emoji icon or fallback to 2-letter label
         if (!string.IsNullOrEmpty(note.Icon))
@@ -163,30 +215,30 @@ public class DockNoteItem : INotifyPropertyChanged
         _isOpen = existingWin != null && existingWin.IsVisible;
         _isMinimized = existingWin != null && !existingWin.IsVisible;
 
-                if (_isOpen)
+        if (_isOpen)
         {
-            OpenIndicatorVisibility = Visibility.Visible;
-            MinIndicatorVisibility = Visibility.Collapsed;
+            OpenIndicatorOpacity = 1;
+            MinIndicatorOpacity = 0;
             IconSize = 32;
             IconOpacity = 1.0;
         }
         else if (_isMinimized)
         {
-            OpenIndicatorVisibility = Visibility.Collapsed;
-            MinIndicatorVisibility = Visibility.Visible;
+            OpenIndicatorOpacity = 0;
+            MinIndicatorOpacity = 1;
             IconSize = 32;
             IconOpacity = 0.7;
         }
         else
         {
-            OpenIndicatorVisibility = Visibility.Collapsed;
-            MinIndicatorVisibility = Visibility.Collapsed;
+            OpenIndicatorOpacity = 0;
+            MinIndicatorOpacity = 0;
             IconSize = 32;
             IconOpacity = 0.5;
         }
 
-        OnPropertyChanged(nameof(OpenIndicatorVisibility));
-        OnPropertyChanged(nameof(MinIndicatorVisibility));
+        OnPropertyChanged(nameof(OpenIndicatorOpacity));
+        OnPropertyChanged(nameof(MinIndicatorOpacity));
         OnPropertyChanged(nameof(IconSize));
         OnPropertyChanged(nameof(IconOpacity));
     }
@@ -204,5 +256,3 @@ public class DockNoteItem : INotifyPropertyChanged
 
     private static bool IsDark(Color c) => (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) < 140;
 }
-
-

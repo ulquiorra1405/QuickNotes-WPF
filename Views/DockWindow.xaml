@@ -8,24 +8,16 @@
         WindowStartupLocation="Manual"
         AllowsTransparency="True"
         Background="Transparent"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        Loaded="DockWindow_Loaded">
 
-    <Window.Resources>
-        <!-- Note icon hover style (subtle brightness overlay) -->
-        <Style x:Key="NoteIconBorder" TargetType="Border">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Opacity" Value="0.85"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-    </Window.Resources>
-
-    <Border CornerRadius="10" Background="#1A1A1A" BorderBrush="#3A3A3A" BorderThickness="1"
-            Padding="2,8,2,8">
+    <Border x:Name="dockBorder" Opacity="0"
+            CornerRadius="10" BorderBrush="#3A3A3A" BorderThickness="1"
+            Padding="2,8,2,8"
+            MouseEnter="DockBorder_MouseEnter" MouseLeave="DockBorder_MouseLeave">
+        <Border.Effect>
+            <DropShadowEffect ShadowDepth="4" Color="#000000" Opacity="0.5" BlurRadius="12" Direction="270"/>
+        </Border.Effect>
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
@@ -37,8 +29,9 @@
                           HorizontalScrollBarVisibility="Disabled">
                 <ItemsControl x:Name="notesList">
                     <ItemsControl.ItemTemplate>
-                                                                                                                        <DataTemplate>
+                        <DataTemplate>
                             <Grid>
+                                <!-- Note icon with scale + brightness hover -->
                                 <Border Width="{Binding IconSize}" Height="{Binding IconSize}"
                                         HorizontalAlignment="Center"
                                         Margin="0,3,0,3"
@@ -47,7 +40,52 @@
                                         Opacity="{Binding IconOpacity}"
                                         Tag="{Binding NoteId}"
                                         MouseDown="NoteIcon_MouseDown"
-                                        Style="{StaticResource NoteIconBorder}">
+                                        ToolTip="{Binding TooltipContent}"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                    </Border.RenderTransform>
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Opacity" Value="1"/>
+                                                    <Trigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" To="1.12" Duration="0:0:0.12">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <QuadraticEase EasingMode="EaseOut"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                                <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" To="1.12" Duration="0:0:0.12">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <QuadraticEase EasingMode="EaseOut"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.EnterActions>
+                                                    <Trigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" To="1" Duration="0:0:0.12">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <QuadraticEase EasingMode="EaseOut"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                                <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" To="1" Duration="0:0:0.12">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <QuadraticEase EasingMode="EaseOut"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.ExitActions>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
                                     <TextBlock Text="{Binding Label}" FontSize="18"
                                                FontWeight="Normal"
                                                Foreground="{Binding FgColor}"
@@ -55,53 +93,131 @@
                                                VerticalAlignment="Center"/>
                                 </Border>
 
-                                <!-- Open indicator: vertical bar -->
+                                <!-- Open indicator: vertical bar (smooth fade) -->
                                 <Rectangle Width="2" Height="12" RadiusX="1" RadiusY="1"
                                            HorizontalAlignment="Right"
                                            VerticalAlignment="Center"
                                            Margin="0,0,2,0"
-                                           Visibility="{Binding OpenIndicatorVisibility}"
-                                           Fill="LimeGreen"/>
+                                           Opacity="0"
+                                           Fill="LimeGreen">
+                                    <Rectangle.Style>
+                                        <Style TargetType="Rectangle">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding OpenIndicatorOpacity}" Value="1">
+                                                    <DataTrigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.15">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <QuadraticEase EasingMode="EaseOut"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.EnterActions>
+                                                    <DataTrigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <QuadraticEase EasingMode="EaseOut"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.ExitActions>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Rectangle.Style>
+                                </Rectangle>
 
-                                <!-- Minimized indicator: dot -->
+                                <!-- Minimized indicator: dot (smooth fade) -->
                                 <Ellipse Width="4" Height="4"
                                          HorizontalAlignment="Right"
                                          VerticalAlignment="Center"
                                          Margin="0,0,2,0"
-                                         Visibility="{Binding MinIndicatorVisibility}"
-                                         Fill="Orange"/>
+                                         Opacity="0"
+                                         Fill="Orange">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding MinIndicatorOpacity}" Value="1">
+                                                    <DataTrigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.15">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <QuadraticEase EasingMode="EaseOut"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.EnterActions>
+                                                    <DataTrigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <QuadraticEase EasingMode="EaseOut"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.ExitActions>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
 
-            <!-- QN exit button -->
+            <!-- Exit button ⛶ -->
             <Button x:Name="exitDockBtn" Grid.Row="1"
-                    Content="QN" FontSize="9"
-                    Width="36" Height="22"
+                    Content="⛶" FontSize="14"
+                    Width="24" Height="24"
                     Background="Transparent" BorderThickness="0"
                     Foreground="#555555"
                     Cursor="Hand"
                     ToolTip="Volver al modo normal"
-                    Margin="0,6,0,0"
+                    Margin="0,8,0,0"
+                    RenderTransformOrigin="0.5,0.5"
                     Click="ExitDock_Click">
+                <Button.RenderTransform>
+                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                </Button.RenderTransform>
                 <Button.Style>
                     <Style TargetType="Button">
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="Button">
-                                    <Border x:Name="bg"
-                                            Background="Transparent"
-                                            CornerRadius="4"
-                                            Padding="6,2">
+                                    <Border x:Name="bg" Background="Transparent"
+                                            CornerRadius="4" Padding="0">
                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
                                             <Setter TargetName="bg" Property="Background" Value="#2A2A2A"/>
-                                            <Setter TargetName="bg" Property="BorderBrush" Value="#555555"/>
-                                            <Setter TargetName="bg" Property="BorderThickness" Value="1"/>
+                                            <Trigger.EnterActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" To="1.15" Duration="0:0:0.1"/>
+                                                        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" To="1.15" Duration="0:0:0.1"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </Trigger.EnterActions>
+                                            <Trigger.ExitActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleX" To="1" Duration="0:0:0.1"/>
+                                                        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.ScaleY" To="1" Duration="0:0:0.1"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </Trigger.ExitActions>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -113,8 +229,3 @@
         </Grid>
     </Border>
 </Window>
-
-
-
-
-
