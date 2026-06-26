@@ -112,6 +112,7 @@ public partial class NoteWindow : Window
         DataObject.AddPastingHandler(noteText, OnNotePaste);
         noteText.AllowDrop = true;
         noteText.Drop += NoteText_Drop;
+        noteText.PreviewDragOver += NoteText_PreviewDragOver;
 
         // Auto-pairing
         PreviewTextInput += NoteWindow_PreviewTextInput;
@@ -138,12 +139,42 @@ public partial class NoteWindow : Window
         }
     }
 
+    private void NoteText_PreviewDragOver(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop) ||
+            e.Data.GetDataPresent(DataFormats.Bitmap))
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+        }
+    }
+
     private void OnNotePaste(object sender, DataObjectPastingEventArgs e)
     {
-        if (Clipboard.ContainsImage())
+        // Check for image data in multiple formats
+        if (e.DataObject.GetDataPresent(DataFormats.Bitmap) ||
+            e.DataObject.GetDataPresent("PNG") ||
+            e.DataObject.GetDataPresent("System.Drawing.Bitmap"))
         {
             e.CancelCommand();
             InsertImageFromClipboard();
+            return;
+        }
+
+        // If it's a file drop from clipboard (e.g. copied image file)
+        if (e.DataObject.GetDataPresent(DataFormats.FileDrop))
+        {
+            var files = e.DataObject.GetData(DataFormats.FileDrop) as string[];
+            if (files != null && files.Length > 0)
+            {
+                var ext = System.IO.Path.GetExtension(files[0]).ToLowerInvariant();
+                var validExts = new HashSet<string> { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
+                if (validExts.Contains(ext))
+                {
+                    e.CancelCommand();
+                    InsertImageFromFile(files[0]);
+                }
+            }
         }
     }
 
@@ -999,23 +1030,26 @@ public partial class NoteWindow : Window
         var container = new BlockUIContainer(img);
 
         // Insert at caret position
-        var caretPara = noteText.CaretPosition.Paragraph;
-        if (caretPara != null)
+        var caretPos = noteText.CaretPosition;
+        var caretPara = caretPos.Paragraph;
+
+        if (caretPara != null && caretPara.Parent is FlowDocument doc)
         {
-            // Insert image block after current paragraph
-            var afterThisBlock = noteText.CaretPosition.Paragraph?.NextBlock;
-            if (afterThisBlock != null)
-                noteText.Document.Blocks.InsertBefore(afterThisBlock, container);
-            else
-                noteText.Document.Blocks.Add(container);
+            doc.Blocks.InsertAfter(caretPara, container);
+        }
+        else if (caretPara != null && caretPara.Parent is Section sec)
+        {
+            sec.Blocks.InsertAfter(caretPara, container);
         }
         else
         {
+            // Fallback: add to the end of document
             noteText.Document.Blocks.Add(container);
         }
 
         // Place caret after the image block
         noteText.CaretPosition = container.ElementEnd;
+        noteText.Focus();
         MarkDirtyAndDebounce();
     }
 
