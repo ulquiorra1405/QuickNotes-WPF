@@ -762,25 +762,14 @@ public partial class NoteWindow : Window
         // Intercept Ctrl+V for images BEFORE RichTextBox handles it
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.V)
         {
-            // DEBUG LOG
-            var logFile = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "QuickNotes", "paste_debug.log");
-            System.IO.File.AppendAllText(logFile,
-                $"[{DateTime.Now:HH:mm:ss}] Ctrl+V detected\n");
-
-            // Use Win32 P/Invoke to read clipboard (handles all DIB formats)
+            // Use Win32 P/Invoke to read clipboard
             var img = Helpers.ClipboardImageReader.GetImageFromClipboard();
             if (img != null)
             {
-                System.IO.File.AppendAllText(logFile,
-                    $"[{DateTime.Now:HH:mm:ss}] Image found: {img.Width}x{img.Height}\n");
                 e.Handled = true;
                 InsertImageFromClipboard(img);
                 return;
             }
-            System.IO.File.AppendAllText(logFile,
-                $"[{DateTime.Now:HH:mm:ss}] No image found\n");
 
             // Check for file drop (image files from Explorer)
             if (Clipboard.ContainsFileDropList())
@@ -1018,74 +1007,133 @@ public partial class NoteWindow : Window
     {
         try
         {
-            if (img == null) { Log($"InsertImageFromClipboard: img is null"); return; }
-
-            Log($"InsertImageFromClipboard: {img.Width}x{img.Height}");
+            if (img == null) return;
 
             Directory.CreateDirectory(_imageFolder);
             var fileName = $"{Guid.NewGuid()}.png";
             var filePath = System.IO.Path.Combine(_imageFolder, fileName);
 
-            Log($"Saving to {filePath}");
             {
                 using var fs = new FileStream(filePath, FileMode.Create);
                 var encoder = new PngBitmapEncoder();
                 encoder.Frames.Add(BitmapFrame.Create(img));
                 encoder.Save(fs);
             }
-            Log($"Saved {new FileInfo(filePath).Length} bytes");
 
             InsertImageBlock(filePath);
-            Log($"InsertImageBlock completed");
         }
-        catch (Exception ex) { Log($"InsertImageFromClipboard error: {ex}"); ErrorLog.Write(ex, "InsertImageFromClipboard"); }
+        catch (Exception ex) { ErrorLog.Write(ex, "InsertImageFromClipboard"); }
     }
 
     private void InsertImageBlock(string fullPath)
     {
-        Log($"InsertImageBlock: {fullPath}");
-        Log($"File exists: {System.IO.File.Exists(fullPath)}");
         var img = new System.Windows.Controls.Image();
         try
         {
-            img.Source = new BitmapImage(new Uri(fullPath));
+            var bi = new BitmapImage();
+            bi.BeginInit();
+            bi.UriSource = new Uri(fullPath);
+            bi.CacheOption = BitmapCacheOption.OnLoad;
+            bi.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+            bi.EndInit();
+            img.Source = bi;
+            img.Width = Math.Min(bi.PixelWidth, Math.Max(Width - 40, 200));
         }
-        catch (Exception ex)
+        catch
         {
-            Log($"Failed to load image: {ex.Message}");
             return;
         }
-        img.MaxWidth = Math.Max(Width - 40, 200);
         img.Margin = new Thickness(0, 4, 0, 4);
         img.Stretch = Stretch.Uniform;
 
-        var container = new BlockUIContainer(img);
+        // Resize handle (small triangle at bottom-right)
+        var resizeThumb = new System.Windows.Controls.Primitives.Thumb();
+        resizeThumb.Width = 14;
+        resizeThumb.Height = 14;
+        resizeThumb.HorizontalAlignment = HorizontalAlignment.Right;
+        resizeThumb.VerticalAlignment = VerticalAlignment.Bottom;
+        resizeThumb.Cursor = Cursors.SizeNWSE;
+        resizeThumb.Opacity = 0;
+
+        // Triangle path
+        var tri = new System.Windows.Shapes.Path
+        {
+            Data = System.Windows.Media.Geometry.Parse("M2,12 L12,2 L12,12 Z"),
+            Fill = new SolidColorBrush(Color.FromArgb(160, 60, 60, 60)),
+            Stroke = System.Windows.Media.Brushes.White,
+            StrokeThickness = 0.5,
+            IsHitTestVisible = false
+        };
+
+        // Hover: show handle
+        var border = new Border
+        {
+            BorderThickness = new Thickness(1),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0, 60, 60, 60)),
+            Child = img
+        };
+
+        border.MouseEnter += (_, _) =>
+        {
+            border.BorderBrush = new SolidColorBrush(Color.FromArgb(60, 60, 60, 60));
+            resizeThumb.Opacity = 1;
+        };
+        border.MouseLeave += (_, _) =>
+        {
+            // Don't hide if dragging
+            if (!_isResizingImage)
+            {
+                border.BorderBrush = new SolidColorBrush(Color.FromArgb(0, 60, 60, 60));
+                resizeThumb.Opacity = 0;
+            }
+        };
+
+        var grid = new Grid();
+        grid.Children.Add(border);
+        grid.Children.Add(tri);
+        grid.Children.Add(resizeThumb);
+
+        resizeThumb.DragStarted += (_, _) => _isResizingImage = true;
+        resizeThumb.DragDelta += (_, e) =>
+        {
+            double newW = Math.Max(50, img.Width + e.HorizontalChange);
+            double newH = Math.Max(50, img.Height + e.VerticalChange);
+            img.Width = newW;
+            img.Height = newH;
+        };
+        resizeThumb.DragCompleted += (_, _) =>
+        {
+            _isResizingImage = false;
+            border.BorderBrush = new SolidColorBrush(Color.FromArgb(0, 60, 60, 60));
+            resizeThumb.Opacity = 0;
+            MarkDirtyAndDebounce();
+        };
+
+        // Double-click to reset size
+        grid.MouseDown += (_, e) =>
+        {
+            if (e.ClickCount == 2 && img.Source is BitmapImage bmp)
+            {
+                e.Handled = true;
+                img.Width = Math.Min(bmp.PixelWidth, Math.Max(Width - 40, 200));
+                img.Height = double.NaN;
+                MarkDirtyAndDebounce();
+            }
+        };
+
+        var container = new BlockUIContainer(grid);
 
         // Insert at caret position
         var caretPos = noteText.CaretPosition;
         var caretPara = caretPos.Paragraph;
-        Log($"caretPara != null: {caretPara != null}");
 
         if (caretPara != null && caretPara.Parent is FlowDocument doc)
-        {
-            Log("Inserting after paragraph in FlowDocument");
             doc.Blocks.InsertAfter(caretPara, container);
-            Log("Inserted OK");
-        }
         else if (caretPara != null && caretPara.Parent is Section sec)
-        {
-            Log("Inserting after paragraph in Section");
             sec.Blocks.InsertAfter(caretPara, container);
-        }
         else
-        {
-            // Fallback: add to the end of document
-            Log("Fallback: adding to end of document");
             noteText.Document.Blocks.Add(container);
-            Log("Added to end OK");
-        }
 
-        // Place caret after the image block
         noteText.CaretPosition = container.ElementEnd;
         noteText.Focus();
         MarkDirtyAndDebounce();
@@ -1318,16 +1366,6 @@ public partial class NoteWindow : Window
             noteText.FontFamily = new FontFamily(fontFamily);
     }
 
-    private void Log(string message)
-    {
-        try
-        {
-            var logFile = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "QuickNotes", "paste_debug.log");
-            System.IO.File.AppendAllText(logFile,
-                $"[{DateTime.Now:HH:mm:ss}] {message}\n");
-        }
-        catch { }
-    }
+    private bool _isResizingImage;
+    private bool _isProcessingAutoText;
 }

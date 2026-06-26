@@ -35,61 +35,20 @@ internal static class ClipboardImageReader
 
     public static BitmapSource? GetImageFromClipboard()
     {
-        var logFile = System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            "QuickNotes", "paste_debug.log");
-
         // 1) Try WPF built-in for simplest case
         try
         {
             var wpf = System.Windows.Clipboard.GetImage();
-            if (wpf != null) {
-                System.IO.File.AppendAllText(logFile,
-                    $"[{DateTime.Now:HH:mm:ss}] WPF GetImage OK: {wpf.Width}x{wpf.Height}\n");
-                return wpf;
-            }
-            System.IO.File.AppendAllText(logFile,
-                $"[{DateTime.Now:HH:mm:ss}] WPF GetImage returned null\n");
+            if (wpf != null) return wpf;
         }
-        catch (Exception ex)
-        {
-            System.IO.File.AppendAllText(logFile,
-                $"[{DateTime.Now:HH:mm:ss}] WPF GetImage exception: {ex.Message}\n");
-        }
+        catch { }
 
         // 2) Try Win32 DIB/DIBV5
-        System.IO.File.AppendAllText(logFile,
-            $"[{DateTime.Now:HH:mm:ss}] Trying CF_DIBV5...\n");
-        var dib = TryReadDib(CF_DIBV5);
-        if (dib != null) {
-            System.IO.File.AppendAllText(logFile,
-                $"[{DateTime.Now:HH:mm:ss}] CF_DIBV5 OK: {dib.Width}x{dib.Height}\n");
-            return dib;
-        }
-        
-        System.IO.File.AppendAllText(logFile,
-            $"[{DateTime.Now:HH:mm:ss}] Trying CF_DIB...\n");
-        dib = TryReadDib(CF_DIB);
-        if (dib != null) {
-            System.IO.File.AppendAllText(logFile,
-                $"[{DateTime.Now:HH:mm:ss}] CF_DIB OK: {dib.Width}x{dib.Height}\n");
-            return dib;
-        }
+        var dib = TryReadDib(CF_DIBV5) ?? TryReadDib(CF_DIB);
+        if (dib != null) return dib;
 
         // 3) Try Win32 HBITMAP
-        System.IO.File.AppendAllText(logFile,
-            $"[{DateTime.Now:HH:mm:ss}] Trying CF_BITMAP...\n");
-        var hbmp = TryReadHBitmap();
-        if (hbmp != null)
-        {
-            System.IO.File.AppendAllText(logFile,
-                $"[{DateTime.Now:HH:mm:ss}] CF_BITMAP OK: {hbmp.Width}x{hbmp.Height}\n");
-            return hbmp;
-        }
-
-        System.IO.File.AppendAllText(logFile,
-            $"[{DateTime.Now:HH:mm:ss}] ALL formats failed\n");
-        return null;
+        return TryReadHBitmap();
     }
 
     /// <summary>
