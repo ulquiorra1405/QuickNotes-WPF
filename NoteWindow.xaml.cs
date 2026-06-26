@@ -762,15 +762,35 @@ public partial class NoteWindow : Window
         // Intercept Ctrl+V for images BEFORE RichTextBox handles it
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.V)
         {
+            // Try immediate read first (works for image files, some screenshots)
             var img = Clipboard.GetImage();
             if (img != null)
             {
                 e.Handled = true;
-                // Insert asynchronously to avoid freezing
-                Dispatcher.BeginInvoke(() => InsertImageFromClipboard(img),
-                    System.Windows.Threading.DispatcherPriority.Background);
+                InsertImageFromClipboard(img);
                 return;
             }
+
+            // Delay 50ms and retry (Snipping Tool needs time to settle)
+            e.Handled = true;
+            var timer = new System.Windows.Threading.DispatcherTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(50);
+            timer.Tick += (s, _) =>
+            {
+                timer.Stop();
+                var delayedImg = Clipboard.GetImage();
+                if (delayedImg != null)
+                {
+                    InsertImageFromClipboard(delayedImg);
+                }
+                else
+                {
+                    // No image — execute default paste
+                    noteText.Paste();
+                }
+            };
+            timer.Start();
+            return;
         }
 
         if (Keyboard.Modifiers == ModifierKeys.Control)
