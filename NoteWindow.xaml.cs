@@ -36,6 +36,20 @@ public partial class NoteWindow : Window
 
     private string _searchQuery = "";
 
+    private Color _currentHighlightColor = Color.FromArgb(0x55, 0xFF, 0xD7, 0x00);
+
+    private static readonly Color[] HighlightColors =
+    [
+        Color.FromArgb(0x55, 0xFF, 0xD7, 0x00), // Yellow
+        Color.FromArgb(0x55, 0x55, 0xFF, 0x55), // Green
+        Color.FromArgb(0x55, 0x55, 0xAA, 0xFF), // Blue
+        Color.FromArgb(0x55, 0xFF, 0x55, 0xFF), // Pink
+        Color.FromArgb(0x55, 0xFF, 0x88, 0x00), // Orange
+        Color.FromArgb(0x55, 0x88, 0x55, 0xFF), // Purple
+        Color.FromArgb(0x55, 0x00, 0xDD, 0xFF), // Cyan
+        Color.FromArgb(0x55, 0xFF, 0x55, 0x55), // Red
+    ];
+
 
 
     public NoteWindow(Note note, NotesStore? store = null)
@@ -83,14 +97,16 @@ public partial class NoteWindow : Window
         PreviewKeyDown += NoteWindow_PreviewKeyDown;
         PreviewMouseDown += (_, e) =>
         {
-            if (!colorPopup.IsOpen && !emojiPopup.IsOpen) return;
+            if (!colorPopup.IsOpen && !emojiPopup.IsOpen && !highlightPopup.IsOpen) return;
             if (e.OriginalSource is DependencyObject src)
             {
                 if (colorPopup.IsOpen && FindParent<Border>(src) == currentColorDot) return;
                 if (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn) return;
+                if (highlightPopup.IsOpen && FindParent<Border>(src) == highlightBtn) return;
             }
             colorPopup.IsOpen = false;
             emojiPopup.IsOpen = false;
+            highlightPopup.IsOpen = false;
         };
 
         // Image paste & drag-drop
@@ -100,6 +116,10 @@ public partial class NoteWindow : Window
 
         // Auto-pairing
         PreviewTextInput += NoteWindow_PreviewTextInput;
+
+        // Highlight popup
+        BuildHighlightPicker();
+        highlightBtn.Background = new SolidColorBrush(_currentHighlightColor);
     }
 
     private void NoteText_Drop(object sender, DragEventArgs e)
@@ -667,7 +687,51 @@ public partial class NoteWindow : Window
 
     // ── Highlight ──
 
-    private void ToggleHighlight()
+    private void BuildHighlightPicker()
+    {
+        highlightPanel.Children.Clear();
+        foreach (var color in HighlightColors)
+        {
+            var border = new Border
+            {
+                Width = 18,
+                Height = 18,
+                CornerRadius = new CornerRadius(3),
+                Margin = new Thickness(2),
+                Cursor = Cursors.Hand,
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0x00, 0x00)),
+                BorderThickness = new Thickness(1),
+                Background = new SolidColorBrush(color),
+            };
+            var c = color; // capture
+            border.MouseDown += (_, e) =>
+            {
+                if (e.LeftButton == MouseButtonState.Pressed)
+                    SelectHighlightColor(c, border);
+            };
+            border.MouseEnter += (_, _) =>
+                border.BorderBrush = new SolidColorBrush(Color.FromArgb(0x80, 0x00, 0x00, 0x00));
+            border.MouseLeave += (_, _) =>
+                border.BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0x00, 0x00));
+            highlightPanel.Children.Add(border);
+        }
+    }
+
+    private void HighlightBtn_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed)
+            highlightPopup.IsOpen = !highlightPopup.IsOpen;
+    }
+
+    private void SelectHighlightColor(Color color, Border selected)
+    {
+        _currentHighlightColor = color;
+        highlightBtn.Background = new SolidColorBrush(color);
+        highlightPopup.IsOpen = false;
+        ApplyHighlight(color);
+    }
+
+    private void ApplyHighlight(Color color)
     {
         var sel = noteText.Selection;
         if (sel.IsEmpty) return;
@@ -675,17 +739,22 @@ public partial class NoteWindow : Window
         var range = new TextRange(sel.Start, sel.End);
         var existing = range.GetPropertyValue(TextElement.BackgroundProperty);
 
-        if (existing is SolidColorBrush scb && scb.Color == Color.FromArgb(0x55, 0xFF, 0xD7, 0x00))
+        if (existing is SolidColorBrush scb && scb.Color == color)
         {
             range.ApplyPropertyValue(TextElement.BackgroundProperty, Brushes.Transparent);
         }
         else
         {
             range.ApplyPropertyValue(TextElement.BackgroundProperty,
-                new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xD7, 0x00)));
+                new SolidColorBrush(color));
         }
 
         MarkDirtyAndDebounce();
+    }
+
+    private void ToggleHighlight()
+    {
+        ApplyHighlight(_currentHighlightColor);
     }
 
     private void NoteWindow_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -1085,7 +1154,6 @@ public partial class NoteWindow : Window
     private void BulletBtn_Click(object sender, RoutedEventArgs e) => ToggleBulletList();
     private void NumberBtn_Click(object sender, RoutedEventArgs e) => ToggleNumberList();
     private void CheckboxBtn_Click(object sender, RoutedEventArgs e) => InsertCheckbox();
-    private void HighlightBtn_Click(object sender, RoutedEventArgs e) => ToggleHighlight();
 
     private void UndoBtn_Click(object sender, RoutedEventArgs e) => Undo();
     private void RedoBtn_Click(object sender, RoutedEventArgs e) => Redo();
