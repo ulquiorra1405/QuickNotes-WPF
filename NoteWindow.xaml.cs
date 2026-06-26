@@ -5,21 +5,31 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Shapes;
 using QuickNotes.Models;
 
 namespace QuickNotes;
 
 public partial class NoteWindow : Window
 {
+    public const double DefaultWidth = 340;
+    public const double DefaultHeight = 260;
+
+    /// <summary>
+    /// Set to true during app shutdown to preserve positions.
+    /// </summary>
+    internal static bool IsAppShuttingDown;
+
     private readonly Note _note;
     private readonly NotesStore _store;
-    private Point _dragStartPoint;
-    private bool _isDragging;
-    private bool _mouseDownOnTitle;
+
     private string _searchQuery = "";
+
+
 
     public NoteWindow(Note note, NotesStore? store = null)
     {
@@ -28,16 +38,25 @@ public partial class NoteWindow : Window
         _store = store ?? new NotesStore();
 
         DataContext = note;
+
+        // Init emoji button
+        emojiBtn.Content = note.Icon;
+        BuildEmojiPicker();
         if (_store.NoteFontSize != 13)
             noteText.FontSize = _store.NoteFontSize;
         if (!string.IsNullOrEmpty(_store.NoteFontFamily) && _store.NoteFontFamily != "Calibri")
             noteText.FontFamily = new FontFamily(_store.NoteFontFamily);
         AnimationHelper.Enabled = _store.AnimationsEnabled;
 
-        if (!double.IsNaN(note.WinLeft)) Left = note.WinLeft;
-        if (!double.IsNaN(note.WinTop)) Top = note.WinTop;
-        if (!double.IsNaN(note.WinWidth)) Width = note.WinWidth;
-        if (!double.IsNaN(note.WinHeight)) Height = note.WinHeight;
+        if (!double.IsNaN(note.WinLeft) && note.WinLeft > 0) Left = note.WinLeft;
+        if (!double.IsNaN(note.WinTop) && note.WinTop > 0) Top = note.WinTop;
+        if (!double.IsNaN(note.WinWidth) && note.WinWidth > 0) Width = note.WinWidth;
+        if (!double.IsNaN(note.WinHeight) && note.WinHeight > 0) Height = note.WinHeight;
+
+        // Ensure window is visible on some monitor
+        var r = MonitorHelper.ClampToScreen(Left, Top, Width, Height);
+        Left = r.Left;
+        Top = r.Top;
 
         Opacity = 0;
         Loaded += (_, _) =>
@@ -49,13 +68,38 @@ public partial class NoteWindow : Window
 
         Activated += (_, _) => ToggleBars(show: true);
         Deactivated += (_, _) => ToggleBars(show: false);
+        SourceInitialized += (_, _) =>
+        {
+            var source = (HwndSource?)PresentationSource.FromVisual(this);
+            source?.AddHook(WndProc);
+        };
         PreviewKeyDown += NoteWindow_PreviewKeyDown;
         PreviewMouseDown += (_, e) =>
         {
-            if (!colorPopup.IsOpen) return;
-            if (e.OriginalSource is DependencyObject src && FindParent<Border>(src) == currentColorDot) return;
+            if (!colorPopup.IsOpen && !emojiPopup.IsOpen) return;
+            if (e.OriginalSource is DependencyObject src)
+            {
+                if (colorPopup.IsOpen && FindParent<Border>(src) == currentColorDot) return;
+                if (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn) return;
+            }
             colorPopup.IsOpen = false;
+            emojiPopup.IsOpen = false;
         };
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_NCLBUTTONDBLCLK = 0x00A3;
+        const int HTCAPTION = 2;
+
+        if (msg == WM_NCLBUTTONDBLCLK && (int)wParam == HTCAPTION)
+        {
+            handled = true;
+            Dispatcher.BeginInvoke(() => EnterEditMode());
+            return IntPtr.Zero;
+        }
+
+        return IntPtr.Zero;
     }
 
     private void LoadRichText()
@@ -111,7 +155,6 @@ public partial class NoteWindow : Window
         _note.LastModified = DateTime.Now;
         _store.Save();
         _note.IsDirty = false;
-        TabBar.Instance.UpdateTab(this);
     }
 
     private void TitleInput_LostFocus(object sender, RoutedEventArgs e)
@@ -178,63 +221,16 @@ public partial class NoteWindow : Window
 
     private void Close_Click(object sender, RoutedEventArgs e)
     {
-        _note.IsMinimized = false;
         SaveRichText();
         _note.LastModified = DateTime.Now;
         _note.IsDirty = false;
-        TabBar.Instance.RemoveTab(this);
         var fade = AnimationHelper.MakeAnimation(0, 150);
         fade.Completed += (_, _) =>
         {
-            SavePosition();
             _store.Save();
             Close();
         };
         BeginAnimation(OpacityProperty, fade);
-    }
-
-    private void TitleBar_PreviewMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ChangedButton == MouseButton.Left && e.ClickCount == 1)
-        {
-            if (e.OriginalSource is DependencyObject src)
-            {
-                if (FindParent<ButtonBase>(src) != null) return;
-                if (FindParent<RichTextBox>(src) != null) return;
-                if (FindParent<TextBox>(src) != null) return;
-                _mouseDownOnTitle = FindParent<TextBlock>(src) != null;
-            }
-            if (titleInput.Visibility == Visibility.Visible)
-                CommitTitleEdit();
-            _dragStartPoint = e.GetPosition(this);
-            _isDragging = false;
-            titleBar.CaptureMouse();
-        }
-    }
-
-    private void TitleBar_PreviewMouseMove(object sender, MouseEventArgs e)
-    {
-        if (e.LeftButton == MouseButtonState.Pressed && titleBar.IsMouseCaptured && !_isDragging)
-        {
-            var pos = e.GetPosition(this);
-            if (Math.Abs(pos.X - _dragStartPoint.X) >= SystemParameters.MinimumHorizontalDragDistance ||
-                Math.Abs(pos.Y - _dragStartPoint.Y) >= SystemParameters.MinimumVerticalDragDistance)
-            {
-                _isDragging = true;
-                titleBar.ReleaseMouseCapture();
-                DragMove();
-            }
-        }
-    }
-
-    private void TitleBar_PreviewMouseUp(object sender, MouseButtonEventArgs e)
-    {
-        if (titleBar.IsMouseCaptured)
-        {
-            titleBar.ReleaseMouseCapture();
-            if (!_isDragging && e.ChangedButton == MouseButton.Left && _mouseDownOnTitle)
-                EnterEditMode();
-        }
     }
 
     private void EnterEditMode()
@@ -260,8 +256,23 @@ public partial class NoteWindow : Window
     {
         SaveRichText();
         _note.IsDirty = false;
+        // Reset position on individual close (not during app shutdown)
+        if (!IsAppShuttingDown)
+        {
+            _note.WinLeft = double.NaN;
+            _note.WinTop = double.NaN;
+        }
         _store.Save();
         base.OnClosing(e);
+
+        // Refresh dock indicators (safe after close)
+        try
+        {
+            foreach (Window w in Application.Current.Windows)
+                if (w is Views.DockWindow dw)
+                    dw.Dispatcher.BeginInvoke(() => dw.RefreshNotes());
+        }
+        catch { }
     }
 
     private static T? FindParent<T>(DependencyObject child) where T : DependencyObject
@@ -285,25 +296,24 @@ public partial class NoteWindow : Window
 
     private void MinimizeNote_Click(object sender, RoutedEventArgs e)
     {
-        SavePosition();
         SaveRichText();
-        _note.IsMinimized = true;
+        _note.WinLeft = Left;
+        _note.WinTop = Top;
+        _note.WinWidth = Width;
+        _note.WinHeight = Height;
         _note.LastModified = DateTime.Now;
         _note.IsDirty = false;
         _store.Save();
-        if (TabBar.Instance.HasTab(this))
-            TabBar.Instance.RestoreTab(this);
-        else
-        {
-            TabBar.Instance.AddTab(this, _note);
-            TabBar.Instance.ShowTabBar();
-        }
         Hide();
+
+        // Notify dock to refresh indicators
+        foreach (Window w in Application.Current.Windows)
+            if (w is Views.DockWindow dw)
+                dw.RefreshNotes();
     }
 
     public void OnTabOpened()
     {
-        _note.IsMinimized = false;
         if (!double.IsNaN(_note.WinLeft)) Left = _note.WinLeft;
         if (!double.IsNaN(_note.WinTop)) Top = _note.WinTop;
         if (!double.IsNaN(_note.WinWidth)) Width = _note.WinWidth;
@@ -328,6 +338,61 @@ public partial class NoteWindow : Window
     {
         if (e.ChangedButton == MouseButton.Left)
             colorPopup.IsOpen = !colorPopup.IsOpen;
+    }
+
+    private void BuildEmojiPicker()
+    {
+        emojiPanel.Children.Clear();
+        foreach (var emoji in Note.EmojiPalette)
+        {
+            var border = new Border
+            {
+                Height = 28,
+                CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(2),
+                Cursor = Cursors.Hand,
+                Background = Brushes.Transparent,
+            };
+            var text = new TextBlock
+            {
+                Text = emoji,
+                FontSize = 13,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            border.Child = text;
+            border.MouseDown += (s, e) =>
+            {
+                if (e.LeftButton == MouseButtonState.Pressed)
+                    SelectEmoji(emoji, border);
+            };
+            border.MouseEnter += (_, _) =>
+                border.Background = new SolidColorBrush(Color.FromArgb(0x3F, 0xFF, 0xFF, 0xFF));
+            border.MouseLeave += (_, _) =>
+                border.Background = Brushes.Transparent;
+            emojiPanel.Children.Add(border);
+        }
+    }
+
+    private void EmojiBtn_Click(object sender, RoutedEventArgs e)
+    {
+        emojiPopup.IsOpen = !emojiPopup.IsOpen;
+    }
+
+    private void SelectEmoji(string emoji, Border selectedBorder)
+    {
+        _note.Icon = emoji;
+        emojiBtn.Content = emoji;
+        _note.LastModified = DateTime.Now;
+        _note.IsDirty = false;
+        _store.Save();
+        emojiPopup.IsOpen = false;
+
+        // Flash feedback
+        var down = AnimationHelper.MakeAnimation(0.7, 80);
+        var up = AnimationHelper.MakeAnimation(1, 120);
+        down.Completed += (_, _) => emojiBtn.BeginAnimation(OpacityProperty, up);
+        emojiBtn.BeginAnimation(OpacityProperty, down);
     }
 
     private void UpdateButtonForegrounds()
@@ -367,6 +432,16 @@ public partial class NoteWindow : Window
         var up = AnimationHelper.MakeAnimation(1, 120);
         down.Completed += (_, _) => el.BeginAnimation(OpacityProperty, up);
         el.BeginAnimation(OpacityProperty, down);
+    }
+
+    /// <summary>
+    /// Resets a note window to default size and positions it to the left of the dock.
+    /// </summary>
+    public static void ResetToDefaultPosition(NoteWindow win, double dockLeft)
+    {
+        win.Left = dockLeft - DefaultWidth - 10;
+        win.Width = DefaultWidth;
+        win.Height = DefaultHeight;
     }
 
     private void NoteWindow_PreviewKeyDown(object sender, KeyEventArgs e)

@@ -42,8 +42,6 @@ public class Note : INotifyPropertyChanged
         set { _color = value; OnPropertyChanged(); OnPropertyChanged(nameof(TextForeground)); }
     }
 
-    public bool IsMinimized { get; set; }
-
     private bool _isDirty;
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsDirty
@@ -76,6 +74,13 @@ public class Note : INotifyPropertyChanged
                 return LastModified.ToString("t");
             return LastModified.ToString("d");
         }
+    }
+
+    private string _icon = "📝";
+    public string Icon
+    {
+        get => _icon;
+        set { _icon = value; OnPropertyChanged(); }
     }
 
     [System.Text.Json.Serialization.JsonIgnore]
@@ -122,6 +127,18 @@ public class Note : INotifyPropertyChanged
     private static readonly Random _rng = new();
 
     public static string RandomColor() => Palette[_rng.Next(Palette.Length)];
+
+    public static readonly string[] EmojiPalette =
+    [
+        "📝", "📌", "💡", "🎯", "✅",
+        "🛒", "💻", "🎵", "📅", "🔖",
+        "❤️", "🔥", "⚡", "🎨", "🏠",
+        "💰", "📋", "🎁", "🗓️", "🔗",
+        "⭐", "🚀", "🎉", "🔔", "👀",
+        "💊", "🧠", "📂", "🔐", "📎"
+    ];
+
+    public static string RandomIcon() => EmojiPalette[_rng.Next(EmojiPalette.Length)];
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null)

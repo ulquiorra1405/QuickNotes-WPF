@@ -21,7 +21,6 @@ public partial class SettingsWindow : Window
     private bool _confirmVal;
     private string _defaultColorVal;
     private int _fontSizeVal;
-    private string _tabPosVal;
     private bool _compactVal;
     private string _fontVal;
     private bool _animVal;
@@ -42,7 +41,6 @@ public partial class SettingsWindow : Window
         _confirmVal = store.ConfirmOnExit;
         _defaultColorVal = string.IsNullOrEmpty(store.DefaultColor) ? Note.RandomColor() : store.DefaultColor;
         _fontSizeVal = store.NoteFontSize;
-        _tabPosVal = store.TabBarPosition;
         _compactVal = store.CompactMode;
         _fontVal = store.NoteFontFamily;
         _animVal = store.AnimationsEnabled;
@@ -248,40 +246,6 @@ public partial class SettingsWindow : Window
 
         panel.Children.Add(new Rectangle { Height = 1, Fill = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF)), Margin = new Thickness(0, 8, 0, 4) });
 
-        // ── TabBar position ──
-        panel.Children.Add(MakeLabel("Posición del TabBar"));
-        var tabPosPanel = new Grid { Margin = new Thickness(0, 0, 0, 6) };
-        tabPosPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        tabPosPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
-        tabPosPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        tabPosPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        tabPosPanel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(6) });
-        tabPosPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        string[] posOptions = ["Izquierda", "Derecha", "Arriba", "Abajo"];
-        string[] posValues = ["left", "right", "top", "bottom"];
-        int currentPos = Array.IndexOf(posValues, _store.TabBarPosition);
-        if (currentPos < 0) currentPos = 0;
-        var posBtns = new Button[4];
-        for (int i = 0; i < 4; i++)
-        {
-            int idx = i;
-            int col = (i % 2) * 2;
-            int row = (i / 2) * 2;
-            var btn = new Button { Content = posOptions[i], Width = 90, Height = 30, Cursor = Cursors.Hand, FontSize = 12 };
-            btn.Click += (_, _) =>
-            {
-                _tabPosVal = posValues[idx];
-                for (int j = 0; j < posBtns.Length; j++)
-                    UpdateThemeBtn(posBtns[j], j == idx);
-            };
-            UpdateThemeBtn(btn, i == currentPos);
-            Grid.SetColumn(btn, col);
-            Grid.SetRow(btn, row);
-            posBtns[i] = btn;
-            tabPosPanel.Children.Add(btn);
-        }
-        panel.Children.Add(tabPosPanel);
-
         // ── Compact mode ──
         panel.Children.Add(MakeLabel("Tarjetas"));
         var compactCheck = new CheckBox
@@ -371,7 +335,6 @@ public partial class SettingsWindow : Window
             _store.ConfirmOnExit = confirmCheck.IsChecked == true;
             _store.DefaultColor = _defaultColorVal;
             _store.NoteFontSize = _fontSizeVal;
-            _store.TabBarPosition = _tabPosVal;
             _store.CompactMode = compactCheck.IsChecked == true;
             _store.NoteFontFamily = _fontVal;
             _store.AnimationsEnabled = animCheck.IsChecked == true;
@@ -381,7 +344,6 @@ public partial class SettingsWindow : Window
             _mainWindow.ApplyTheme(_selectedTheme);
             _mainWindow.ApplyCompactMode(_store.CompactMode);
             _mainWindow.SetStartWithWindows(_store.StartWithWindows);
-            TabBar.Instance.SetPosition(_tabPosVal);
             foreach (Window w in Application.Current.Windows)
                 if (w is NoteWindow nw)
                     nw.SetFontFamily(_fontVal);
