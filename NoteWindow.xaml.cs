@@ -108,13 +108,7 @@ public partial class NoteWindow : Window
             highlightPopup.IsOpen = false;
         };
 
-        // Image paste via NoteRichTextBox.OnPreviewKeyDown
-        var rtb = noteText as Helpers.NoteRichTextBox;
-        if (rtb != null)
-        {
-            rtb.ImagePastedWithData += InsertImageFromClipboard;
-            rtb.ImageFilePasted += (path) => InsertImageFromFile(path);
-        }
+        // Image paste via NoteWindow_PreviewKeyDown
         noteText.AllowDrop = true;
         noteText.Drop += NoteText_Drop;
         noteText.PreviewDragOver += NoteText_PreviewDragOver;
@@ -765,6 +759,20 @@ public partial class NoteWindow : Window
 
     private void NoteWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Intercept Ctrl+V for images BEFORE RichTextBox handles it
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.V)
+        {
+            var img = Clipboard.GetImage();
+            if (img != null)
+            {
+                e.Handled = true;
+                // Insert asynchronously to avoid freezing
+                Dispatcher.BeginInvoke(() => InsertImageFromClipboard(img),
+                    System.Windows.Threading.DispatcherPriority.Background);
+                return;
+            }
+        }
+
         if (Keyboard.Modifiers == ModifierKeys.Control)
         {
             switch (e.Key)
