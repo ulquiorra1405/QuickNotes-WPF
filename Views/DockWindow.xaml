@@ -35,26 +35,13 @@
                         <TranslateTransform X="6" Y="0"/>
                     </Border.RenderTransform>
                     <Grid Height="32">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="4"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Rectangle x:Name="tooltipColorBar" Grid.Column="0"
-                                   RadiusX="1" RadiusY="1" Margin="0,4"
-                                   Fill="#F8F9FA"/>
-                        <TextBlock x:Name="tooltipEmoji" Grid.Column="1"
-                                   FontSize="16" VerticalAlignment="Center"
-                                   Margin="8,0,6,0" Foreground="#EEEEEE"/>
-                        <StackPanel Grid.Column="2" VerticalAlignment="Center"
-                                    Margin="0,0,10,0">
-                            <TextBlock x:Name="tooltipTitle" FontSize="13"
-                                       FontWeight="SemiBold"
-                                       Foreground="#EEEEEE"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="tooltipDate" FontSize="11"
-                                       Foreground="#888888"/>
-                        </StackPanel>
+                        <TextBlock x:Name="tooltipTitle" FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Foreground="#EEEEEE"
+                                   TextTrimming="CharacterEllipsis"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Margin="10,0"/>
                     </Grid>
                 </Border>
             </Popup>

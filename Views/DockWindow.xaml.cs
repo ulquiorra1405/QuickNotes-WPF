@@ -92,11 +92,10 @@ public partial class DockWindow : Window
         tooltipPopup.PlacementTarget = border;
         tooltipPopup.HorizontalOffset = -12;
 
-        // Update tooltip content
-        tooltipEmoji.Text = item.Label.Length <= 2 ? "📝" : item.Label;
+        // Update tooltip content and colors
         tooltipTitle.Text = item.FullTitle;
-        tooltipDate.Text = item.TooltipDate;
-        tooltipColorBar.Fill = border.Background;
+        tooltipBorder.Background = border.Background;
+        tooltipTitle.Foreground = new SolidColorBrush(item.IsNoteDark ? Colors.White : Color.FromArgb(0xCC, 0x1A, 0x1A, 0x1A));
 
         // Open and animate in
         if (!tooltipPopup.IsOpen)
@@ -306,6 +305,7 @@ public class DockNoteItem : INotifyPropertyChanged
     public string TooltipDate { get; }
     public Brush BgColor { get; }
     public Brush FgColor { get; }
+    public bool IsNoteDark { get; }
     public double OpenIndicatorOpacity { get; private set; }
     public double MinIndicatorOpacity { get; private set; }
     public double IconSize { get; private set; }
@@ -346,7 +346,8 @@ public class DockNoteItem : INotifyPropertyChanged
         var hex = note.Color ?? "#F8F9FA";
         var bgColor = ParseHex(hex);
         BgColor = new SolidColorBrush(bgColor);
-        FgColor = new SolidColorBrush(IsDark(bgColor) ? Colors.White : Color.FromArgb(0xCC, 0x1A, 0x1A, 0x1A));
+        IsNoteDark = IsDark(bgColor);
+        FgColor = new SolidColorBrush(IsNoteDark ? Colors.White : Color.FromArgb(0xCC, 0x1A, 0x1A, 0x1A));
 
         RefreshState();
     }
