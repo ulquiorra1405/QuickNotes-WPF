@@ -762,14 +762,25 @@ public partial class NoteWindow : Window
         // Intercept Ctrl+V for images BEFORE RichTextBox handles it
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.V)
         {
+            // DEBUG LOG
+            var logFile = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "QuickNotes", "paste_debug.log");
+            System.IO.File.AppendAllText(logFile,
+                $"[{DateTime.Now:HH:mm:ss}] Ctrl+V detected\n");
+
             // Use Win32 P/Invoke to read clipboard (handles all DIB formats)
             var img = Helpers.ClipboardImageReader.GetImageFromClipboard();
             if (img != null)
             {
+                System.IO.File.AppendAllText(logFile,
+                    $"[{DateTime.Now:HH:mm:ss}] Image found: {img.Width}x{img.Height}\n");
                 e.Handled = true;
                 InsertImageFromClipboard(img);
                 return;
             }
+            System.IO.File.AppendAllText(logFile,
+                $"[{DateTime.Now:HH:mm:ss}] No image found\n");
 
             // Check for file drop (image files from Explorer)
             if (Clipboard.ContainsFileDropList())
