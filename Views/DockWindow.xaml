@@ -9,8 +9,24 @@
         AllowsTransparency="True"
         Background="Transparent"
         ShowInTaskbar="False"
-        Loaded="DockWindow_Loaded"
-        MouseMove="DockWindow_MouseMove">
+        Loaded="DockWindow_Loaded">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <Style TargetType="ToolTip">
+                <Setter Property="Background" Value="#2A2A2A"/>
+                <Setter Property="Foreground" Value="#EEEEEE"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Padding" Value="10,6"/>
+                <Setter Property="BorderBrush" Value="#444444"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="HasDropShadow" Value="False"/>
+                <Setter Property="Placement" Value="Left"/>
+                <Setter Property="HorizontalOffset" Value="-4"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
 
     <Border x:Name="dockBorder" Opacity="0"
             CornerRadius="10" BorderBrush="#3A3A3A" BorderThickness="1"
@@ -19,35 +35,8 @@
         <Border.Effect>
             <DropShadowEffect ShadowDepth="4" Color="#000000" Opacity="0.5" BlurRadius="12" Direction="270"/>
         </Border.Effect>
-
         <Grid>
-            <!-- Custom tooltip popup: fixed to the left of the hovered icon -->
-            <Popup x:Name="tooltipPopup" AllowsTransparency="True" StaysOpen="True"
-                   Placement="Left" HorizontalOffset="-16"
-                   PopupAnimation="None">
-                <Border x:Name="tooltipBorder" CornerRadius="6"
-                        Background="#2A2A2A" BorderBrush="#444" BorderThickness="1"
-                        Padding="0" MinWidth="130" MaxWidth="220"
-                        RenderTransformOrigin="0.5,0.5"
-                        MouseEnter="Tooltip_MouseEnter" MouseLeave="Tooltip_MouseLeave"
-                        Opacity="0">
-                    <Border.RenderTransform>
-                        <TranslateTransform X="6" Y="0"/>
-                    </Border.RenderTransform>
-                    <Grid Height="32">
-                        <TextBlock x:Name="tooltipTitle" FontSize="13"
-                                   FontWeight="SemiBold"
-                                   Foreground="#EEEEEE"
-                                   TextTrimming="CharacterEllipsis"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Margin="10,0"/>
-                    </Grid>
-                </Border>
-            </Popup>
-
-            <Grid>
-                <Grid.RowDefinitions>
+            <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
@@ -68,12 +57,16 @@
                                         Opacity="{Binding IconOpacity}"
                                         Tag="{Binding NoteId}"
                                         MouseDown="NoteIcon_MouseDown"
-                                        MouseEnter="NoteIcon_MouseEnter"
-                                        MouseLeave="NoteIcon_MouseLeave"
                                         RenderTransformOrigin="0.5,0.5">
                                     <Border.RenderTransform>
                                         <ScaleTransform ScaleX="1" ScaleY="1"/>
                                     </Border.RenderTransform>
+                                    <Border.ToolTip>
+                                        <ToolTip Placement="Left" HorizontalOffset="-4"
+                                                 Background="{Binding TtBgColor}"
+                                                 Foreground="{Binding TtFgColor}"
+                                                 Content="{Binding FullTitle}"/>
+                                    </Border.ToolTip>
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Style.Triggers>
@@ -256,6 +249,5 @@
                 </Button.Style>
             </Button>
         </Grid>
-    </Grid>
-</Border>
+    </Border>
 </Window>
