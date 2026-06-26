@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -108,7 +109,12 @@ public partial class NoteWindow : Window
             highlightPopup.IsOpen = false;
         };
 
-        // Image paste & drag-drop via PreviewKeyDown (Ctrl+V)
+        // Image paste interceptor
+        var cmdPaste = new CommandBinding(ApplicationCommands.Paste,
+            executed: OnPasteExecuted,
+            canExecute: (_, e) => e.CanExecute = true);
+        noteText.CommandBindings.Add(cmdPaste);
+
         noteText.AllowDrop = true;
         noteText.Drop += NoteText_Drop;
         noteText.PreviewDragOver += NoteText_PreviewDragOver;
@@ -772,7 +778,6 @@ public partial class NoteWindow : Window
                 case Key.Y: Redo(); e.Handled = true; return;
                 case Key.L: ToggleHighlight(); e.Handled = true; return;
                 case Key.H: ToggleHighlight(); e.Handled = true; return;
-                case Key.V: HandleImagePaste(e); if (e.Handled) return; break;
             }
         }
         if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.C)
@@ -953,21 +958,43 @@ public partial class NoteWindow : Window
         MarkDirtyAndDebounce();
     }
 
-    private void HandleImagePaste(KeyEventArgs e)
+    private void OnPasteExecuted(object? sender, ExecutedRoutedEventArgs e)
     {
         try
         {
-            var img = Clipboard.GetImage();
-            if (img != null)
+            // Try image paste first
+            if (Clipboard.ContainsImage())
             {
-                e.Handled = true;
-                InsertImageFromClipboard();
+                var img = Clipboard.GetImage();
+                if (img != null)
+                {
+                    e.Handled = true;
+                    InsertImageFromClipboard();
+                    return;
+                }
+            }
+
+            // Check for image files in clipboard
+            if (Clipboard.ContainsFileDropList())
+            {
+                var files = Clipboard.GetFileDropList();
+                if (files.Count > 0 && files[0] != null)
+                {
+                    var ext = System.IO.Path.GetExtension(files[0]).ToLowerInvariant();
+                    var validExts = new HashSet<string>
+                        { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
+                    if (validExts.Contains(ext))
+                    {
+                        e.Handled = true;
+                        InsertImageFromFile(files[0]);
+                        return;
+                    }
+                }
             }
         }
-        catch
-        {
-            // Clipboard not available, fall through to default paste
-        }
+        catch { /* clipboard unavailable */ }
+
+        // Not an image — let default paste handle text (bubble to class handler)
     }
 
     // ── Image support ──
