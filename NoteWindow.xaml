@@ -1,6 +1,7 @@
 <Window x:Class="QuickNotes.NoteWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:QuickNotes.Helpers"
         Title="Note" Height="260" Width="340"
         Topmost="True"
         ResizeMode="CanResize"
@@ -213,7 +214,7 @@
 
         <!-- Note text -->
         <Grid Grid.Row="1">
-            <RichTextBox x:Name="noteText"
+            <local:NoteRichTextBox x:Name="noteText"
                          Background="Transparent" BorderThickness="0"
                          Foreground="{Binding TextForeground}" FontFamily="Calibri" FontSize="13"
                          Padding="10,2,15,6"
@@ -225,14 +226,14 @@
                          PreviewMouseLeftButtonDown="NoteText_PreviewMouseDown"
                          PreviewMouseMove="NoteText_PreviewMouseMove"
                          IsDocumentEnabled="True">
-                <RichTextBox.Resources>
+                <local:NoteRichTextBox.Resources>
                     <Style TargetType="Paragraph">
                         <Setter Property="Margin" Value="0"/>
                         <Setter Property="LineHeight" Value="18"/>
                         <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
                     </Style>
-                </RichTextBox.Resources>
-            </RichTextBox>
+                </local:NoteRichTextBox.Resources>
+            </local:NoteRichTextBox>
         </Grid>
 
         <!-- Bottom bar: color picker (collapsed) + format buttons -->

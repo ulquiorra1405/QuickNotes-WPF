@@ -108,7 +108,13 @@ public partial class NoteWindow : Window
             highlightPopup.IsOpen = false;
         };
 
-        // Image paste & drag-drop
+        // Image paste via NoteRichTextBox.OnPaste override
+        var rtb = noteText as Helpers.NoteRichTextBox;
+        if (rtb != null)
+        {
+            rtb.ImagePasted += InsertImageFromClipboard;
+            rtb.ImageFilePasted += (path) => InsertImageFromFile(path);
+        }
         noteText.AllowDrop = true;
         noteText.Drop += NoteText_Drop;
         noteText.PreviewDragOver += NoteText_PreviewDragOver;
@@ -761,19 +767,6 @@ public partial class NoteWindow : Window
     {
         if (Keyboard.Modifiers == ModifierKeys.Control)
         {
-            // Ctrl+V: intercept images before RichTextBox handles it
-            if (e.Key == Key.V)
-            {
-                if (Clipboard.ContainsImage())
-                {
-                    e.Handled = true;
-                    InsertImageFromClipboard();
-                    return;
-                }
-                // Text paste — let it fall through to RichTextBox
-                return;
-            }
-
             switch (e.Key)
             {
                 case Key.F: ShowNoteSearch(); e.Handled = true; return;
