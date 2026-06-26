@@ -18,16 +18,19 @@
                 <Setter Property="FontWeight" Value="SemiBold"/>
                 <Setter Property="HasDropShadow" Value="False"/>
                 <Setter Property="Placement" Value="Left"/>
-                <Setter Property="HorizontalOffset" Value="-4"/>
+                <Setter Property="HorizontalOffset" Value="-10"/>
                 <Setter Property="Padding" Value="0"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ToolTip">
                             <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="#555555"
+                                    BorderThickness="1"
                                     CornerRadius="6"
                                     Padding="10,6">
                                 <ContentPresenter HorizontalAlignment="Center"
-                                                  VerticalAlignment="Center"/>
+                                                  VerticalAlignment="Center"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}"/>
                             </Border>
                         </ControlTemplate>
                     </Setter.Value>
@@ -70,7 +73,7 @@
                                         <ScaleTransform ScaleX="1" ScaleY="1"/>
                                     </Border.RenderTransform>
                                     <Border.ToolTip>
-                                        <ToolTip Placement="Left" HorizontalOffset="-4"
+                                        <ToolTip Placement="Left" HorizontalOffset="-10"
                                                  Background="{Binding TtBgColor}"
                                                  Foreground="{Binding TtFgColor}"
                                                  Content="{Binding FullTitle}"/>
