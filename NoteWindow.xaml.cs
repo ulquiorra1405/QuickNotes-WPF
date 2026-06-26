@@ -147,13 +147,12 @@ public partial class NoteWindow : Window
 
         try
         {
-            var range = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd);
-            using var ms = new MemoryStream(Encoding.UTF8.GetBytes(text));
-            range.Load(ms, DataFormats.Xaml);
+            var doc = (System.Windows.Documents.FlowDocument)System.Windows.Markup.XamlReader.Parse(text);
+            noteText.Document = doc;
         }
         catch
         {
-            // Fallback: plain text (existing notes or corrupt data)
+            // Fallback: plain text (notes from before XAML migration)
             var para = new Paragraph(new Run(text));
             noteText.Document.Blocks.Clear();
             noteText.Document.Blocks.Add(para);
@@ -162,12 +161,9 @@ public partial class NoteWindow : Window
 
     private void SaveRichText()
     {
-        var range = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd);
         using var ms = new MemoryStream();
-        range.Save(ms, DataFormats.Xaml);
-        ms.Position = 0;
-        using var reader = new StreamReader(ms);
-        _note.Text = reader.ReadToEnd();
+        var xaml = System.Windows.Markup.XamlWriter.Save(noteText.Document);
+        _note.Text = xaml;
         _note.LastModified = DateTime.Now;
     }
 
