@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -9,6 +10,7 @@ using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using QuickNotes.Models;
 
@@ -24,10 +26,28 @@ public partial class NoteWindow : Window
     /// </summary>
     internal static bool IsAppShuttingDown;
 
+    private static readonly string _imageFolder = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        "QuickNotes", "images");
+
     private readonly Note _note;
     private readonly NotesStore _store;
 
     private string _searchQuery = "";
+
+    private Color _currentHighlightColor = Color.FromArgb(0x55, 0xFF, 0xD7, 0x00);
+
+    private static readonly Color[] HighlightColors =
+    [
+        Color.FromArgb(0x55, 0xFF, 0xD7, 0x00), // Yellow
+        Color.FromArgb(0x55, 0x55, 0xFF, 0x55), // Green
+        Color.FromArgb(0x55, 0x55, 0xAA, 0xFF), // Blue
+        Color.FromArgb(0x55, 0xFF, 0x55, 0xFF), // Pink
+        Color.FromArgb(0x55, 0xFF, 0x88, 0x00), // Orange
+        Color.FromArgb(0x55, 0x88, 0x55, 0xFF), // Purple
+        Color.FromArgb(0x55, 0x00, 0xDD, 0xFF), // Cyan
+        Color.FromArgb(0x55, 0xFF, 0x55, 0x55), // Red
+    ];
 
 
 
@@ -76,15 +96,56 @@ public partial class NoteWindow : Window
         PreviewKeyDown += NoteWindow_PreviewKeyDown;
         PreviewMouseDown += (_, e) =>
         {
-            if (!colorPopup.IsOpen && !emojiPopup.IsOpen) return;
+            if (!colorPopup.IsOpen && !emojiPopup.IsOpen && !highlightPopup.IsOpen) return;
             if (e.OriginalSource is DependencyObject src)
             {
                 if (colorPopup.IsOpen && FindParent<Border>(src) == currentColorDot) return;
                 if (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn) return;
+                if (highlightPopup.IsOpen && FindParent<Border>(src) == highlightBtn) return;
             }
             colorPopup.IsOpen = false;
             emojiPopup.IsOpen = false;
+            highlightPopup.IsOpen = false;
         };
+
+        // Image paste via NoteWindow_PreviewKeyDown
+        noteText.AllowDrop = true;
+        noteText.Drop += NoteText_Drop;
+        noteText.PreviewDragOver += NoteText_PreviewDragOver;
+
+        // Auto-pairing
+        PreviewTextInput += NoteWindow_PreviewTextInput;
+
+        // Highlight popup
+        BuildHighlightPicker();
+        highlightBtn.Background = new SolidColorBrush(_currentHighlightColor);
+    }
+
+    private void NoteText_Drop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        var files = (string[]?)e.Data.GetData(DataFormats.FileDrop);
+        if (files == null || files.Length == 0) return;
+        var validExts = new HashSet<string> { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
+        foreach (var file in files)
+        {
+            var ext = System.IO.Path.GetExtension(file).ToLowerInvariant();
+            if (validExts.Contains(ext))
+            {
+                InsertImageFromFile(file);
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void NoteText_PreviewDragOver(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop) ||
+            e.Data.GetDataPresent(DataFormats.Bitmap))
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+        }
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -109,11 +170,12 @@ public partial class NoteWindow : Window
 
         try
         {
-            var doc = (FlowDocument)XamlReader.Parse(text);
+            var doc = (System.Windows.Documents.FlowDocument)System.Windows.Markup.XamlReader.Parse(text);
             noteText.Document = doc;
         }
         catch
         {
+            // Fallback: plain text (notes from before XAML migration)
             var para = new Paragraph(new Run(text));
             noteText.Document.Blocks.Clear();
             noteText.Document.Blocks.Add(para);
@@ -122,8 +184,9 @@ public partial class NoteWindow : Window
 
     private void SaveRichText()
     {
-        var range = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd);
-        _note.Text = range.Text.TrimEnd('\r', '\n');
+        using var ms = new MemoryStream();
+        var xaml = System.Windows.Markup.XamlWriter.Save(noteText.Document);
+        _note.Text = xaml;
         _note.LastModified = DateTime.Now;
     }
 
@@ -444,8 +507,293 @@ public partial class NoteWindow : Window
         win.Height = DefaultHeight;
     }
 
+    // ── Auto-pairing ──
+
+    private void NoteWindow_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        if (e.Text.Length != 1) return;
+        var ch = e.Text[0];
+
+        // Skip auto-pair if text is selected (wrap in markers instead)
+        if (!noteText.Selection.IsEmpty)
+        {
+            switch (ch)
+            {
+                case '(': WrapSelection("(", ")"); e.Handled = true; break;
+                case '[': WrapSelection("[", "]"); e.Handled = true; break;
+                case '{': WrapSelection("{", "}"); e.Handled = true; break;
+                case '"': WrapSelection("\"", "\""); e.Handled = true; break;
+                case '\'': WrapSelection("'", "'"); e.Handled = true; break;
+            }
+            if (e.Handled) return;
+        }
+
+        switch (ch)
+        {
+            case '(': InsertPair("()"); e.Handled = true; break;
+            case '[': InsertPair("[]"); e.Handled = true; break;
+            case '{': InsertPair("{}"); e.Handled = true; break;
+            case '"': InsertPair("\"\""); e.Handled = true; break;
+            case '\'': InsertPair("''"); e.Handled = true; break;
+            case ')': SkipClosing(')'); break;
+            case ']': SkipClosing(']'); break;
+            case '}': SkipClosing('}'); break;
+        }
+    }
+
+    private void InsertPair(string pair)
+    {
+        var pos = noteText.CaretPosition;
+        pos.InsertTextInRun(pair);
+        noteText.CaretPosition = pos.GetPositionAtOffset(1);
+    }
+
+    private void WrapSelection(string open, string close)
+    {
+        var sel = noteText.Selection;
+        var text = sel.Text;
+        sel.Text = $"{open}{text}{close}";
+        // Selection covers the wrapped text
+    }
+
+    private void SkipClosing(char ch)
+    {
+        var text = noteText.CaretPosition.GetTextInRun(LogicalDirection.Forward);
+        if (text.Length > 0 && text[0] == ch)
+            noteText.CaretPosition = noteText.CaretPosition.GetPositionAtOffset(1);
+    }
+
+    // ── List continuation ──
+
+    private bool HandleListContinuation()
+    {
+        var para = noteText.CaretPosition.Paragraph;
+        if (para == null) return false;
+
+        var text = new TextRange(para.ContentStart, para.ContentEnd).Text.TrimEnd('\r', '\n');
+
+        // Prefixes for bullet / checklist
+        string[] prefixes = ["- ", "* ", "\u2022 ", "\u25a1 ", "\u2610 ", "[] ", "[x] "];
+
+        foreach (var prefix in prefixes)
+        {
+            if (!text.StartsWith(prefix)) continue;
+
+            if (text.Length == prefix.TrimEnd().Length)
+            {
+                // Only prefix → exit list (let default Enter create empty para)
+                return false;
+            }
+
+            // Has content → continue with same prefix
+            var doc = noteText.Document;
+            var newPara = new Paragraph(new Run(prefix.TrimEnd()));
+
+            var nextBlock = para.NextBlock;
+            if (nextBlock != null)
+                doc.Blocks.InsertBefore(nextBlock, newPara);
+            else
+                doc.Blocks.Add(newPara);
+
+            noteText.CaretPosition = newPara.ContentEnd;
+            return true;
+        }
+
+        // Numbered list continuation: 1. → 2.
+        var match = System.Text.RegularExpressions.Regex.Match(text, @"^(\d+)\.\s");
+        if (match.Success)
+        {
+            var num = int.Parse(match.Groups[1].Value);
+            var doc = noteText.Document;
+            var newPara = new Paragraph(new Run($"{num + 1}. "));
+
+            var nextBlock = para.NextBlock;
+            if (nextBlock != null)
+                doc.Blocks.InsertBefore(nextBlock, newPara);
+            else
+                doc.Blocks.Add(newPara);
+
+            noteText.CaretPosition = newPara.ContentEnd;
+            return true;
+        }
+
+        return false;
+    }
+
+    // ── Markdown shortcuts (inline) ──
+
+    private bool HandleMarkdownShortcuts()
+    {
+        var caret = noteText.CaretPosition;
+        var text = caret.GetTextInRun(LogicalDirection.Backward);
+        if (string.IsNullOrEmpty(text)) return false;
+
+        // **text** → Bold
+        if (text.EndsWith("**") && text.Length > 4)
+        {
+            var innerEnd = text.Length - 2;
+            var openIdx = text.LastIndexOf("**", innerEnd - 1);
+            if (openIdx >= 0 && openIdx + 2 < innerEnd)
+                return ApplyInlineFormat(caret, text, openIdx, "**", "**",
+                    FontWeightProperty, FontWeights.Bold);
+        }
+
+        // *text* → Italic (not **)
+        if (text.EndsWith("*") && !text.EndsWith("**") && text.Length > 2)
+        {
+            var innerEnd = text.Length - 1;
+            var openIdx = text.LastIndexOf("*", innerEnd - 1);
+            if (openIdx >= 0 && openIdx + 1 < innerEnd &&
+                (openIdx == 0 || text[openIdx - 1] != '*'))
+                return ApplyInlineFormat(caret, text, openIdx, "*", "*",
+                    FontStyleProperty, FontStyles.Italic);
+        }
+
+        // ~~text~~ → Strikethrough
+        if (text.EndsWith("~~") && text.Length > 4)
+        {
+            var innerEnd = text.Length - 2;
+            var openIdx = text.LastIndexOf("~~", innerEnd - 1);
+            if (openIdx >= 0 && openIdx + 2 < innerEnd)
+                return ApplyInlineFormat(caret, text, openIdx, "~~", "~~",
+                    Inline.TextDecorationsProperty, TextDecorations.Strikethrough);
+        }
+
+        return false;
+    }
+
+    private bool ApplyInlineFormat(TextPointer caret, string text, int openIdx,
+        string openMarker, string closeMarker, DependencyProperty prop, object value)
+    {
+        var start = caret.GetPositionAtOffset(-text.Length + openIdx);
+        if (start == null) return false;
+
+        var sel = new TextRange(start, caret);
+        var totalLen = sel.Text.Length;
+        var innerLen = totalLen - openMarker.Length - closeMarker.Length;
+        var inner = sel.Text.Substring(openMarker.Length, innerLen);
+
+        // Replace markers+inner with just inner
+        sel.Text = inner;
+
+        // Apply format (sel now covers the inner text)
+        sel.ApplyPropertyValue(prop, value);
+
+        // Insert space after the formatted text
+        var newCaret = noteText.CaretPosition;
+        newCaret.InsertTextInRun(" ");
+        return true;
+    }
+
+    // ── Highlight ──
+
+    private void BuildHighlightPicker()
+    {
+        highlightPanel.Children.Clear();
+        foreach (var color in HighlightColors)
+        {
+            var border = new Border
+            {
+                Width = 14,
+                Height = 14,
+                CornerRadius = new CornerRadius(2),
+                Margin = new Thickness(2),
+                Cursor = Cursors.Hand,
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0x00, 0x00)),
+                BorderThickness = new Thickness(1),
+                Background = new SolidColorBrush(color),
+            };
+            var c = color; // capture
+            border.MouseDown += (_, e) =>
+            {
+                if (e.LeftButton == MouseButtonState.Pressed)
+                    SelectHighlightColor(c, border);
+            };
+            border.MouseEnter += (_, _) =>
+                border.BorderBrush = new SolidColorBrush(Color.FromArgb(0x80, 0x00, 0x00, 0x00));
+            border.MouseLeave += (_, _) =>
+                border.BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0x00, 0x00));
+            highlightPanel.Children.Add(border);
+        }
+    }
+
+    private void HighlightBtn_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed)
+            highlightPopup.IsOpen = !highlightPopup.IsOpen;
+    }
+
+    private void SelectHighlightColor(Color color, Border selected)
+    {
+        _currentHighlightColor = color;
+        highlightBtn.Background = new SolidColorBrush(color);
+        highlightPopup.IsOpen = false;
+        ApplyHighlight(color);
+    }
+
+    private void ApplyHighlight(Color color)
+    {
+        var sel = noteText.Selection;
+        if (sel.IsEmpty) return;
+
+        var range = new TextRange(sel.Start, sel.End);
+        var existing = range.GetPropertyValue(TextElement.BackgroundProperty);
+
+        if (existing is SolidColorBrush scb && scb.Color == color)
+        {
+            range.ApplyPropertyValue(TextElement.BackgroundProperty, Brushes.Transparent);
+        }
+        else
+        {
+            range.ApplyPropertyValue(TextElement.BackgroundProperty,
+                new SolidColorBrush(color));
+        }
+
+        MarkDirtyAndDebounce();
+    }
+
+    private void ToggleHighlight()
+    {
+        ApplyHighlight(_currentHighlightColor);
+    }
+
     private void NoteWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Intercept Ctrl+V for images BEFORE RichTextBox handles it
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.V)
+        {
+            // Use Win32 P/Invoke to read clipboard
+            var img = Helpers.ClipboardImageReader.GetImageFromClipboard();
+            if (img != null)
+            {
+                e.Handled = true;
+                InsertImageFromClipboard(img);
+                return;
+            }
+
+            // Check for file drop (image files from Explorer)
+            if (Clipboard.ContainsFileDropList())
+            {
+                var files = Clipboard.GetFileDropList();
+                if (files.Count > 0 && files[0] != null)
+                {
+                    var ext = System.IO.Path.GetExtension(files[0]).ToLowerInvariant();
+                    var validExts = new System.Collections.Generic.HashSet<string>
+                        { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
+                    if (validExts.Contains(ext))
+                    {
+                        e.Handled = true;
+                        InsertImageFromFile(files[0]);
+                        return;
+                    }
+                }
+            }
+
+            // No image — let default paste handle text
+            // Don't set e.Handled, let it flow naturally
+            return;
+        }
+
         if (Keyboard.Modifiers == ModifierKeys.Control)
         {
             switch (e.Key)
@@ -457,6 +805,8 @@ public partial class NoteWindow : Window
                 case Key.K: ToggleStrikethrough(); e.Handled = true; return;
                 case Key.Z: Undo(); e.Handled = true; return;
                 case Key.Y: Redo(); e.Handled = true; return;
+                case Key.L: ToggleHighlight(); e.Handled = true; return;
+                case Key.H: ToggleHighlight(); e.Handled = true; return;
             }
         }
         if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.C)
@@ -465,6 +815,28 @@ public partial class NoteWindow : Window
             e.Handled = true;
             return;
         }
+
+        // Markdown shortcuts (Space) & list continuation (Enter)
+        if (Keyboard.Modifiers == ModifierKeys.None)
+        {
+            if (e.Key == Key.Space)
+            {
+                if (HandleMarkdownShortcuts())
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+            else if (e.Key == Key.Enter)
+            {
+                if (HandleListContinuation())
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+        }
+
         if (e.Key == Key.Escape && noteSearchBorder.Visibility == Visibility.Visible)
         {
             HideNoteSearch();
@@ -612,6 +984,88 @@ public partial class NoteWindow : Window
             else
                 doc.Blocks.Add(newList);
         }
+        MarkDirtyAndDebounce();
+    }
+
+    // ── Image support ──
+
+    private void InsertImageFromFile(string sourcePath)
+    {
+        try
+        {
+            Directory.CreateDirectory(_imageFolder);
+            var ext = System.IO.Path.GetExtension(sourcePath).ToLowerInvariant();
+            var fileName = $"{Guid.NewGuid()}{ext}";
+            var destPath = System.IO.Path.Combine(_imageFolder, fileName);
+            File.Copy(sourcePath, destPath, overwrite: false);
+            InsertImageBlock(destPath);
+        }
+        catch (Exception ex) { ErrorLog.Write(ex, "InsertImageFromFile"); }
+    }
+
+    private void InsertImageFromClipboard(BitmapSource img)
+    {
+        try
+        {
+            if (img == null) return;
+
+            Directory.CreateDirectory(_imageFolder);
+            var fileName = $"{Guid.NewGuid()}.png";
+            var filePath = System.IO.Path.Combine(_imageFolder, fileName);
+
+            {
+                using var fs = new FileStream(filePath, FileMode.Create);
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(img));
+                encoder.Save(fs);
+            }
+
+            InsertImageBlock(filePath);
+        }
+        catch (Exception ex) { ErrorLog.Write(ex, "InsertImageFromClipboard"); }
+    }
+
+    private void InsertImageBlock(string fullPath)
+    {
+        var img = new System.Windows.Controls.Image();
+        BitmapImage bi;
+        try
+        {
+            bi = new BitmapImage();
+            bi.BeginInit();
+            bi.UriSource = new Uri(fullPath);
+            bi.CacheOption = BitmapCacheOption.OnLoad;
+            bi.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+            bi.EndInit();
+            img.Source = bi;
+        }
+        catch { return; }
+
+        // Natural size
+        double naturalW = bi.PixelWidth;
+        double noteContentW = Math.Max(Width - 60, 200);
+
+        // Fit to note width, but never exceed natural size (no pixelation)
+        img.MaxWidth = Math.Min(naturalW, noteContentW);
+        img.HorizontalAlignment = HorizontalAlignment.Center;
+        img.Margin = new Thickness(0, 4, 0, 4);
+        img.Stretch = Stretch.Uniform;
+
+        var container = new BlockUIContainer(img);
+
+        // Insert at caret position
+        var caretPos = noteText.CaretPosition;
+        var caretPara = caretPos.Paragraph;
+
+        if (caretPara != null && caretPara.Parent is FlowDocument doc)
+            doc.Blocks.InsertAfter(caretPara, container);
+        else if (caretPara != null && caretPara.Parent is Section sec)
+            sec.Blocks.InsertAfter(caretPara, container);
+        else
+            noteText.Document.Blocks.Add(container);
+
+        noteText.CaretPosition = container.ElementEnd;
+        noteText.Focus();
         MarkDirtyAndDebounce();
     }
 
@@ -841,4 +1295,5 @@ public partial class NoteWindow : Window
         if (!string.IsNullOrEmpty(fontFamily))
             noteText.FontFamily = new FontFamily(fontFamily);
     }
+
 }

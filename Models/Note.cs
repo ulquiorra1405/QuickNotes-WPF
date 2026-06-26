@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text;
+using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Markup;
 
@@ -94,7 +96,6 @@ public class Note : INotifyPropertyChanged
             try
             {
                 var doc = (System.Windows.Documents.FlowDocument)System.Windows.Markup.XamlReader.Parse(t);
-                using var sw = new StringWriter();
                 var range = new System.Windows.Documents.TextRange(
                     doc.ContentStart, doc.ContentEnd);
                 return range.Text.TrimEnd('\r', '\n');
