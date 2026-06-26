@@ -89,6 +89,15 @@ public partial class DockWindow : Window
         if (item == null) return;
 
         // Position the popup to the left of this icon
+        // When switching icons while popup is open, close & reopen to force repositioning
+        bool needsReopen = tooltipPopup.IsOpen && tooltipPopup.PlacementTarget != border;
+        if (needsReopen)
+        {
+            tooltipPopup.IsOpen = false;
+            // Force the close to be processed before reopening
+            tooltipPopup.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+        }
+
         tooltipPopup.PlacementTarget = border;
         tooltipPopup.HorizontalOffset = -12;
 
@@ -97,8 +106,8 @@ public partial class DockWindow : Window
         tooltipBorder.Background = border.Background;
         tooltipTitle.Foreground = new SolidColorBrush(item.IsNoteDark ? Colors.White : Color.FromArgb(0xCC, 0x1A, 0x1A, 0x1A));
 
-        // Open and animate in
-        if (!tooltipPopup.IsOpen)
+        // Open (or reopen) and animate in
+        if (!tooltipPopup.IsOpen || needsReopen)
         {
             tooltipPopup.IsOpen = true;
             tooltipBorder.Opacity = 0;
