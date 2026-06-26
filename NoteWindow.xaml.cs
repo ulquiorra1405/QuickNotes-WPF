@@ -108,8 +108,7 @@ public partial class NoteWindow : Window
             highlightPopup.IsOpen = false;
         };
 
-        // Image paste & drag-drop
-        DataObject.AddPastingHandler(noteText, OnNotePaste);
+        // Image paste & drag-drop via PreviewKeyDown (Ctrl+V)
         noteText.AllowDrop = true;
         noteText.Drop += NoteText_Drop;
         noteText.PreviewDragOver += NoteText_PreviewDragOver;
@@ -146,35 +145,6 @@ public partial class NoteWindow : Window
         {
             e.Effects = DragDropEffects.Copy;
             e.Handled = true;
-        }
-    }
-
-    private void OnNotePaste(object sender, DataObjectPastingEventArgs e)
-    {
-        // Check for image data in multiple formats
-        if (e.DataObject.GetDataPresent(DataFormats.Bitmap) ||
-            e.DataObject.GetDataPresent("PNG") ||
-            e.DataObject.GetDataPresent("System.Drawing.Bitmap"))
-        {
-            e.CancelCommand();
-            InsertImageFromClipboard();
-            return;
-        }
-
-        // If it's a file drop from clipboard (e.g. copied image file)
-        if (e.DataObject.GetDataPresent(DataFormats.FileDrop))
-        {
-            var files = e.DataObject.GetData(DataFormats.FileDrop) as string[];
-            if (files != null && files.Length > 0)
-            {
-                var ext = System.IO.Path.GetExtension(files[0]).ToLowerInvariant();
-                var validExts = new HashSet<string> { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
-                if (validExts.Contains(ext))
-                {
-                    e.CancelCommand();
-                    InsertImageFromFile(files[0]);
-                }
-            }
         }
     }
 
@@ -802,6 +772,7 @@ public partial class NoteWindow : Window
                 case Key.Y: Redo(); e.Handled = true; return;
                 case Key.L: ToggleHighlight(); e.Handled = true; return;
                 case Key.H: ToggleHighlight(); e.Handled = true; return;
+                case Key.V: HandleImagePaste(e); if (e.Handled) return; break;
             }
         }
         if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.C)
@@ -980,6 +951,23 @@ public partial class NoteWindow : Window
                 doc.Blocks.Add(newList);
         }
         MarkDirtyAndDebounce();
+    }
+
+    private void HandleImagePaste(KeyEventArgs e)
+    {
+        try
+        {
+            var img = Clipboard.GetImage();
+            if (img != null)
+            {
+                e.Handled = true;
+                InsertImageFromClipboard();
+            }
+        }
+        catch
+        {
+            // Clipboard not available, fall through to default paste
+        }
     }
 
     // ── Image support ──
