@@ -16,6 +16,14 @@ namespace QuickNotes;
 
 public partial class NoteWindow : Window
 {
+    public const double DefaultWidth = 340;
+    public const double DefaultHeight = 260;
+
+    /// <summary>
+    /// Set to true during app shutdown to preserve positions.
+    /// </summary>
+    internal static bool IsAppShuttingDown;
+
     private readonly Note _note;
     private readonly NotesStore _store;
 
@@ -219,7 +227,6 @@ public partial class NoteWindow : Window
         var fade = AnimationHelper.MakeAnimation(0, 150);
         fade.Completed += (_, _) =>
         {
-            SavePosition();
             _store.Save();
             Close();
         };
@@ -249,6 +256,12 @@ public partial class NoteWindow : Window
     {
         SaveRichText();
         _note.IsDirty = false;
+        // Reset position on individual close (not during app shutdown)
+        if (!IsAppShuttingDown)
+        {
+            _note.WinLeft = double.NaN;
+            _note.WinTop = double.NaN;
+        }
         _store.Save();
         base.OnClosing(e);
 
@@ -419,6 +432,16 @@ public partial class NoteWindow : Window
         var up = AnimationHelper.MakeAnimation(1, 120);
         down.Completed += (_, _) => el.BeginAnimation(OpacityProperty, up);
         el.BeginAnimation(OpacityProperty, down);
+    }
+
+    /// <summary>
+    /// Resets a note window to default size and positions it to the left of the dock.
+    /// </summary>
+    public static void ResetToDefaultPosition(NoteWindow win, double dockLeft)
+    {
+        win.Left = dockLeft - DefaultWidth - 10;
+        win.Width = DefaultWidth;
+        win.Height = DefaultHeight;
     }
 
     private void NoteWindow_PreviewKeyDown(object sender, KeyEventArgs e)

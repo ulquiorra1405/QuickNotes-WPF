@@ -83,14 +83,41 @@ public partial class DockWindow : Window
 
     private void NoteIcon_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.LeftButton == MouseButtonState.Pressed &&
-            sender is Border border && border.Tag is Guid noteId)
+        if (e.LeftButton != MouseButtonState.Pressed ||
+            sender is not Border border || border.Tag is not Guid noteId)
+            return;
+
+        if (e.ClickCount >= 2)
         {
-            OpenNote(noteId);
+            // Double-click: force reposition to dock with default size
+            var note = _store.Notes.FirstOrDefault(n => n.Id == noteId);
+            if (note == null) return;
+
+            var existing = Application.Current.Windows.OfType<NoteWindow>()
+                .FirstOrDefault(w => w.DataContext is Note n && n.Id == noteId);
+
+            if (existing != null)
+            {
+                // Show if minimized, then reposition
+                if (!existing.IsVisible)
+                {
+                    existing.Show();
+                    existing.Focus();
+                }
+                NoteWindow.ResetToDefaultPosition(existing, Left);
+            }
+            else
+            {
+                OpenNote(noteId, forceDefault: true);
+            }
+            return;
         }
+
+        // Single click: normal open
+        OpenNote(noteId);
     }
 
-    private void OpenNote(Guid noteId)
+    private void OpenNote(Guid noteId, bool forceDefault = false)
     {
         var note = _store.Notes.FirstOrDefault(n => n.Id == noteId);
         if (note == null) return;
@@ -102,23 +129,38 @@ public partial class DockWindow : Window
         {
             if (!existing.IsVisible)
             {
-                if (!double.IsNaN(note.WinLeft) && note.WinLeft > 0) existing.Left = note.WinLeft;
-                if (!double.IsNaN(note.WinTop) && note.WinTop > 0) existing.Top = note.WinTop;
+                if (!forceDefault)
+                {
+                    if (!double.IsNaN(note.WinLeft) && note.WinLeft > 0) existing.Left = note.WinLeft;
+                    if (!double.IsNaN(note.WinTop) && note.WinTop > 0) existing.Top = note.WinTop;
+                }
                 existing.Show();
                 existing.Focus();
+                if (forceDefault)
+                    NoteWindow.ResetToDefaultPosition(existing, Left);
             }
             else
             {
-                existing.Left = Left - existing.Width - 10;
-                existing.Top = Top;
+                if (forceDefault)
+                    NoteWindow.ResetToDefaultPosition(existing, Left);
+                else
+                {
+                    existing.Left = Left - existing.Width - 10;
+                    existing.Top = Top;
+                }
                 existing.Focus();
             }
         }
         else
         {
             var win = new NoteWindow(note, _store);
-            win.Left = Left - 350;
-            win.Top = Top;
+            if (forceDefault)
+                NoteWindow.ResetToDefaultPosition(win, Left);
+            else
+            {
+                win.Left = Left - 350;
+                win.Top = Top;
+            }
             win.Show();
             win.Focus();
         }

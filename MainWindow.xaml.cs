@@ -830,6 +830,10 @@ public partial class MainWindow : Window
         store.Save();
         // Close DockWindow if open
         _dockWindow?.Close();
+
+        // Don't reset note positions — app is shutting down
+        NoteWindow.IsAppShuttingDown = true;
+
         // Close all NoteWindows except MainWindow
         for (int i = Application.Current.Windows.Count - 1; i >= 0; i--)
         {
