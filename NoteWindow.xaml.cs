@@ -97,6 +97,9 @@ public partial class NoteWindow : Window
         DataObject.AddPastingHandler(noteText, OnNotePaste);
         noteText.AllowDrop = true;
         noteText.Drop += NoteText_Drop;
+
+        // Auto-pairing
+        PreviewTextInput += NoteWindow_PreviewTextInput;
     }
 
     private void NoteText_Drop(object sender, DragEventArgs e)
@@ -484,6 +487,207 @@ public partial class NoteWindow : Window
         win.Height = DefaultHeight;
     }
 
+    // ── Auto-pairing ──
+
+    private void NoteWindow_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        if (e.Text.Length != 1) return;
+        var ch = e.Text[0];
+
+        // Skip auto-pair if text is selected (wrap in markers instead)
+        if (!noteText.Selection.IsEmpty)
+        {
+            switch (ch)
+            {
+                case '(': WrapSelection("(", ")"); e.Handled = true; break;
+                case '[': WrapSelection("[", "]"); e.Handled = true; break;
+                case '{': WrapSelection("{", "}"); e.Handled = true; break;
+                case '"': WrapSelection("\"", "\""); e.Handled = true; break;
+                case '\'': WrapSelection("'", "'"); e.Handled = true; break;
+            }
+            if (e.Handled) return;
+        }
+
+        switch (ch)
+        {
+            case '(': InsertPair("()"); e.Handled = true; break;
+            case '[': InsertPair("[]"); e.Handled = true; break;
+            case '{': InsertPair("{}"); e.Handled = true; break;
+            case '"': InsertPair("\"\""); e.Handled = true; break;
+            case '\'': InsertPair("''"); e.Handled = true; break;
+            case ')': SkipClosing(')'); break;
+            case ']': SkipClosing(']'); break;
+            case '}': SkipClosing('}'); break;
+        }
+    }
+
+    private void InsertPair(string pair)
+    {
+        var pos = noteText.CaretPosition;
+        pos.InsertTextInRun(pair);
+        noteText.CaretPosition = pos.GetPositionAtOffset(1);
+    }
+
+    private void WrapSelection(string open, string close)
+    {
+        var sel = noteText.Selection;
+        var text = sel.Text;
+        sel.Text = $"{open}{text}{close}";
+        // Selection covers the wrapped text
+    }
+
+    private void SkipClosing(char ch)
+    {
+        var text = noteText.CaretPosition.GetTextInRun(LogicalDirection.Forward);
+        if (text.Length > 0 && text[0] == ch)
+            noteText.CaretPosition = noteText.CaretPosition.GetPositionAtOffset(1);
+    }
+
+    // ── List continuation ──
+
+    private bool HandleListContinuation()
+    {
+        var para = noteText.CaretPosition.Paragraph;
+        if (para == null) return false;
+
+        var text = new TextRange(para.ContentStart, para.ContentEnd).Text.TrimEnd('\r', '\n');
+
+        // Prefixes for bullet / checklist
+        string[] prefixes = ["- ", "* ", "\u2022 ", "\u25a1 ", "\u2610 ", "[] ", "[x] "];
+
+        foreach (var prefix in prefixes)
+        {
+            if (!text.StartsWith(prefix)) continue;
+
+            if (text.Length == prefix.TrimEnd().Length)
+            {
+                // Only prefix → exit list (let default Enter create empty para)
+                return false;
+            }
+
+            // Has content → continue with same prefix
+            var doc = noteText.Document;
+            var newPara = new Paragraph(new Run(prefix.TrimEnd()));
+
+            var nextBlock = para.NextBlock;
+            if (nextBlock != null)
+                doc.Blocks.InsertBefore(nextBlock, newPara);
+            else
+                doc.Blocks.Add(newPara);
+
+            noteText.CaretPosition = newPara.ContentEnd;
+            return true;
+        }
+
+        // Numbered list continuation: 1. → 2.
+        var match = System.Text.RegularExpressions.Regex.Match(text, @"^(\d+)\.\s");
+        if (match.Success)
+        {
+            var num = int.Parse(match.Groups[1].Value);
+            var doc = noteText.Document;
+            var newPara = new Paragraph(new Run($"{num + 1}. "));
+
+            var nextBlock = para.NextBlock;
+            if (nextBlock != null)
+                doc.Blocks.InsertBefore(nextBlock, newPara);
+            else
+                doc.Blocks.Add(newPara);
+
+            noteText.CaretPosition = newPara.ContentEnd;
+            return true;
+        }
+
+        return false;
+    }
+
+    // ── Markdown shortcuts (inline) ──
+
+    private bool HandleMarkdownShortcuts()
+    {
+        var caret = noteText.CaretPosition;
+        var text = caret.GetTextInRun(LogicalDirection.Backward);
+        if (string.IsNullOrEmpty(text)) return false;
+
+        // **text** → Bold
+        if (text.EndsWith("**") && text.Length > 4)
+        {
+            var innerEnd = text.Length - 2;
+            var openIdx = text.LastIndexOf("**", innerEnd - 1);
+            if (openIdx >= 0 && openIdx + 2 < innerEnd)
+                return ApplyInlineFormat(caret, text, openIdx, "**", "**",
+                    FontWeightProperty, FontWeights.Bold);
+        }
+
+        // *text* → Italic (not **)
+        if (text.EndsWith("*") && !text.EndsWith("**") && text.Length > 2)
+        {
+            var innerEnd = text.Length - 1;
+            var openIdx = text.LastIndexOf("*", innerEnd - 1);
+            if (openIdx >= 0 && openIdx + 1 < innerEnd &&
+                (openIdx == 0 || text[openIdx - 1] != '*'))
+                return ApplyInlineFormat(caret, text, openIdx, "*", "*",
+                    FontStyleProperty, FontStyles.Italic);
+        }
+
+        // ~~text~~ → Strikethrough
+        if (text.EndsWith("~~") && text.Length > 4)
+        {
+            var innerEnd = text.Length - 2;
+            var openIdx = text.LastIndexOf("~~", innerEnd - 1);
+            if (openIdx >= 0 && openIdx + 2 < innerEnd)
+                return ApplyInlineFormat(caret, text, openIdx, "~~", "~~",
+                    Inline.TextDecorationsProperty, TextDecorations.Strikethrough);
+        }
+
+        return false;
+    }
+
+    private bool ApplyInlineFormat(TextPointer caret, string text, int openIdx,
+        string openMarker, string closeMarker, DependencyProperty prop, object value)
+    {
+        var start = caret.GetPositionAtOffset(-text.Length + openIdx);
+        if (start == null) return false;
+
+        var sel = new TextRange(start, caret);
+        var totalLen = sel.Text.Length;
+        var innerLen = totalLen - openMarker.Length - closeMarker.Length;
+        var inner = sel.Text.Substring(openMarker.Length, innerLen);
+
+        // Replace markers+inner with just inner
+        sel.Text = inner;
+
+        // Apply format (sel now covers the inner text)
+        sel.ApplyPropertyValue(prop, value);
+
+        // Insert space after the formatted text
+        var newCaret = noteText.CaretPosition;
+        newCaret.InsertTextInRun(" ");
+        return true;
+    }
+
+    // ── Highlight ──
+
+    private void ToggleHighlight()
+    {
+        var sel = noteText.Selection;
+        if (sel.IsEmpty) return;
+
+        var range = new TextRange(sel.Start, sel.End);
+        var existing = range.GetPropertyValue(TextElement.BackgroundProperty);
+
+        if (existing is SolidColorBrush scb && scb.Color == Color.FromArgb(0x55, 0xFF, 0xD7, 0x00))
+        {
+            range.ApplyPropertyValue(TextElement.BackgroundProperty, Brushes.Transparent);
+        }
+        else
+        {
+            range.ApplyPropertyValue(TextElement.BackgroundProperty,
+                new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xD7, 0x00)));
+        }
+
+        MarkDirtyAndDebounce();
+    }
+
     private void NoteWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (Keyboard.Modifiers == ModifierKeys.Control)
@@ -497,6 +701,8 @@ public partial class NoteWindow : Window
                 case Key.K: ToggleStrikethrough(); e.Handled = true; return;
                 case Key.Z: Undo(); e.Handled = true; return;
                 case Key.Y: Redo(); e.Handled = true; return;
+                case Key.L: ToggleHighlight(); e.Handled = true; return;
+                case Key.H: ToggleHighlight(); e.Handled = true; return;
             }
         }
         if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.C)
@@ -505,6 +711,28 @@ public partial class NoteWindow : Window
             e.Handled = true;
             return;
         }
+
+        // Markdown shortcuts (Space) & list continuation (Enter)
+        if (Keyboard.Modifiers == ModifierKeys.None)
+        {
+            if (e.Key == Key.Space)
+            {
+                if (HandleMarkdownShortcuts())
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+            else if (e.Key == Key.Enter)
+            {
+                if (HandleListContinuation())
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+        }
+
         if (e.Key == Key.Escape && noteSearchBorder.Visibility == Visibility.Visible)
         {
             HideNoteSearch();
@@ -857,6 +1085,7 @@ public partial class NoteWindow : Window
     private void BulletBtn_Click(object sender, RoutedEventArgs e) => ToggleBulletList();
     private void NumberBtn_Click(object sender, RoutedEventArgs e) => ToggleNumberList();
     private void CheckboxBtn_Click(object sender, RoutedEventArgs e) => InsertCheckbox();
+    private void HighlightBtn_Click(object sender, RoutedEventArgs e) => ToggleHighlight();
 
     private void UndoBtn_Click(object sender, RoutedEventArgs e) => Undo();
     private void RedoBtn_Click(object sender, RoutedEventArgs e) => Redo();
