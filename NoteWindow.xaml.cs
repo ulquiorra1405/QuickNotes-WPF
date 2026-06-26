@@ -1,4 +1,3 @@
-using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -109,12 +108,7 @@ public partial class NoteWindow : Window
             highlightPopup.IsOpen = false;
         };
 
-        // Image paste interceptor
-        var cmdPaste = new CommandBinding(ApplicationCommands.Paste,
-            executed: OnPasteExecuted,
-            canExecute: (_, e) => e.CanExecute = true);
-        noteText.CommandBindings.Add(cmdPaste);
-
+        // Image paste & drag-drop
         noteText.AllowDrop = true;
         noteText.Drop += NoteText_Drop;
         noteText.PreviewDragOver += NoteText_PreviewDragOver;
@@ -767,6 +761,19 @@ public partial class NoteWindow : Window
     {
         if (Keyboard.Modifiers == ModifierKeys.Control)
         {
+            // Ctrl+V: intercept images before RichTextBox handles it
+            if (e.Key == Key.V)
+            {
+                if (Clipboard.ContainsImage())
+                {
+                    e.Handled = true;
+                    InsertImageFromClipboard();
+                    return;
+                }
+                // Text paste — let it fall through to RichTextBox
+                return;
+            }
+
             switch (e.Key)
             {
                 case Key.F: ShowNoteSearch(); e.Handled = true; return;
@@ -956,45 +963,6 @@ public partial class NoteWindow : Window
                 doc.Blocks.Add(newList);
         }
         MarkDirtyAndDebounce();
-    }
-
-    private void OnPasteExecuted(object? sender, ExecutedRoutedEventArgs e)
-    {
-        try
-        {
-            // Try image paste first
-            if (Clipboard.ContainsImage())
-            {
-                var img = Clipboard.GetImage();
-                if (img != null)
-                {
-                    e.Handled = true;
-                    InsertImageFromClipboard();
-                    return;
-                }
-            }
-
-            // Check for image files in clipboard
-            if (Clipboard.ContainsFileDropList())
-            {
-                var files = Clipboard.GetFileDropList();
-                if (files.Count > 0 && files[0] != null)
-                {
-                    var ext = System.IO.Path.GetExtension(files[0]).ToLowerInvariant();
-                    var validExts = new HashSet<string>
-                        { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
-                    if (validExts.Contains(ext))
-                    {
-                        e.Handled = true;
-                        InsertImageFromFile(files[0]);
-                        return;
-                    }
-                }
-            }
-        }
-        catch { /* clipboard unavailable */ }
-
-        // Not an image — let default paste handle text (bubble to class handler)
     }
 
     // ── Image support ──
