@@ -123,7 +123,11 @@ public partial class NoteWindow : Window
     private void SaveRichText()
     {
         var range = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd);
-        _note.Text = range.Text.TrimEnd('\r', '\n');
+        using var ms = new MemoryStream();
+        range.Save(ms, DataFormats.Xaml);
+        ms.Position = 0;
+        using var reader = new StreamReader(ms);
+        _note.Text = reader.ReadToEnd();
         _note.LastModified = DateTime.Now;
     }
 
