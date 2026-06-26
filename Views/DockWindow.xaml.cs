@@ -19,6 +19,8 @@ public partial class DockWindow : Window
     private readonly SolidColorBrush _dockBgBrush;
     private readonly DispatcherTimer _tooltipTimer;
     private Border? _hoveredIcon;
+    private Border? _lastTooltipTarget;
+    private bool _tooltipVisible;
 
     public DockWindow(NotesStore store, Rect monitorBounds, Action onExit)
     {
@@ -38,6 +40,9 @@ public partial class DockWindow : Window
             Interval = TimeSpan.FromMilliseconds(200),
         };
         _tooltipTimer.Tick += TooltipTimer_Tick;
+
+        // Use absolute positioning so we can move the popup without closing/reopening
+        tooltipPopup.Placement = System.Windows.Controls.Primitives.PlacementMode.Absolute;
 
         // Position: right edge of the correct monitor, vertically centered
         Left = monitorBounds.Right - 70;
@@ -88,42 +93,33 @@ public partial class DockWindow : Window
         var item = border.DataContext as DockNoteItem;
         if (item == null) return;
 
-        // Update tooltip content and colors (always, before any open/reopen)
+        // Update tooltip content and colors
         tooltipTitle.Text = item.FullTitle;
         tooltipBorder.Background = border.Background;
         tooltipTitle.Foreground = new SolidColorBrush(item.IsNoteDark ? Colors.White : Color.FromArgb(0xCC, 0x1A, 0x1A, 0x1A));
 
-        // Position the popup to the left of this icon
-        // When switching icons while popup is open, close & reopen to force repositioning
-        bool needsReopen = tooltipPopup.IsOpen && tooltipPopup.PlacementTarget != border;
-        if (needsReopen)
+        // Calculate absolute position: left of the icon
+        var iconPos = border.PointToScreen(new Point(0, 0));
+        double tipLeft = iconPos.X - 16; // 16px gap from dock
+        double tipTop = iconPos.Y + (border.ActualHeight - 32) / 2;// center tooltip vertically
+
+        // If tooltip already open on a different icon, just reposition (no close/reopen)
+        if (_tooltipVisible && _lastTooltipTarget != border)
         {
-            tooltipPopup.IsOpen = false;
-            // Stop any running animations that could cause a flash
-            tooltipBorder.BeginAnimation(UIElement.OpacityProperty, null);
-            var tt = (TranslateTransform)tooltipBorder.RenderTransform;
-            tt.BeginAnimation(TranslateTransform.XProperty, null);
-            // Force close to render, then reopen via BeginInvoke
-            Dispatcher.BeginInvoke(() =>
-            {
-                // If mouse already moved to another icon, skip
-                if (_hoveredIcon != border) return;
-                tooltipPopup.PlacementTarget = border;
-                tooltipPopup.HorizontalOffset = -16;
-                tooltipPopup.IsOpen = true;
-                ResetTooltipAnimation();
-                AnimateTooltipIn();
-            }, System.Windows.Threading.DispatcherPriority.Render);
+            tooltipPopup.HorizontalOffset = tipLeft;
+            tooltipPopup.VerticalOffset = tipTop;
+            _lastTooltipTarget = border;
             return;
         }
 
-        tooltipPopup.PlacementTarget = border;
-        tooltipPopup.HorizontalOffset = -16;
+        tooltipPopup.HorizontalOffset = tipLeft;
+        tooltipPopup.VerticalOffset = tipTop;
+        _lastTooltipTarget = border;
 
-        // Open (or reopen) — animation covers the brief close
         if (!tooltipPopup.IsOpen)
         {
             tooltipPopup.IsOpen = true;
+            _tooltipVisible = true;
             ResetTooltipAnimation();
         }
 
@@ -157,6 +153,8 @@ public partial class DockWindow : Window
         AnimateTooltipOut(() =>
         {
             tooltipPopup.IsOpen = false;
+            _tooltipVisible = false;
+            _lastTooltipTarget = null;
         });
     }
 
