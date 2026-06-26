@@ -14,16 +14,24 @@
     <Window.Resources>
         <ResourceDictionary>
             <Style TargetType="ToolTip">
-                <Setter Property="Background" Value="#2A2A2A"/>
-                <Setter Property="Foreground" Value="#EEEEEE"/>
                 <Setter Property="FontSize" Value="13"/>
                 <Setter Property="FontWeight" Value="SemiBold"/>
-                <Setter Property="Padding" Value="10,6"/>
-                <Setter Property="BorderBrush" Value="#444444"/>
-                <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="HasDropShadow" Value="False"/>
                 <Setter Property="Placement" Value="Left"/>
                 <Setter Property="HorizontalOffset" Value="-4"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToolTip">
+                            <Border Background="{TemplateBinding Background}"
+                                    CornerRadius="6"
+                                    Padding="10,6">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
         </ResourceDictionary>
     </Window.Resources>
