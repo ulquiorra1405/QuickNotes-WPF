@@ -94,12 +94,22 @@ public partial class DockWindow : Window
         if (needsReopen)
         {
             tooltipPopup.IsOpen = false;
-            // Force the close to be processed (next frame) before reopening
-            tooltipPopup.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+            // Force close to render, then reopen via BeginInvoke
+            Dispatcher.BeginInvoke(() =>
+            {
+                // If mouse already moved to another icon, skip
+                if (_hoveredIcon != border) return;
+                tooltipPopup.PlacementTarget = border;
+                tooltipPopup.HorizontalOffset = -16;
+                tooltipPopup.IsOpen = true;
+                ResetTooltipAnimation();
+                AnimateTooltipIn();
+            }, System.Windows.Threading.DispatcherPriority.Render);
+            return;
         }
 
         tooltipPopup.PlacementTarget = border;
-        tooltipPopup.HorizontalOffset = -12;
+        tooltipPopup.HorizontalOffset = -16;
 
         // Update tooltip content and colors
         tooltipTitle.Text = item.FullTitle;
@@ -110,9 +120,7 @@ public partial class DockWindow : Window
         if (!tooltipPopup.IsOpen)
         {
             tooltipPopup.IsOpen = true;
-            tooltipBorder.Opacity = 0;
-            var tt = (TranslateTransform)tooltipBorder.RenderTransform;
-            tt.X = 6;
+            ResetTooltipAnimation();
         }
 
         AnimateTooltipIn();
@@ -165,6 +173,13 @@ public partial class DockWindow : Window
     }
 
     // ── Tooltip animations ──
+
+    private void ResetTooltipAnimation()
+    {
+        tooltipBorder.Opacity = 0;
+        var tt = (TranslateTransform)tooltipBorder.RenderTransform;
+        tt.X = 6;
+    }
 
     private void AnimateTooltipIn()
     {

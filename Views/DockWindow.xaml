@@ -23,7 +23,7 @@
         <Grid>
             <!-- Custom tooltip popup: fixed to the left of the hovered icon -->
             <Popup x:Name="tooltipPopup" AllowsTransparency="True" StaysOpen="True"
-                   Placement="Left" HorizontalOffset="-12"
+                   Placement="Left" HorizontalOffset="-16"
                    PopupAnimation="None">
                 <Border x:Name="tooltipBorder" CornerRadius="6"
                         Background="#2A2A2A" BorderBrush="#444" BorderThickness="1"
