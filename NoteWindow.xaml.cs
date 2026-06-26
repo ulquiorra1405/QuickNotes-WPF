@@ -762,8 +762,8 @@ public partial class NoteWindow : Window
         // Intercept Ctrl+V for images BEFORE RichTextBox handles it
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.V)
         {
-            // Try immediate read first (works for image files, some screenshots)
-            var img = Clipboard.GetImage();
+            // Use Win32 P/Invoke to read clipboard (handles all DIB formats)
+            var img = Helpers.ClipboardImageReader.GetImageFromClipboard();
             if (img != null)
             {
                 e.Handled = true;
@@ -771,25 +771,26 @@ public partial class NoteWindow : Window
                 return;
             }
 
-            // Delay 50ms and retry (Snipping Tool needs time to settle)
-            e.Handled = true;
-            var timer = new System.Windows.Threading.DispatcherTimer();
-            timer.Interval = TimeSpan.FromMilliseconds(50);
-            timer.Tick += (s, _) =>
+            // Check for file drop (image files from Explorer)
+            if (Clipboard.ContainsFileDropList())
             {
-                timer.Stop();
-                var delayedImg = Clipboard.GetImage();
-                if (delayedImg != null)
+                var files = Clipboard.GetFileDropList();
+                if (files.Count > 0 && files[0] != null)
                 {
-                    InsertImageFromClipboard(delayedImg);
+                    var ext = System.IO.Path.GetExtension(files[0]).ToLowerInvariant();
+                    var validExts = new System.Collections.Generic.HashSet<string>
+                        { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
+                    if (validExts.Contains(ext))
+                    {
+                        e.Handled = true;
+                        InsertImageFromFile(files[0]);
+                        return;
+                    }
                 }
-                else
-                {
-                    // No image — execute default paste
-                    noteText.Paste();
-                }
-            };
-            timer.Start();
+            }
+
+            // No image — let default paste handle text
+            // Don't set e.Handled, let it flow naturally
             return;
         }
 
