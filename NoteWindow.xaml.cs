@@ -10,7 +10,9 @@ using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using Microsoft.Win32;
 using QuickNotes.Models;
 
 namespace QuickNotes;
@@ -24,6 +26,10 @@ public partial class NoteWindow : Window
     /// Set to true during app shutdown to preserve positions.
     /// </summary>
     internal static bool IsAppShuttingDown;
+
+    private static readonly string _imageFolder = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        "QuickNotes", "images");
 
     private readonly Note _note;
     private readonly NotesStore _store;
@@ -86,6 +92,37 @@ public partial class NoteWindow : Window
             colorPopup.IsOpen = false;
             emojiPopup.IsOpen = false;
         };
+
+        // Image paste & drag-drop
+        DataObject.AddPastingHandler(noteText, OnNotePaste);
+        noteText.AllowDrop = true;
+        noteText.Drop += NoteText_Drop;
+    }
+
+    private void NoteText_Drop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        var files = (string[]?)e.Data.GetData(DataFormats.FileDrop);
+        if (files == null || files.Length == 0) return;
+        var validExts = new HashSet<string> { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
+        foreach (var file in files)
+        {
+            var ext = System.IO.Path.GetExtension(file).ToLowerInvariant();
+            if (validExts.Contains(ext))
+            {
+                InsertImageFromFile(file);
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void OnNotePaste(object sender, DataObjectPastingEventArgs e)
+    {
+        if (Clipboard.ContainsImage())
+        {
+            e.CancelCommand();
+            InsertImageFromClipboard();
+        }
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -619,6 +656,85 @@ public partial class NoteWindow : Window
             else
                 doc.Blocks.Add(newList);
         }
+        MarkDirtyAndDebounce();
+    }
+
+    // ── Image support ──
+
+    private void ImageBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFileDialog
+        {
+            Filter = "Imágenes (*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp)|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp",
+            Title = "Insertar imagen"
+        };
+        if (dlg.ShowDialog() == true)
+            InsertImageFromFile(dlg.FileName);
+    }
+
+    private void InsertImageFromFile(string sourcePath)
+    {
+        try
+        {
+            Directory.CreateDirectory(_imageFolder);
+            var ext = System.IO.Path.GetExtension(sourcePath).ToLowerInvariant();
+            var fileName = $"{Guid.NewGuid()}{ext}";
+            var destPath = System.IO.Path.Combine(_imageFolder, fileName);
+            File.Copy(sourcePath, destPath, overwrite: false);
+            InsertImageBlock(destPath);
+        }
+        catch (Exception ex) { ErrorLog.Write(ex, "InsertImageFromFile"); }
+    }
+
+    private void InsertImageFromClipboard()
+    {
+        try
+        {
+            var img = Clipboard.GetImage();
+            if (img == null) return;
+
+            Directory.CreateDirectory(_imageFolder);
+            var fileName = $"{Guid.NewGuid()}.png";
+            var filePath = System.IO.Path.Combine(_imageFolder, fileName);
+
+            using var fs = new FileStream(filePath, FileMode.Create);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(img));
+            encoder.Save(fs);
+
+            InsertImageBlock(filePath);
+        }
+        catch (Exception ex) { ErrorLog.Write(ex, "InsertImageFromClipboard"); }
+    }
+
+    private void InsertImageBlock(string fullPath)
+    {
+        var img = new System.Windows.Controls.Image();
+        img.Source = new BitmapImage(new Uri(fullPath));
+        img.MaxWidth = Math.Max(Width - 40, 200);
+        img.Margin = new Thickness(0, 4, 0, 4);
+        img.Stretch = Stretch.Uniform;
+
+        var container = new BlockUIContainer(img);
+
+        // Insert at caret position
+        var caretPara = noteText.CaretPosition.Paragraph;
+        if (caretPara != null)
+        {
+            // Insert image block after current paragraph
+            var afterThisBlock = noteText.CaretPosition.Paragraph?.NextBlock;
+            if (afterThisBlock != null)
+                noteText.Document.Blocks.InsertBefore(afterThisBlock, container);
+            else
+                noteText.Document.Blocks.Add(container);
+        }
+        else
+        {
+            noteText.Document.Blocks.Add(container);
+        }
+
+        // Place caret after the image block
+        noteText.CaretPosition = container.ElementEnd;
         MarkDirtyAndDebounce();
     }
 

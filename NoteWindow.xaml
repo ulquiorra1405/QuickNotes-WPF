@@ -342,6 +342,11 @@
                             Width="24" Height="22" Cursor="Hand" ToolTip="Checklist"
                             Style="{StaticResource TitleBtn}"
                             Click="CheckboxBtn_Click"/>
+                    <Rectangle Width="1" Fill="#30000000" Margin="4,4"/>
+                    <Button x:Name="imgBtn" Content="🖼️" FontSize="12"
+                            Width="24" Height="22" Cursor="Hand" ToolTip="Insertar imagen"
+                            Style="{StaticResource TitleBtn}"
+                            Click="ImageBtn_Click"/>
                 </StackPanel>
             </Grid>
         </Border>
