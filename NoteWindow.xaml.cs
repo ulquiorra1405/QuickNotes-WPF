@@ -694,9 +694,9 @@ public partial class NoteWindow : Window
         {
             var border = new Border
             {
-                Width = 18,
-                Height = 18,
-                CornerRadius = new CornerRadius(3),
+                Width = 14,
+                Height = 14,
+                CornerRadius = new CornerRadius(2),
                 Margin = new Thickness(2),
                 Cursor = Cursors.Hand,
                 BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0x00, 0x00)),

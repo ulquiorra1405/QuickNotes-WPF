@@ -328,8 +328,8 @@
                             </DataTemplate>
                         </Button.ContentTemplate>
                     </Button>
-                    <Border x:Name="highlightBtn" Width="16" Height="16"
-                            CornerRadius="3" Cursor="Hand"
+                    <Border x:Name="highlightBtn" Width="14" Height="14"
+                            CornerRadius="2" Cursor="Hand"
                             BorderBrush="#80000000" BorderThickness="1"
                             ToolTip="Resaltar (Ctrl+H)"
                             MouseDown="HighlightBtn_MouseDown"/>
@@ -337,7 +337,7 @@
                            PlacementTarget="{Binding ElementName=highlightBtn}"
                            StaysOpen="True" AllowsTransparency="True"
                            PopupAnimation="Fade">
-                        <Border Background="{Binding Color}" CornerRadius="6" Padding="4"
+                        <Border Background="{Binding Color}" CornerRadius="6" Padding="2"
                                 BorderBrush="#40000000" BorderThickness="1">
                             <StackPanel x:Name="highlightPanel" Orientation="Horizontal"/>
                         </Border>
@@ -357,7 +357,7 @@
                             Style="{StaticResource TitleBtn}"
                             Click="CheckboxBtn_Click"/>
                     <Rectangle Width="1" Fill="#30000000" Margin="4,4"/>
-                    <Button x:Name="imgBtn" Content="🖼️" FontSize="12"
+                    <Button x:Name="imgBtn" Content="📷" FontSize="16"
                             Width="24" Height="22" Cursor="Hand" ToolTip="Insertar imagen"
                             Style="{StaticResource TitleBtn}"
                             Click="ImageBtn_Click"/>
