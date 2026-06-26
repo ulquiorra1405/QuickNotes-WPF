@@ -8,192 +8,170 @@ namespace QuickNotes.Helpers;
 /// <summary>
 /// Reads image data from clipboard using raw Win32 P/Invoke,
 /// bypassing WPF's limited clipboard format detection.
-/// Handles CF_DIBV5 and CF_DIB (the formats used by Snipping Tool,
-/// PrintScreen, browser image copy, etc.).
 /// </summary>
 internal static class ClipboardImageReader
 {
-    // Win32 Clipboard Format Constants
     private const uint CF_DIB = 8;
     private const uint CF_DIBV5 = 17;
     private const uint CF_BITMAP = 2;
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("user32.dll")]
     private static extern bool OpenClipboard(IntPtr hWndNewOwner);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("user32.dll")]
     private static extern bool CloseClipboard();
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("user32.dll")]
     private static extern IntPtr GetClipboardData(uint uFormat);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport("kernel32.dll")]
     private static extern IntPtr GlobalLock(IntPtr hMem);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport("kernel32.dll")]
     private static extern bool GlobalUnlock(IntPtr hMem);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport("kernel32.dll")]
     private static extern uint GlobalSize(IntPtr hMem);
 
-    /// <summary>
-    /// Attempts to read a BitmapSource from clipboard using Win32 APIs.
-    /// Tries CF_DIBV5, CF_DIB, and CF_BITMAP formats.
-    /// </summary>
     public static BitmapSource? GetImageFromClipboard()
     {
-        if (!OpenClipboard(IntPtr.Zero))
-            return null;
-
+        // 1) Try WPF built-in for simplest case
         try
         {
-            // Try DIBV5 first (newer, common on Win10+)
-            var result = ReadDibFormat(CF_DIBV5);
-            if (result != null) return result;
+            var wpf = System.Windows.Clipboard.GetImage();
+            if (wpf != null) return wpf;
+        }
+        catch { }
 
-            // Try standard DIB
-            result = ReadDibFormat(CF_DIB);
-            if (result != null) return result;
+        // 2) Try Win32 DIB/DIBV5 (handles Snipping Tool, PrintScreen, browsers)
+        var dib = TryReadDib(CF_DIBV5) ?? TryReadDib(CF_DIB);
+        if (dib != null) return dib;
 
-            // Try HBITMAP (less common)
-            return ReadHBitmapFormat();
-        }
-        catch
-        {
-            return null;
-        }
-        finally
-        {
-            CloseClipboard();
-        }
+        // 3) Try Win32 HBITMAP
+        return TryReadHBitmap();
     }
 
     /// <summary>
-    /// Reads CF_DIB or CF_DIBV5 from clipboard, wraps in BMP file header,
-    /// and loads as BitmapImage.
+    /// Reads CF_DIB or CF_DIBV5 and returns a BitmapSource.
     /// </summary>
-    private static BitmapSource? ReadDibFormat(uint format)
+    private static BitmapSource? TryReadDib(uint format)
     {
-        IntPtr hData = GetClipboardData(format);
-        if (hData == IntPtr.Zero)
-            return null;
-
-        IntPtr locked = GlobalLock(hData);
-        if (locked == IntPtr.Zero)
-            return null;
-
+        if (!OpenClipboard(IntPtr.Zero)) return null;
         try
         {
-            uint totalSize = GlobalSize(hData);
-            if (totalSize < 40) return null; // minimum BITMAPINFOHEADER
+            IntPtr hData = GetClipboardData(format);
+            if (hData == IntPtr.Zero) return null;
 
-            byte[] dibData = new byte[totalSize];
-            Marshal.Copy(locked, dibData, 0, (int)totalSize);
+            IntPtr locked = GlobalLock(hData);
+            if (locked == IntPtr.Zero) return null;
 
-            // Parse BITMAPINFOHEADER fields
-            int biSize = BitConverter.ToInt32(dibData, 0);
-            if (biSize < 40) return null;
-
-            int width = Math.Abs(BitConverter.ToInt32(dibData, 4));
-            int height = Math.Abs(BitConverter.ToInt32(dibData, 8));
-            short bitCount = BitConverter.ToInt16(dibData, 14);
-            int compression = BitConverter.ToInt32(dibData, 16);
-            uint sizeImage = (uint)BitConverter.ToInt32(dibData, 20);
-            uint clrUsed = (uint)BitConverter.ToInt32(dibData, 32);
-
-            // Calculate pixel data offset within DIB
-            int pixelOffset = biSize;
-
-            // BI_BITFIELDS adds 3 DWORD color masks
-            if (compression == 3)
-                pixelOffset += 12;
-
-            // Color table for <= 8bpp (when not using BITFIELDS masks area)
-            if (bitCount <= 8 && compression != 3)
+            try
             {
-                uint paletteCount = clrUsed > 0 ? clrUsed : (uint)(1 << bitCount);
-                pixelOffset += (int)paletteCount * 4;
+                uint totalSize = GlobalSize(hData);
+                if (totalSize < 40) return null;
+
+                byte[] raw = new byte[totalSize];
+                Marshal.Copy(locked, raw, 0, (int)totalSize);
+
+                int biSize = BitConverter.ToInt32(raw, 0);
+                if (biSize < 40) return null;
+
+                int width = Math.Abs(BitConverter.ToInt32(raw, 4));
+                int height = Math.Abs(BitConverter.ToInt32(raw, 8));
+                short bitCount = BitConverter.ToInt16(raw, 14);
+                int compression = BitConverter.ToInt32(raw, 16);
+                uint sizeImage = (uint)BitConverter.ToInt32(raw, 20);
+
+                if (width <= 0 && height <= 0) return null;
+
+                // Calculate offset to pixel data within the DIB
+                int pixelOffset = biSize;
+                if (compression == 3) pixelOffset += 12; // BI_BITFIELDS masks
+
+                if (bitCount <= 8 && compression != 3)
+                {
+                    uint clrUsed = (uint)BitConverter.ToInt32(raw, 32);
+                    uint paletteCount = clrUsed > 0 ? clrUsed : (uint)(1 << bitCount);
+                    pixelOffset += (int)paletteCount * 4;
+                }
+
+                if (pixelOffset >= totalSize) return null;
+
+                int stride = ((width * bitCount + 31) / 32) * 4;
+                int pixelDataSize = sizeImage > 0 ? (int)sizeImage : stride * Math.Abs(height);
+                int available = (int)(totalSize - pixelOffset);
+                if (available <= 0) return null;
+                pixelDataSize = Math.Min(pixelDataSize, available);
+
+                // Build BMP in memory: BITMAPFILEHEADER (14) + DIB header + pixels
+                using var ms = new MemoryStream(14 + pixelOffset + pixelDataSize);
+
+                // Write BITMAPFILEHEADER
+                WriteLE16(ms, 0x4D42); // 'BM'
+                WriteLE32(ms, (uint)(14 + pixelOffset + pixelDataSize)); // file size
+                WriteLE16(ms, 0); // reserved1
+                WriteLE16(ms, 0); // reserved2
+                WriteLE32(ms, (uint)(14 + pixelOffset)); // offset to pixel data
+
+                // DIB header + optional data
+                ms.Write(raw, 0, pixelOffset);
+                // Pixel data
+                ms.Write(raw, pixelOffset, pixelDataSize);
+
+                ms.Position = 0;
+
+                var bi = new BitmapImage();
+                bi.BeginInit();
+                bi.StreamSource = ms;
+                bi.CacheOption = BitmapCacheOption.OnLoad;
+                bi.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+                bi.EndInit();
+                bi.Freeze();
+                return bi;
             }
-
-            int stride = ((width * bitCount + 31) / 32) * 4;
-            int absHeight = Math.Abs(height);
-
-            // Pixel data size (use biSizeImage if provided, else calculate)
-            int pixelDataSize = sizeImage > 0 ? (int)sizeImage : stride * absHeight;
-
-            // Sanity check
-            if (pixelOffset + pixelDataSize > totalSize)
-                pixelDataSize = (int)(totalSize - pixelOffset);
-
-            if (pixelDataSize <= 0)
-                return null;
-
-            // Build BMP file: BITMAPFILEHEADER (14) + DIB header + pixel data
-            int bmpSize = 14 + pixelOffset + pixelDataSize;
-            byte[] bmp = new byte[bmpSize];
-
-            // BITMAPFILEHEADER
-            bmp[0] = (byte)'B';
-            bmp[1] = (byte)'M';
-            WriteLE32(bmp, 2, bmpSize);               // bfSize
-            WriteLE32(bmp, 10, 14 + pixelOffset);     // bfOffBits
-
-            // Copy DIB header (biSize bytes)
-            Array.Copy(dibData, 0, bmp, 14, pixelOffset);
-
-            // Copy pixel data
-            Array.Copy(dibData, pixelOffset, bmp, 14 + pixelOffset, pixelDataSize);
-
-            // Load BitmapImage from stream
-            var bi = new BitmapImage();
-            bi.BeginInit();
-            bi.StreamSource = new MemoryStream(bmp);
-            bi.CacheOption = BitmapCacheOption.OnLoad;
-            bi.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
-            bi.EndInit();
-            bi.Freeze();
-            return bi;
+            finally { GlobalUnlock(locked); }
         }
-        catch
-        {
-            return null;
-        }
-        finally
-        {
-            GlobalUnlock(locked);
-        }
+        finally { CloseClipboard(); }
     }
 
     /// <summary>
-    /// Reads CF_BITMAP (HBITMAP) format. Only used as last resort.
+    /// Reads CF_BITMAP (HBITMAP) and converts via WPF interop.
     /// </summary>
-    private static BitmapSource? ReadHBitmapFormat()
+    private static BitmapSource? TryReadHBitmap()
     {
-        IntPtr hData = GetClipboardData(CF_BITMAP);
-        if (hData == IntPtr.Zero)
-            return null;
-
+        if (!OpenClipboard(IntPtr.Zero)) return null;
         try
         {
+            IntPtr hData = GetClipboardData(CF_BITMAP);
+            if (hData == IntPtr.Zero) return null;
+
             var source = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
                 hData,
                 IntPtr.Zero,
                 System.Windows.Int32Rect.Empty,
                 BitmapSizeOptions.FromEmptyOptions());
-            source.Freeze();
+
+            if (source != null) source.Freeze();
             return source;
         }
         catch
         {
             return null;
         }
+        finally { CloseClipboard(); }
     }
 
-    private static void WriteLE32(byte[] buffer, int offset, int value)
+    private static void WriteLE16(Stream s, ushort v)
     {
-        buffer[offset] = (byte)(value & 0xFF);
-        buffer[offset + 1] = (byte)((value >> 8) & 0xFF);
-        buffer[offset + 2] = (byte)((value >> 16) & 0xFF);
-        buffer[offset + 3] = (byte)((value >> 24) & 0xFF);
+        s.WriteByte((byte)(v & 0xFF));
+        s.WriteByte((byte)((v >> 8) & 0xFF));
+    }
+
+    private static void WriteLE32(Stream s, uint v)
+    {
+        s.WriteByte((byte)(v & 0xFF));
+        s.WriteByte((byte)((v >> 8) & 0xFF));
+        s.WriteByte((byte)((v >> 16) & 0xFF));
+        s.WriteByte((byte)((v >> 24) & 0xFF));
     }
 }
