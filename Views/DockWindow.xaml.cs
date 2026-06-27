@@ -26,8 +26,11 @@ public partial class DockWindow : Window
 
     // Drag-vs-click detection
     private Point? _dragStartPoint;
-    private bool _dragStarted;
     private const double DragThreshold = 6;
+
+    // Reorder state
+    private Guid _reorderNoteId;
+    private bool _isReorderDragging;
 
 
     private readonly NotesStore _store;
@@ -130,7 +133,7 @@ public partial class DockWindow : Window
         _dockBgBrush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
     }
 
-    // ── Note opening (with drag-vs-click detection) ──
+    // ── Note opening (click) + reorder (drag) ──
 
     private void NoteIcon_MouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -138,46 +141,73 @@ public partial class DockWindow : Window
             sender is not Border border || border.Tag is not Guid noteId)
             return;
 
-        // Start drag tracking — don't open the note yet
         _dragStartPoint = e.GetPosition(this);
-        _dragStarted = false;
+        _reorderNoteId = noteId;
+        _isReorderDragging = false;
         border.CaptureMouse();
     }
 
     private void NoteIcon_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (_dragStartPoint == null || _dragStarted) return;
+        if (_dragStartPoint == null) return;
+
+        if (_isReorderDragging)
+        {
+            // Update visual feedback — not much we can do here without a drag adorner
+            return;
+        }
 
         var pos = e.GetPosition(this);
         var diff = (pos - _dragStartPoint.Value).Length;
 
         if (diff > DragThreshold)
         {
-            _dragStarted = true;
-            if (sender is Border b) b.ReleaseMouseCapture();
-            _dragStartPoint = null;
-
-            var hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd != IntPtr.Zero)
-            {
-                ReleaseCapture();
-                SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
-            }
+            // Enter reorder mode
+            _isReorderDragging = true;
+            Mouse.SetCursor(Cursors.SizeAll);
+            if (sender is Border b) b.CaptureMouse(); // keep capture
         }
     }
 
     private void NoteIcon_PreviewMouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (_dragStartPoint == null || _dragStarted ||
+        if (sender is Border b) b.ReleaseMouseCapture();
+
+        if (_isReorderDragging)
+        {
+            _isReorderDragging = false;
+            _dragStartPoint = null;
+            Mouse.SetCursor(Cursors.Arrow);
+
+            // Calculate target index from mouse Y position relative to the items control
+            var pos = e.GetPosition(notesList);
+            int targetIndex = (int)(pos.Y / 38);
+            var notes = _store.Notes.OrderBy(n => n.Order).ToList();
+            targetIndex = Math.Clamp(targetIndex, 0, notes.Count - 1);
+
+            var srcIndex = notes.FindIndex(n => n.Id == _reorderNoteId);
+            if (srcIndex < 0 || srcIndex == targetIndex) return;
+
+            // Reorder: remove from current position, insert at target, reassign Order
+            var note = notes[srcIndex];
+            notes.RemoveAt(srcIndex);
+            notes.Insert(targetIndex, note);
+            for (int i = 0; i < notes.Count; i++)
+                notes[i].Order = i;
+            _store.Save();
+            RefreshNotes();
+            return;
+        }
+
+        // Click (no drag detected)
+        if (_dragStartPoint == null ||
             sender is not Border border || border.Tag is not Guid noteId)
         {
             _dragStartPoint = null;
             return;
         }
 
-        // Dragged less than threshold — treat as click
         _dragStartPoint = null;
-        if (sender is Border b) b.ReleaseMouseCapture();
 
         if (e.ClickCount >= 2)
         {
