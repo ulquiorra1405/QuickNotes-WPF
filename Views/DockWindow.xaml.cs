@@ -32,7 +32,6 @@ public partial class DockWindow : Window
     private Guid _reorderNoteId;
     private bool _isReorderDragging;
     private Border? _dragSourceBorder;
-    private int _dragHoverSlot = -1;
 
 
     private readonly NotesStore _store;
@@ -208,8 +207,6 @@ public partial class DockWindow : Window
         var ghostStart = container.TransformToAncestor(this).Transform(new Point(0, 0));
         Canvas.SetLeft(dragGhost, this.ActualWidth / 2 - 16);
         Canvas.SetTop(dragGhost, ghostStart.Y);
-
-        _dragSourceBorder.Visibility = Visibility.Collapsed;
     }
 
     private static Border? FindBorderInContainer(DependencyObject parent, Guid noteId)
@@ -228,80 +225,7 @@ public partial class DockWindow : Window
 
     private void UpdateDragVisual(Point pos)
     {
-        var items = _store.Notes.OrderBy(n => n.Order).ToList();
-        int count = items.Count;
-        int slot = (int)(pos.Y / 38);
-        slot = Math.Clamp(slot, 0, count);
-
-        if (_dragHoverSlot != slot)
-        {
-            _dragHoverSlot = slot;
-            ApplyItemShifts(slot, items);
-        }
-
         Canvas.SetTop(dragGhost, pos.Y - 16);
-    }
-
-    private void ApplyItemShifts(int slot, System.Collections.Generic.List<Note> orderedNotes)
-    {
-        var source = notesList.ItemsSource as System.Collections.IList;
-        if (source == null) return;
-
-        int srcIdx = orderedNotes.FindIndex(n => n.Id == _reorderNoteId);
-        if (srcIdx < 0) return;
-        if (slot == srcIdx)
-        {
-            ClearItemShifts();
-            return;
-        }
-
-        if (slot > srcIdx)
-        {
-            // Dragging DOWN: items between srcIdx+1 and slot shift UP to close the source gap
-            for (int i = 0; i < source.Count; i++)
-            {
-                if (i > srcIdx && i <= slot)
-                    SetItemShift(i, -38);
-                else
-                    SetItemShift(i, 0);
-            }
-        }
-        else
-        {
-            // Dragging UP: items from slot to srcIdx-1 shift DOWN to open a gap at target
-            for (int i = 0; i < source.Count; i++)
-            {
-                if (i >= slot && i < srcIdx)
-                    SetItemShift(i, 38);
-                else
-                    SetItemShift(i, 0);
-            }
-        }
-    }
-
-    private void ClearItemShifts()
-    {
-        var source = notesList.ItemsSource as System.Collections.IList;
-        if (source == null) return;
-        for (int i = 0; i < source.Count; i++)
-            SetItemShift(i, 0);
-    }
-
-    private void SetItemShift(int index, double shiftY)
-    {
-        var item = notesList.ItemsSource is System.Collections.IList list && index < list.Count
-            ? list[index] : null;
-        if (item == null) return;
-        var container = notesList.ItemContainerGenerator.ContainerFromItem(item) as ContentPresenter;
-        if (container == null) return;
-
-        var transform = container.RenderTransform as TranslateTransform;
-        if (transform == null)
-        {
-            transform = new TranslateTransform();
-            container.RenderTransform = transform;
-        }
-        transform.Y = shiftY;
     }
 
     private void DockScroller_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -310,8 +234,6 @@ public partial class DockWindow : Window
 
         // Hide ghost
         dragGhost.Visibility = Visibility.Collapsed;
-        ClearItemShifts();
-        _dragHoverSlot = -1;
         _dragSourceBorder = null;
 
         if (_isReorderDragging)
