@@ -254,9 +254,9 @@ public partial class DockWindow : Window
             double shiftAmount;
             if (slot > srcIdx)
             {
-                // Dragging downward: items between srcIdx+1 and slot shift UP to close the gap
+                // Dragging downward: items between srcIdx+1 and slot-1 shift UP to close the gap
                 shiftStart = srcIdx + 1;
-                shiftEnd = slot;
+                shiftEnd = slot - 1;
                 shiftAmount = -38;
             }
             else
