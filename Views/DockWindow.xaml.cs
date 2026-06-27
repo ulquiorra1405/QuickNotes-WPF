@@ -31,6 +31,7 @@ public partial class DockWindow : Window
     // Reorder state
     private Guid _reorderNoteId;
     private bool _isReorderDragging;
+    private Border? _dragSourceBorder;
 
 
     private readonly NotesStore _store;
@@ -133,7 +134,7 @@ public partial class DockWindow : Window
         _dockBgBrush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
     }
 
-    // ── Note opening (click) + reorder (drag) ──
+    // ── Note opening (click) + reorder (drag with live ghost) ──
 
     private Border? FindNoteIcon(DependencyObject? el)
     {
@@ -141,6 +142,18 @@ public partial class DockWindow : Window
         {
             if (el is Border b && b.Tag is Guid) return b;
             el = VisualTreeHelper.GetParent(el);
+        }
+        return null;
+    }
+
+    private ContentPresenter? FindNoteContainer(Guid noteId)
+    {
+        var source = notesList.ItemsSource as System.Collections.IList;
+        if (source == null) return null;
+        foreach (var item in source)
+        {
+            if (item is DockNoteItem di && di.NoteId == noteId)
+                return notesList.ItemContainerGenerator.ContainerFromItem(item) as ContentPresenter;
         }
         return null;
     }
@@ -164,7 +177,7 @@ public partial class DockWindow : Window
 
         if (_isReorderDragging)
         {
-            UpdateDropIndicator(pos);
+            UpdateDragVisual(pos);
             e.Handled = true;
             return;
         }
@@ -172,19 +185,81 @@ public partial class DockWindow : Window
         if ((pos - _dragStartPoint.Value).Length > DragThreshold)
         {
             _isReorderDragging = true;
-            dropIndicator.Visibility = Visibility.Visible;
-            UpdateDropIndicator(pos);
+            ShowDragGhost();
+            UpdateDragVisual(pos);
         }
+    }
+
+    private void ShowDragGhost()
+    {
+        // Find the source Border to copy its appearance
+        var container = FindNoteContainer(_reorderNoteId);
+        if (container == null) return;
+
+        // Walk visual tree to find the actual Border with matching Tag
+        _dragSourceBorder = FindBorderInContainer(container, _reorderNoteId);
+        if (_dragSourceBorder == null) return;
+
+        // Copy visual state to ghost
+        dragGhost.Width = Math.Max(_dragSourceBorder.ActualWidth, 32);
+        dragGhost.Height = Math.Max(_dragSourceBorder.ActualHeight, 32);
+        dragGhost.Fill = _dragSourceBorder.Background;
+        dragGhost.Opacity = 0.85;
+        dragGhost.Visibility = Visibility.Visible;
+
+        // Position ghost over the source item
+        var ghostStart = container.TransformToAncestor(this).Transform(new Point(0, 0));
+        Canvas.SetLeft(dragGhost, this.Width / 2 - 16);
+        Canvas.SetTop(dragGhost, ghostStart.Y);
+
+        // Dim the original item
+        _dragSourceBorder.Opacity = 0.25;
+    }
+
+    private static Border? FindBorderInContainer(DependencyObject parent, Guid noteId)
+    {
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is Border b && b.Tag is Guid id && id == noteId)
+                return b;
+            var found = FindBorderInContainer(child, noteId);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private void UpdateDragVisual(Point pos)
+    {
+        int slot = (int)(pos.Y / 38);
+        var items = _store.Notes.OrderBy(n => n.Order).ToList();
+        slot = Math.Clamp(slot, 0, items.Count);
+
+        // Position ghost centered around the cursor
+        double ghostY = pos.Y + dockScroller.VerticalOffset - 16;
+        // The ghost is in the Canvas overlay (same container as ScrollViewer), so pos is already relative
+        Canvas.SetTop(dragGhost, pos.Y - 16);
     }
 
     private void DockScroller_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         dockScroller.ReleaseMouseCapture();
-        dropIndicator.Visibility = Visibility.Collapsed;
+
+        // Hide ghost
+        dragGhost.Visibility = Visibility.Collapsed;
+
+        // Restore original item opacity
+        if (_dragSourceBorder != null)
+        {
+            _dragSourceBorder.ClearValue(UIElement.OpacityProperty);
+            _dragSourceBorder = null;
+        }
 
         if (_isReorderDragging)
         {
             _isReorderDragging = false;
+
             var pos = e.GetPosition(dockScroller);
             int slot = (int)(pos.Y / 38);
             var notes = _store.Notes.OrderBy(n => n.Order).ToList();
@@ -195,11 +270,9 @@ public partial class DockWindow : Window
             if (srcIndex >= 0 && srcIndex != slot)
             {
                 int insertAt = slot;
-                if (srcIndex < slot) insertAt--; // account for removal shift
+                if (srcIndex < slot) insertAt--;
 
                 var note = notes[srcIndex];
-
-                // Build the new order as a list and replace ObservableCollection entirely
                 notes.RemoveAt(srcIndex);
                 notes.Insert(insertAt, note);
 
@@ -246,11 +319,27 @@ public partial class DockWindow : Window
         _dragStartPoint = null;
     }
 
-    private void UpdateDropIndicator(Point pos)
+    private void RestoreOpacity(ContentPresenter container)
     {
-        int slot = (int)(pos.Y / 38);
-        slot = Math.Clamp(slot, 0, _store.Notes.Count);
-        dropIndicatorTransform.Y = slot * 38;
+        // Walk children to find the Border and restore its opacity
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(container); i++)
+        {
+            var child = VisualTreeHelper.GetChild(container, i);
+            if (child is ContentPresenter cp) { RestoreOpacity(cp); return; }
+            if (child is Grid g)
+            {
+                foreach (var child2 in g.Children.OfType<FrameworkElement>())
+                {
+                    if (child2 is Border b && b.Tag is Guid)
+                    {
+                        b.Opacity = 1.0;
+                        // Re-bind opacity by clearing local value
+                        b.ClearValue(UIElement.OpacityProperty);
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     private void OpenNote(Guid noteId, bool forceDefault = false)

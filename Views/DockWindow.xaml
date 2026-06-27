@@ -211,21 +211,19 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
-            <!-- Drop indicator for reorder -->
-            <Rectangle x:Name="dropIndicator"
-                       Grid.Row="0"
-                       Width="44" Height="2"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Top"
-                       Fill="#80FFFFFF"
-                       RadiusX="1" RadiusY="1"
-                       IsHitTestVisible="False"
-                       Visibility="Collapsed"
-                       RenderTransformOrigin="0.5,0.5">
-                <Rectangle.RenderTransform>
-                    <TranslateTransform x:Name="dropIndicatorTransform" X="0" Y="0"/>
-                </Rectangle.RenderTransform>
-            </Rectangle>
+            <!-- Drag ghost overlay -->
+            <Canvas Grid.Row="0" IsHitTestVisible="False">
+                <Rectangle x:Name="dragGhost"
+                           Width="32" Height="32"
+                           RadiusX="8" RadiusY="8"
+                           IsHitTestVisible="False"
+                           Visibility="Collapsed">
+                    <Rectangle.Effect>
+                        <DropShadowEffect ShadowDepth="3" Color="#000000" Opacity="0.5"
+                                          BlurRadius="8" Direction="315"/>
+                    </Rectangle.Effect>
+                </Rectangle>
+            </Canvas>
 
             <!-- Exit button ⛶ -->
             <Button x:Name="exitDockBtn" Grid.Row="1"
