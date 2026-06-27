@@ -155,11 +155,12 @@
             <!-- Body -->
             <TextBlock Grid.Row="1"
                        x:Name="cardBodyBlock"
-                       Style="{DynamicResource NoteTextBox}"
                        Foreground="{Binding TextForeground}"
                        TextWrapping="Wrap"
                        Padding="6,4"
-                       IsHitTestVisible="False"/>
+                       IsHitTestVisible="False"
+                       FontSize="12"
+                       MaxHeight="95"/>
 
             <!-- Bottom bar: color dots + actions -->
             <Border Grid.Row="2" Background="#18000000"
