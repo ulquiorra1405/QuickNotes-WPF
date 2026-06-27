@@ -850,8 +850,8 @@ public partial class MainWindow : Window
                     n.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                     n.PlainText.Contains(filter, StringComparison.OrdinalIgnoreCase);
 
-            // Show all notes; non-matching are dimmed via visual trigger
-            _view.Filter = null;
+            // Filter to show only matching + highlight bar on matches
+            _view.Filter = obj => obj is Note note && note.IsSearchMatch;
         }
         UpdateSearchHint();
     }

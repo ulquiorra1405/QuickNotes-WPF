@@ -212,6 +212,84 @@ public partial class NoteWindow : Window
         _note.LastModified = DateTime.Now;
         var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is MainWindow) as MainWindow;
         mainWin?.DebounceSave();
+        HighlightUrls();
+    }
+
+    private void HighlightUrls()
+    {
+        if (_isUpdatingUrlFormats) return;
+        _isUpdatingUrlFormats = true;
+
+        var linkBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x60, 0xA0, 0xFF)); // soft blue
+
+        try
+        {
+            foreach (var block in noteText.Document.Blocks)
+            {
+                if (block is not Paragraph para) continue;
+
+                // Iterate over all Inlines recursively
+                var inlines = new System.Collections.Generic.List<Inline>(para.Inlines);
+                foreach (var inline in inlines)
+                {
+                    if (inline is not Run run) continue;
+                    if (string.IsNullOrEmpty(run.Text)) continue;
+
+                    var matches = _urlRegex.Matches(run.Text);
+                    if (matches.Count == 0) continue;
+
+                    // If the entire run is one URL, just style it
+                    if (matches.Count == 1 && matches[0].Index == 0 && matches[0].Length == run.Text.Length)
+                    {
+                        run.Foreground = linkBrush;
+                        run.TextDecorations = TextDecorations.Underline;
+                        continue;
+                    }
+
+                    // Multiple URLs or text+URL in same run: split the run
+                    int offset = 0;
+                    Inline? prevInline = run;
+                    foreach (System.Text.RegularExpressions.Match m in matches)
+                    {
+                        // Text before the URL
+                        if (m.Index > offset)
+                        {
+                            var beforeText = run.Text.Substring(offset, m.Index - offset);
+                            var beforeRun = new Run(beforeText);
+                            para.Inlines.InsertBefore(prevInline ?? run, beforeRun);
+                            prevInline = beforeRun;
+                        }
+
+                        // The URL itself
+                        var urlText = m.Value;
+                        var urlRun = new Run(urlText)
+                        {
+                            Foreground = linkBrush,
+                            TextDecorations = TextDecorations.Underline
+                        };
+                        para.Inlines.InsertBefore(prevInline ?? run, urlRun);
+                        prevInline = urlRun;
+
+                        offset = m.Index + m.Length;
+                    }
+
+                    // Text after the last URL
+                    if (offset < run.Text.Length)
+                    {
+                        var afterText = run.Text.Substring(offset);
+                        var afterRun = new Run(afterText);
+                        para.Inlines.InsertBefore(prevInline ?? run, afterRun);
+                    }
+
+                    // Remove the original run
+                    para.Inlines.Remove(run);
+                }
+            }
+        }
+        finally
+        {
+            _isUpdatingUrlFormats = false;
+        }
     }
 
     private void Title_TextChanged(object sender, TextChangedEventArgs e)
@@ -568,8 +646,6 @@ public partial class NoteWindow : Window
 
     // ── List continuation ──
 
-    private int _emptyCheckboxCount = 0;
-
     private bool HandleListContinuation()
     {
         var para = noteText.CaretPosition.Paragraph;
@@ -593,31 +669,28 @@ public partial class NoteWindow : Window
 
             if (IsEmptyListItem(prefix))
             {
-                // Empty checkbox
-                _emptyCheckboxCount++;
-                if (_emptyCheckboxCount >= 2)
-                {
-                    // Two consecutive empty checkboxes → exit
-                    _emptyCheckboxCount = 0;
-                    return false;
-                }
-
-                // First empty checkbox → stay in checklist mode
+                // Empty checkbox → remove it and exit list
                 var doc = noteText.Document;
-                var newPara = new Paragraph(new Run(prefix));
 
-                var nextBlock = para.NextBlock;
-                if (nextBlock != null)
-                    doc.Blocks.InsertBefore(nextBlock, newPara);
+                // Move caret to after this paragraph before removing
+                var afterPara = para.NextBlock;
+                var insertPos = afterPara != null
+                    ? afterPara.ContentStart
+                    : doc.ContentEnd;
+
+                // Insert an empty paragraph where this one was
+                var emptyPara = new Paragraph(new Run(""));
+                if (afterPara != null)
+                    doc.Blocks.InsertBefore(afterPara, emptyPara);
                 else
-                    doc.Blocks.Add(newPara);
+                    doc.Blocks.Add(emptyPara);
 
-                noteText.CaretPosition = newPara.ContentEnd;
+                doc.Blocks.Remove(para);
+                noteText.CaretPosition = emptyPara.ContentEnd;
                 return true;
             }
 
-            // Has content → continue with same prefix, reset counter
-            _emptyCheckboxCount = 0;
+            // Has content → continue with same prefix
             var doc2 = noteText.Document;
             var newPara2 = new Paragraph(new Run(prefix));
 
@@ -630,9 +703,6 @@ public partial class NoteWindow : Window
             noteText.CaretPosition = newPara2.ContentEnd;
             return true;
         }
-
-        // Reset counter for non-checkbox lines
-        _emptyCheckboxCount = 0;
 
         // Standard bullet / prefix lists
         foreach (var prefix in prefixes)
@@ -1242,6 +1312,7 @@ public partial class NoteWindow : Window
     }
 
     private static readonly Regex _urlRegex = new(@"https?://[\w./?=&%#@!~$'()*+,;:–—\[\]_-]+", RegexOptions.Compiled);
+    private bool _isUpdatingUrlFormats;
 
     private void NoteText_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
