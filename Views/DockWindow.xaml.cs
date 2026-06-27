@@ -238,38 +238,41 @@ public partial class DockWindow : Window
         int slot = (int)(pos.Y / 38);
         slot = Math.Clamp(slot, 0, count);
 
-        // Reset previous slot shift
         if (_dragHoverSlot != slot)
         {
             ClearItemShifts();
             _dragHoverSlot = slot;
 
-            // Shift items below the hover slot down by 38px
+            var srcIdx = items.FindIndex(n => n.Id == _reorderNoteId);
+            if (srcIdx < 0) return;
+
             var source = notesList.ItemsSource as System.Collections.IList;
-            if (source != null)
+            if (source == null) return;
+
+            // Shift items between srcIdx and slot to make a gap
+            int shiftStart, shiftEnd;
+            if (slot > srcIdx)
             {
-                for (int i = 0; i < source.Count; i++)
-                {
-                    if (i < slot)
-                    {
-                        // Items above the slot: no shift
-                        SetItemShift(i, 0);
-                    }
-                    else
-                    {
-                        // Items at and below the slot: shift down by 38px
-                        // Skip the dragged item itself
-                        var di = source[i] as DockNoteItem;
-                        if (di?.NoteId == _reorderNoteId)
-                            SetItemShift(i, 0);
-                        else
-                            SetItemShift(i, 38);
-                    }
-                }
+                // Dragging downward: shift items from srcIdx+1 to slot-1 down
+                shiftStart = srcIdx + 1;
+                shiftEnd = slot - 1;
+            }
+            else
+            {
+                // Dragging upward: shift items from slot to srcIdx-1 down
+                shiftStart = slot;
+                shiftEnd = srcIdx - 1;
+            }
+
+            for (int i = 0; i < source.Count; i++)
+            {
+                if (i >= shiftStart && i <= shiftEnd)
+                    SetItemShift(i, 38);
+                else
+                    SetItemShift(i, 0);
             }
         }
 
-        // Position ghost centered around the cursor
         Canvas.SetTop(dragGhost, pos.Y - 16);
     }
 
