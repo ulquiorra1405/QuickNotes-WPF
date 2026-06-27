@@ -84,25 +84,11 @@
                             </Setter.Value>
                         </Setter>
                     </Style>
-                    <Style TargetType="Separator">
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="Separator">
-                                    <Border Height="1"
-                                            Background="#40FFFFFF"
-                                            Margin="10,4"
-                                            HorizontalAlignment="Stretch"/>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
                 </ContextMenu.Resources>
                 <MenuItem Header="Duplicar" Tag="Duplicate" Click="ContextMenuItem_Click"/>
                 <MenuItem Header="Eliminar" Tag="Delete" Click="ContextMenuItem_Click"/>
-                <Separator/>
                 <MenuItem Header="Archivar" Tag="Archive" Click="ContextMenuItem_Click"/>
                 <MenuItem Header="Anclar" Tag="Pin" Click="ContextMenuItem_Click"/>
-                <Separator/>
                 <MenuItem Header="Exportar" Tag="Export" Click="ContextMenuItem_Click"/>
             </ContextMenu>
         </Border.ContextMenu>
