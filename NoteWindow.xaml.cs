@@ -213,6 +213,24 @@ public partial class NoteWindow : Window
         _note.LastModified = DateTime.Now;
         var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is MainWindow) as MainWindow;
         mainWin?.DebounceSave();
+
+        // Debounce URL formatting: reset timer on each keystroke
+        if (_urlFormatTimer == null)
+        {
+            _urlFormatTimer = new System.Windows.Threading.DispatcherTimer(
+                System.Windows.Threading.DispatcherPriority.Background);
+            _urlFormatTimer.Interval = TimeSpan.FromMilliseconds(600);
+            _urlFormatTimer.Tick += (_, _) =>
+            {
+                _urlFormatTimer?.Stop();
+                HighlightUrls();
+            };
+        }
+        else
+        {
+            _urlFormatTimer.Stop();
+        }
+        _urlFormatTimer.Start();
     }
 
     private void HighlightUrls()
@@ -398,6 +416,8 @@ public partial class NoteWindow : Window
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
+        _urlFormatTimer?.Stop();
+        _urlFormatTimer = null;
         SaveRichText();
         _note.IsDirty = false;
         // Reset position on individual close (not during app shutdown)
@@ -1312,6 +1332,7 @@ public partial class NoteWindow : Window
     }
 
     private static readonly Regex _urlRegex = new(@"https?://[\w./?=&%#@!~$'()*+,;:–—\[\]_-]+", RegexOptions.Compiled);
+    private System.Windows.Threading.DispatcherTimer? _urlFormatTimer;
     private bool _isUpdatingUrlFormats;
 
     private void NoteText_PreviewMouseDown(object sender, MouseButtonEventArgs e)
