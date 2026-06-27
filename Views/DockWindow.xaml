@@ -42,7 +42,8 @@
     <Border x:Name="dockBorder" Opacity="0"
             CornerRadius="10" BorderBrush="#3A3A3A" BorderThickness="1"
             Padding="2,8,2,8"
-            MouseEnter="DockBorder_MouseEnter" MouseLeave="DockBorder_MouseLeave">
+            MouseEnter="DockBorder_MouseEnter" MouseLeave="DockBorder_MouseLeave"
+            PreviewMouseDown="DockBorder_PreviewMouseDown">
         <Border.Effect>
             <DropShadowEffect ShadowDepth="4" Color="#000000" Opacity="0.5" BlurRadius="12" Direction="270"/>
         </Border.Effect>

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -567,6 +568,8 @@ public partial class NoteWindow : Window
 
     // ── List continuation ──
 
+    private static int _emptyCheckboxCount = 0;
+
     private bool HandleListContinuation()
     {
         var para = noteText.CaretPosition.Paragraph;
@@ -574,9 +577,60 @@ public partial class NoteWindow : Window
 
         var text = new TextRange(para.ContentStart, para.ContentEnd).Text.TrimEnd('\r', '\n');
 
-        // Prefixes for bullet / checklist
+        // Prefixes for bullet / checklist (including QuickNotes checkboxes)
         string[] prefixes = ["- ", "* ", "\u2022 ", "\u25a1 ", "\u2610 ", "[] ", "[x] "];
+        // QuickNotes-specific checkbox prefixes
+        string[] cbPrefixes = ["\u25fb ", "\u2713 "];  // ◻ and ✓
 
+        // Check QuickNotes checkboxes first
+        foreach (var prefix in cbPrefixes)
+        {
+            if (!text.StartsWith(prefix)) continue;
+
+            if (text.Length == prefix.TrimEnd().Length)
+            {
+                // Empty checkbox
+                _emptyCheckboxCount++;
+                if (_emptyCheckboxCount >= 2)
+                {
+                    // Two consecutive empty checkboxes → exit
+                    _emptyCheckboxCount = 0;
+                    return false;
+                }
+
+                // First empty checkbox → stay in checklist mode
+                var doc = noteText.Document;
+                var newPara = new Paragraph(new Run(prefix.TrimEnd()));
+
+                var nextBlock = para.NextBlock;
+                if (nextBlock != null)
+                    doc.Blocks.InsertBefore(nextBlock, newPara);
+                else
+                    doc.Blocks.Add(newPara);
+
+                noteText.CaretPosition = newPara.ContentEnd;
+                return true;
+            }
+
+            // Has content → continue with same prefix, reset counter
+            _emptyCheckboxCount = 0;
+            var doc2 = noteText.Document;
+            var newPara2 = new Paragraph(new Run(prefix.TrimEnd()));
+
+            var nextBlock2 = para.NextBlock;
+            if (nextBlock2 != null)
+                doc2.Blocks.InsertBefore(nextBlock2, newPara2);
+            else
+                doc2.Blocks.Add(newPara2);
+
+            noteText.CaretPosition = newPara2.ContentEnd;
+            return true;
+        }
+
+        // Reset counter for non-checkbox lines
+        _emptyCheckboxCount = 0;
+
+        // Standard bullet / prefix lists
         foreach (var prefix in prefixes)
         {
             if (!text.StartsWith(prefix)) continue;
@@ -1183,6 +1237,8 @@ public partial class NoteWindow : Window
         r.Text = replaceWith;
     }
 
+    private static readonly Regex _urlRegex = new(@"https?://[\w./?=&%#@!~$'()*+,;:–—\[\]_-]+", RegexOptions.Compiled);
+
     private void NoteText_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         try
@@ -1190,6 +1246,31 @@ public partial class NoteWindow : Window
             var pt = e.GetPosition(noteText);
             var pos = noteText.GetPositionFromPoint(pt, false);
             if (pos == null) return;
+
+            // Ctrl+Click → open URL under cursor
+            if (Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                var wordPos = pos.GetPositionAtOffset(0);
+                if (wordPos?.Parent is Run run)
+                {
+                    int offset = wordPos.GetOffsetToPosition(run.ContentStart);
+                    if (offset >= 0 && offset < run.Text.Length)
+                    {
+                        var word = ExtractUrlAt(run.Text, offset);
+                        if (word != null)
+                        {
+                            e.Handled = true;
+                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = word,
+                                UseShellExecute = true
+                            });
+                            return;
+                        }
+                    }
+                }
+                return;
+            }
 
             for (int offset = -1; offset <= 1; offset++)
             {
@@ -1220,6 +1301,17 @@ public partial class NoteWindow : Window
         {
             ErrorLog.Write(ex, "NoteText_PreviewMouseDown");
         }
+    }
+
+    private static string? ExtractUrlAt(string text, int offset)
+    {
+        var matches = _urlRegex.Matches(text);
+        foreach (System.Text.RegularExpressions.Match m in matches)
+        {
+            if (offset >= m.Index && offset < m.Index + m.Length)
+                return m.Value;
+        }
+        return null;
     }
 
     private void NoteText_PreviewMouseMove(object sender, MouseEventArgs e)

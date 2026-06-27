@@ -57,6 +57,32 @@ public partial class DockWindow : Window
         Height = Math.Max(h, 80);
     }
 
+    // ── Drag to reposition ──
+
+    private void DockBorder_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+
+        // Don't start drag if clicking on a note icon, the exit button, or the scroll viewer
+        var src = e.OriginalSource as DependencyObject;
+        if (src != null && FindParent<Border>(src, note => note.Tag is Guid) != null) return;
+        if (src != null && FindParent<Button>(src) != null) return;
+        if (src != null && FindParent<ScrollViewer>(src) != null) return;
+
+        DragMove();
+    }
+
+    private static T? FindParent<T>(DependencyObject? child, Func<T, bool>? predicate = null) where T : DependencyObject
+    {
+        while (child != null)
+        {
+            if (child is T t && (predicate == null || predicate(t)))
+                return t;
+            child = VisualTreeHelper.GetParent(child);
+        }
+        return null;
+    }
+
     // ── Dock background animation (hover-to-opaque) ──
 
     private void DockBorder_MouseEnter(object sender, MouseEventArgs e)
