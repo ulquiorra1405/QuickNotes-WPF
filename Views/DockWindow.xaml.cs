@@ -209,7 +209,7 @@ public partial class DockWindow : Window
 
         // Position ghost over the source item
         var ghostStart = container.TransformToAncestor(this).Transform(new Point(0, 0));
-        Canvas.SetLeft(dragGhost, this.Width / 2 - 16);
+        Canvas.SetLeft(dragGhost, this.ActualWidth / 2 - 16);
         Canvas.SetTop(dragGhost, ghostStart.Y);
 
         // Dim the original item
@@ -319,28 +319,6 @@ public partial class DockWindow : Window
         _dragStartPoint = null;
     }
 
-    private void RestoreOpacity(ContentPresenter container)
-    {
-        // Walk children to find the Border and restore its opacity
-        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(container); i++)
-        {
-            var child = VisualTreeHelper.GetChild(container, i);
-            if (child is ContentPresenter cp) { RestoreOpacity(cp); return; }
-            if (child is Grid g)
-            {
-                foreach (var child2 in g.Children.OfType<FrameworkElement>())
-                {
-                    if (child2 is Border b && b.Tag is Guid)
-                    {
-                        b.Opacity = 1.0;
-                        // Re-bind opacity by clearing local value
-                        b.ClearValue(UIElement.OpacityProperty);
-                        return;
-                    }
-                }
-            }
-        }
-    }
 
     private void OpenNote(Guid noteId, bool forceDefault = false)
     {
