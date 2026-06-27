@@ -32,6 +32,7 @@ public partial class DockWindow : Window
     private Guid _reorderNoteId;
     private bool _isReorderDragging;
     private Border? _dragSourceBorder;
+    private int _dragHoverSlot = -1;
 
 
     private readonly NotesStore _store;
@@ -208,7 +209,7 @@ public partial class DockWindow : Window
         Canvas.SetLeft(dragGhost, this.ActualWidth / 2 - 16);
         Canvas.SetTop(dragGhost, ghostStart.Y);
 
-        // Source stays visible — ghost floats above, no item shifts
+        _dragSourceBorder.ClearValue(UIElement.OpacityProperty);
     }
 
     private static Border? FindBorderInContainer(DependencyObject parent, Guid noteId)
@@ -227,8 +228,66 @@ public partial class DockWindow : Window
 
     private void UpdateDragVisual(Point pos)
     {
-        // Ghost only — follows cursor, no item shifting
+        var items = _store.Notes.OrderBy(n => n.Order).ToList();
+        int count = items.Count;
+        int slot = (int)(pos.Y / 38);
+        slot = Math.Clamp(slot, 0, count);
+
+        if (_dragHoverSlot != slot)
+        {
+            _dragHoverSlot = slot;
+            ApplyItemShifts(slot, items);
+        }
+
         Canvas.SetTop(dragGhost, pos.Y - 16);
+    }
+
+    private void ApplyItemShifts(int slot, System.Collections.Generic.List<Note> orderedNotes)
+    {
+        var source = notesList.ItemsSource as System.Collections.IList;
+        if (source == null) return;
+
+        int srcIdx = orderedNotes.FindIndex(n => n.Id == _reorderNoteId);
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            if (i >= slot)
+            {
+                // Items from slot downward shift by 38px
+                // If the source is at or above the slot, it shifts too (creating the gap)
+                SetItemShift(i, 38);
+            }
+            else
+            {
+                // Items above the slot stay put
+                SetItemShift(i, 0);
+            }
+        }
+    }
+
+    private void ClearItemShifts()
+    {
+        var source = notesList.ItemsSource as System.Collections.IList;
+        if (source == null) return;
+        for (int i = 0; i < source.Count; i++)
+            SetItemShift(i, 0);
+    }
+
+    private void SetItemShift(int index, double shiftY)
+    {
+        var item = notesList.ItemsSource is System.Collections.IList list && index < list.Count
+            ? list[index] : null;
+        if (item == null) return;
+        var container = notesList.ItemContainerGenerator.ContainerFromItem(item) as ContentPresenter;
+        if (container == null) return;
+
+        var transform = container.RenderTransform as TranslateTransform;
+        if (transform == null)
+        {
+            transform = new TranslateTransform();
+            container.RenderTransform = transform;
+        }
+        transform.Y = shiftY;
     }
 
     private void DockScroller_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -237,6 +296,8 @@ public partial class DockWindow : Window
 
         // Hide ghost
         dragGhost.Visibility = Visibility.Collapsed;
+        ClearItemShifts();
+        _dragHoverSlot = -1;
         _dragSourceBorder = null;
 
         if (_isReorderDragging)
