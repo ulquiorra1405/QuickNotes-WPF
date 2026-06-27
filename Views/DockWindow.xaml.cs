@@ -209,7 +209,7 @@ public partial class DockWindow : Window
         Canvas.SetLeft(dragGhost, this.ActualWidth / 2 - 16);
         Canvas.SetTop(dragGhost, ghostStart.Y);
 
-        _dragSourceBorder.ClearValue(UIElement.OpacityProperty);
+        _dragSourceBorder.Visibility = Visibility.Collapsed;
     }
 
     private static Border? FindBorderInContainer(DependencyObject parent, Guid noteId)
@@ -248,19 +248,33 @@ public partial class DockWindow : Window
         if (source == null) return;
 
         int srcIdx = orderedNotes.FindIndex(n => n.Id == _reorderNoteId);
-
-        for (int i = 0; i < source.Count; i++)
+        if (srcIdx < 0) return;
+        if (slot == srcIdx)
         {
-            if (i >= slot)
+            ClearItemShifts();
+            return;
+        }
+
+        if (slot > srcIdx)
+        {
+            // Dragging DOWN: items between srcIdx+1 and slot shift UP to close the source gap
+            for (int i = 0; i < source.Count; i++)
             {
-                // Items from slot downward shift by 38px
-                // If the source is at or above the slot, it shifts too (creating the gap)
-                SetItemShift(i, 38);
+                if (i > srcIdx && i <= slot)
+                    SetItemShift(i, -38);
+                else
+                    SetItemShift(i, 0);
             }
-            else
+        }
+        else
+        {
+            // Dragging UP: items from slot to srcIdx-1 shift DOWN to open a gap at target
+            for (int i = 0; i < source.Count; i++)
             {
-                // Items above the slot stay put
-                SetItemShift(i, 0);
+                if (i >= slot && i < srcIdx)
+                    SetItemShift(i, 38);
+                else
+                    SetItemShift(i, 0);
             }
         }
     }
