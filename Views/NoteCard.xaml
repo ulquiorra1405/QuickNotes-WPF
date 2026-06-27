@@ -10,16 +10,45 @@
              AllowDrop="True"
              Loaded="Card_Loaded">
 
-    <Border Style="{DynamicResource NoteCard}"
+    <Border x:Name="mainBorder"
             Background="{Binding Color}"
             BorderBrush="#30FFFFFF" BorderThickness="1"
             AllowDrop="True">
+        <Border.Style>
+            <Style TargetType="Border" BasedOn="{DynamicResource NoteCard}">
+                <Setter Property="Opacity" Value="1"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsSearchMatch}" Value="False">
+                        <Setter Property="Opacity" Value="0.4"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
         <Grid AllowDrop="True">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*" MaxHeight="95"/>
                 <RowDefinition Height="36"/>
             </Grid.RowDefinitions>
+
+            <!-- Search highlight bar -->
+            <Rectangle Grid.RowSpan="3"
+                       HorizontalAlignment="Left" Width="4"
+                       VerticalAlignment="Stretch"
+                       Fill="#80FFFFFF"
+                       RadiusX="2" RadiusY="2"
+                       Margin="2,4,0,4"
+                       Visibility="Collapsed">
+                <Rectangle.Style>
+                    <Style TargetType="Rectangle">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSearchMatch}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Rectangle.Style>
+            </Rectangle>
 
             <!-- Title with dash -->
             <Grid Grid.Row="0" Margin="6,6,3,0" AllowDrop="True">

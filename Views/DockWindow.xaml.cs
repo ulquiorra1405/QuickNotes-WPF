@@ -53,7 +53,7 @@ public partial class DockWindow : Window
         notesList.ItemsSource = items;
 
         int count = items.Count;
-        double h = 8 + Math.Min(count, 6) * 38 + 32 + 8;
+        double h = 8 + Math.Min(count, 9) * 38 + 32 + 8;
         Height = Math.Max(h, 80);
     }
 

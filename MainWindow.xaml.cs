@@ -784,12 +784,23 @@ public partial class MainWindow : Window
     private void Search_TextChanged(object sender, TextChangedEventArgs e)
     {
         var filter = searchBox.Text.Trim();
+
         if (string.IsNullOrEmpty(filter))
+        {
+            foreach (var n in store.Notes)
+                n.IsSearchMatch = false;
             _view.Filter = null;
+        }
         else
-            _view.Filter = obj => obj is Note note &&
-                (note.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                 note.PlainText.Contains(filter, StringComparison.OrdinalIgnoreCase));
+        {
+            foreach (var n in store.Notes)
+                n.IsSearchMatch =
+                    n.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                    n.PlainText.Contains(filter, StringComparison.OrdinalIgnoreCase);
+
+            // Show all notes; non-matching are dimmed via visual trigger
+            _view.Filter = null;
+        }
         UpdateSearchHint();
     }
 

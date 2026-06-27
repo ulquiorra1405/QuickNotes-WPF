@@ -45,6 +45,14 @@ public class Note : INotifyPropertyChanged
     }
 
     private bool _isDirty;
+    private bool _isSearchMatch;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsSearchMatch
+    {
+        get => _isSearchMatch;
+        set { _isSearchMatch = value; OnPropertyChanged(); }
+    }
+
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsDirty
     {

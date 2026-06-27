@@ -816,6 +816,20 @@ public partial class NoteWindow : Window
             return;
         }
 
+        // Tab / Shift+Tab for indentation (only when RichTextBox has focus)
+        if (Keyboard.Modifiers == ModifierKeys.None && e.Key == Key.Tab && noteText.IsFocused)
+        {
+            EditingCommands.IncreaseIndentation.Execute(null, noteText);
+            e.Handled = true;
+            return;
+        }
+        if (Keyboard.Modifiers == ModifierKeys.Shift && e.Key == Key.Tab && noteText.IsFocused)
+        {
+            EditingCommands.DecreaseIndentation.Execute(null, noteText);
+            e.Handled = true;
+            return;
+        }
+
         // Markdown shortcuts (Space) & list continuation (Enter)
         if (Keyboard.Modifiers == ModifierKeys.None)
         {
