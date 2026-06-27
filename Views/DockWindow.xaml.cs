@@ -32,7 +32,6 @@ public partial class DockWindow : Window
     private Guid _reorderNoteId;
     private bool _isReorderDragging;
     private Border? _dragSourceBorder;
-    private int _dragHoverSlot = -1;
 
 
     private readonly NotesStore _store;
@@ -209,8 +208,7 @@ public partial class DockWindow : Window
         Canvas.SetLeft(dragGhost, this.ActualWidth / 2 - 16);
         Canvas.SetTop(dragGhost, ghostStart.Y);
 
-        // Hide the source item (no dimming) — the ghost replaces it visually
-        _dragSourceBorder.Visibility = Visibility.Collapsed;
+        // Source stays visible — ghost floats above, no item shifts
     }
 
     private static Border? FindBorderInContainer(DependencyObject parent, Guid noteId)
@@ -229,87 +227,17 @@ public partial class DockWindow : Window
 
     private void UpdateDragVisual(Point pos)
     {
-        var items = _store.Notes.OrderBy(n => n.Order).ToList();
-        int count = items.Count;
-        int slot = (int)(pos.Y / 38);
-        slot = Math.Clamp(slot, 0, count);
-
-        if (_dragHoverSlot != slot)
-        {
-            ClearItemShifts();
-            _dragHoverSlot = slot;
-
-            var srcIdx = items.FindIndex(n => n.Id == _reorderNoteId);
-            if (srcIdx < 0) return;
-
-            var source = notesList.ItemsSource as System.Collections.IList;
-            if (source == null) return;
-
-            // Shift items from slot downward to open space (always positive Y = down)
-            // The dragged item's original position handles itself (ghost + dimmed original)
-            int shiftStart = slot;
-            int shiftEnd = source.Count - 1;
-            double shiftAmount = 38;
-
-            for (int i = 0; i < source.Count; i++)
-            {
-                if (i >= shiftStart && i <= shiftEnd)
-                {
-                    // Skip the item being dragged (it has its own ghost)
-                    var di = source[i] as DockNoteItem;
-                    if (di?.NoteId == _reorderNoteId)
-                        SetItemShift(i, 0);
-                    else
-                        SetItemShift(i, shiftAmount);
-                }
-                else
-                    SetItemShift(i, 0);
-            }
-        }
-
+        // Ghost only — follows cursor, no item shifting
         Canvas.SetTop(dragGhost, pos.Y - 16);
-    }
-
-    private void ClearItemShifts()
-    {
-        var source = notesList.ItemsSource as System.Collections.IList;
-        if (source == null) return;
-        for (int i = 0; i < source.Count; i++)
-            SetItemShift(i, 0);
-    }
-
-    private void SetItemShift(int index, double shiftY)
-    {
-        var item = notesList.ItemsSource is System.Collections.IList list && index < list.Count
-            ? list[index] : null;
-        if (item == null) return;
-        var container = notesList.ItemContainerGenerator.ContainerFromItem(item) as ContentPresenter;
-        if (container == null) return;
-
-        var transform = container.RenderTransform as TranslateTransform;
-        if (transform == null)
-        {
-            transform = new TranslateTransform();
-            container.RenderTransform = transform;
-        }
-        transform.Y = shiftY;
     }
 
     private void DockScroller_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         dockScroller.ReleaseMouseCapture();
 
-        // Hide ghost and clear item shifts
+        // Hide ghost
         dragGhost.Visibility = Visibility.Collapsed;
-        ClearItemShifts();
-        _dragHoverSlot = -1;
-
-        // Restore original item visibility
-        if (_dragSourceBorder != null)
-        {
-            _dragSourceBorder.Visibility = Visibility.Visible;
-            _dragSourceBorder = null;
-        }
+        _dragSourceBorder = null;
 
         if (_isReorderDragging)
         {
