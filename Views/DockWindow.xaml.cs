@@ -1,9 +1,11 @@
 using System;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using QuickNotes.Models;
@@ -12,6 +14,17 @@ namespace QuickNotes.Views;
 
 public partial class DockWindow : Window
 {
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ReleaseCapture();
+
+    private const int WM_NCLBUTTONDOWN = 0xA1;
+    private const int HTCAPTION = 2;
+
+
     private readonly NotesStore _store;
     private readonly Action _onExit;
     private readonly Rect _monitorBounds;
@@ -57,7 +70,7 @@ public partial class DockWindow : Window
         Height = Math.Max(h, 80);
     }
 
-    // ── Drag to reposition ──
+    // ── Drag to reposition (P/Invoke for WindowStyle=None) ──
 
     private void DockBorder_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -69,7 +82,14 @@ public partial class DockWindow : Window
         if (src != null && FindParent<Button>(src) != null) return;
         if (src != null && FindParent<ScrollViewer>(src) != null) return;
 
-        DragMove();
+        // Use WM_NCLBUTTONDOWN / HTCAPTION to simulate title bar drag
+        // (DragMove() doesn't work with WindowStyle=None + AllowsTransparency=True)
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+        {
+            ReleaseCapture();
+            SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+        }
     }
 
     private static T? FindParent<T>(DependencyObject? child, Func<T, bool>? predicate = null) where T : DependencyObject

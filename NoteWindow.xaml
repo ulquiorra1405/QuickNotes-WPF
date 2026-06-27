@@ -220,6 +220,7 @@
                          Padding="10,2,15,6"
                          VerticalScrollBarVisibility="Auto"
                          ScrollViewer.CanContentScroll="False"
+                         AcceptsTab="True"
                          Loaded="NoteText_Loaded"
                          LostFocus="Text_LostFocus"
                          TextChanged="NoteText_TextChanged"

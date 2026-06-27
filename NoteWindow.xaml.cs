@@ -568,7 +568,7 @@ public partial class NoteWindow : Window
 
     // ── List continuation ──
 
-    private static int _emptyCheckboxCount = 0;
+    private int _emptyCheckboxCount = 0;
 
     private bool HandleListContinuation()
     {
@@ -582,12 +582,16 @@ public partial class NoteWindow : Window
         // QuickNotes-specific checkbox prefixes
         string[] cbPrefixes = ["\u25fb ", "\u2713 "];  // ◻ and ✓
 
+        // Helper: check if text is only the prefix (empty list item)
+        bool IsEmptyListItem(string prefix)
+            => text.TrimEnd() == prefix.TrimEnd();
+
         // Check QuickNotes checkboxes first
         foreach (var prefix in cbPrefixes)
         {
             if (!text.StartsWith(prefix)) continue;
 
-            if (text.Length == prefix.TrimEnd().Length)
+            if (IsEmptyListItem(prefix))
             {
                 // Empty checkbox
                 _emptyCheckboxCount++;
@@ -600,7 +604,7 @@ public partial class NoteWindow : Window
 
                 // First empty checkbox → stay in checklist mode
                 var doc = noteText.Document;
-                var newPara = new Paragraph(new Run(prefix.TrimEnd()));
+                var newPara = new Paragraph(new Run(prefix));
 
                 var nextBlock = para.NextBlock;
                 if (nextBlock != null)
@@ -615,7 +619,7 @@ public partial class NoteWindow : Window
             // Has content → continue with same prefix, reset counter
             _emptyCheckboxCount = 0;
             var doc2 = noteText.Document;
-            var newPara2 = new Paragraph(new Run(prefix.TrimEnd()));
+            var newPara2 = new Paragraph(new Run(prefix));
 
             var nextBlock2 = para.NextBlock;
             if (nextBlock2 != null)
@@ -635,7 +639,7 @@ public partial class NoteWindow : Window
         {
             if (!text.StartsWith(prefix)) continue;
 
-            if (text.Length == prefix.TrimEnd().Length)
+            if (IsEmptyListItem(prefix))
             {
                 // Only prefix → exit list (let default Enter create empty para)
                 return false;
@@ -643,7 +647,7 @@ public partial class NoteWindow : Window
 
             // Has content → continue with same prefix
             var doc = noteText.Document;
-            var newPara = new Paragraph(new Run(prefix.TrimEnd()));
+            var newPara = new Paragraph(new Run(prefix));
 
             var nextBlock = para.NextBlock;
             if (nextBlock != null)
@@ -1250,19 +1254,23 @@ public partial class NoteWindow : Window
             // Ctrl+Click → open URL under cursor
             if (Keyboard.Modifiers == ModifierKeys.Control)
             {
-                var wordPos = pos.GetPositionAtOffset(0);
-                if (wordPos?.Parent is Run run)
+                var textBefore = pos.GetTextInRun(LogicalDirection.Backward) ?? "";
+                var textAfter = pos.GetTextInRun(LogicalDirection.Forward) ?? "";
+                var combined = textBefore + textAfter;
+                if (combined.Length > 0)
                 {
-                    int offset = wordPos.GetOffsetToPosition(run.ContentStart);
-                    if (offset >= 0 && offset < run.Text.Length)
+                    var match = _urlRegex.Match(combined);
+                    if (match.Success)
                     {
-                        var word = ExtractUrlAt(run.Text, offset);
-                        if (word != null)
+                        var url = match.Value;
+                        // Find the URL at cursor: ensure cursor is within the match
+                        if (textBefore.Length >= match.Index &&
+                            textBefore.Length <= match.Index + match.Length)
                         {
                             e.Handled = true;
                             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                             {
-                                FileName = word,
+                                FileName = url,
                                 UseShellExecute = true
                             });
                             return;

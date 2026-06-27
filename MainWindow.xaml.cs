@@ -840,7 +840,7 @@ public partial class MainWindow : Window
         if (string.IsNullOrEmpty(filter))
         {
             foreach (var n in store.Notes)
-                n.IsSearchMatch = false;
+                n.IsSearchMatch = true;
             _view.Filter = null;
         }
         else
