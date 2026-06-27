@@ -853,6 +853,10 @@ public partial class MainWindow : Window
             // Filter to show only matching + highlight bar on matches
             _view.Filter = obj => obj is Note note && note.IsSearchMatch;
         }
+
+        // Pass search filter to NoteCards for inline text highlighting
+        Views.NoteCard.SearchFilter = filter ?? "";
+
         UpdateSearchHint();
     }
 

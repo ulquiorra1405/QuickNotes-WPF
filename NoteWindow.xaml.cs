@@ -87,6 +87,7 @@ public partial class NoteWindow : Window
             BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(0, 1, 200));
             LoadRichText();
             UpdateButtonForegrounds();
+            HighlightUrls();
         };
 
         Activated += (_, _) => ToggleBars(show: true);
@@ -212,7 +213,6 @@ public partial class NoteWindow : Window
         _note.LastModified = DateTime.Now;
         var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is MainWindow) as MainWindow;
         mainWin?.DebounceSave();
-        HighlightUrls();
     }
 
     private void HighlightUrls()

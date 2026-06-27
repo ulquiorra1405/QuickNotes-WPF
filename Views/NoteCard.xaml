@@ -153,11 +153,13 @@
                        Margin="12,0,3,0" VerticalAlignment="Bottom"/>
 
             <!-- Body -->
-            <TextBox Grid.Row="1" Style="{DynamicResource NoteTextBox}"
-                     Foreground="{Binding TextForeground}"
-                     Text="{Binding PlainText, Mode=OneWay}"
-                     IsReadOnly="True"
-                     VerticalScrollBarVisibility="Auto"/>
+            <TextBlock Grid.Row="1"
+                       x:Name="cardBodyBlock"
+                       Style="{DynamicResource NoteTextBox}"
+                       Foreground="{Binding TextForeground}"
+                       TextWrapping="Wrap"
+                       Padding="6,4"
+                       IsHitTestVisible="False"/>
 
             <!-- Bottom bar: color dots + actions -->
             <Border Grid.Row="2" Background="#18000000"

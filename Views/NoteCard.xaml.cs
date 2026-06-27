@@ -1,6 +1,8 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -10,9 +12,31 @@ namespace QuickNotes.Views;
 
 public partial class NoteCard : UserControl
 {
+    private static string _searchFilter = "";
+    private static event EventHandler? SearchFilterChanged;
+
+    public static string SearchFilter
+    {
+        get => _searchFilter;
+        set
+        {
+            if (_searchFilter == value) return;
+            _searchFilter = value;
+            SearchFilterChanged?.Invoke(null, EventArgs.Empty);
+        }
+    }
+
     public NoteCard()
     {
         InitializeComponent();
+        SearchFilterChanged += OnSearchFilterChanged;
+        DataContextChanged += (_, _) => RenderBodyWithHighlight();
+        Unloaded += (_, _) => SearchFilterChanged -= OnSearchFilterChanged;
+    }
+
+    private void OnSearchFilterChanged(object? sender, EventArgs e)
+    {
+        RenderBodyWithHighlight();
     }
 
     // === Routed events for MainWindow to handle ===
@@ -50,6 +74,51 @@ public partial class NoteCard : UserControl
             var pinBtn = FindVisualChild<Button>(this);
             if (pinBtn != null)
                 UpdatePinVisual(pinBtn, note, false);
+        }
+
+        RenderBodyWithHighlight();
+    }
+
+    private void RenderBodyWithHighlight()
+    {
+        cardBodyBlock.Inlines.Clear();
+
+        if (DataContext is not Note note) return;
+        var text = note.PlainText ?? "";
+        var filter = _searchFilter;
+
+        if (string.IsNullOrEmpty(filter) || text.Length == 0)
+        {
+            cardBodyBlock.Inlines.Add(new Run(text));
+            return;
+        }
+
+        // Split text around the search filter and highlight matches
+        var highlightBg = new SolidColorBrush(Color.FromArgb(0x44, 0xFF, 0xD7, 0x00)); // translucent yellow
+
+        int idx = 0;
+        while (idx < text.Length)
+        {
+            var matchIdx = text.IndexOf(filter, idx, StringComparison.OrdinalIgnoreCase);
+            if (matchIdx < 0)
+            {
+                // No more matches — remaining text
+                cardBodyBlock.Inlines.Add(new Run(text.Substring(idx)));
+                break;
+            }
+
+            // Text before match
+            if (matchIdx > idx)
+                cardBodyBlock.Inlines.Add(new Run(text.Substring(idx, matchIdx - idx)));
+
+            // Highlighted match
+            cardBodyBlock.Inlines.Add(new Run(text.Substring(matchIdx, filter.Length))
+            {
+                Background = highlightBg,
+                FontWeight = FontWeights.SemiBold
+            });
+
+            idx = matchIdx + filter.Length;
         }
     }
 
