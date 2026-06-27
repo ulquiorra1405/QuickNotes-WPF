@@ -9,8 +9,19 @@
              x:Name="cardRoot"
              AllowDrop="True"
              Loaded="Card_Loaded">
+    <UserControl.Style>
+        <Style TargetType="UserControl">
+            <Setter Property="Opacity" Value="1"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSearchMatch}" Value="False">
+                    <Setter Property="Opacity" Value="0.4"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Style>
 
     <Border x:Name="mainBorder"
+            Style="{DynamicResource NoteCard}"
             Background="{Binding Color}"
             BorderBrush="#30FFFFFF" BorderThickness="1"
             AllowDrop="True"
@@ -27,16 +38,6 @@
                 <MenuItem Header="Exportar" Tag="Export" Click="ContextMenuItem_Click"/>
             </ContextMenu>
         </Border.ContextMenu>
-        <Border.Style>
-            <Style TargetType="Border" BasedOn="{StaticResource NoteCard}">
-                <Setter Property="Opacity" Value="1"/>
-                <Style.Triggers>
-                    <DataTrigger Binding="{Binding IsSearchMatch}" Value="False">
-                        <Setter Property="Opacity" Value="0.4"/>
-                    </DataTrigger>
-                </Style.Triggers>
-            </Style>
-        </Border.Style>
         <Grid AllowDrop="True">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
