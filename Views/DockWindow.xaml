@@ -69,6 +69,8 @@
                                         Opacity="{Binding IconOpacity}"
                                         Tag="{Binding NoteId}"
                                         MouseDown="NoteIcon_MouseDown"
+                                        PreviewMouseMove="NoteIcon_PreviewMouseMove"
+                                        PreviewMouseUp="NoteIcon_PreviewMouseUp"
                                         RenderTransformOrigin="0.5,0.5">
                                     <Border.RenderTransform>
                                         <ScaleTransform ScaleX="1" ScaleY="1"/>

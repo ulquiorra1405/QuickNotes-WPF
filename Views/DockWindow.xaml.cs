@@ -24,6 +24,11 @@ public partial class DockWindow : Window
     private const int WM_NCLBUTTONDOWN = 0xA1;
     private const int HTCAPTION = 2;
 
+    // Drag-vs-click detection
+    private Point? _dragStartPoint;
+    private bool _dragStarted;
+    private const double DragThreshold = 6;
+
 
     private readonly NotesStore _store;
     private readonly Action _onExit;
@@ -125,7 +130,7 @@ public partial class DockWindow : Window
         _dockBgBrush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
     }
 
-    // ── Note opening ──
+    // ── Note opening (with drag-vs-click detection) ──
 
     private void NoteIcon_MouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -133,9 +138,49 @@ public partial class DockWindow : Window
             sender is not Border border || border.Tag is not Guid noteId)
             return;
 
+        // Start drag tracking — don't open the note yet
+        _dragStartPoint = e.GetPosition(this);
+        _dragStarted = false;
+        border.CaptureMouse();
+    }
+
+    private void NoteIcon_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragStartPoint == null || _dragStarted) return;
+
+        var pos = e.GetPosition(this);
+        var diff = (pos - _dragStartPoint.Value).Length;
+
+        if (diff > DragThreshold)
+        {
+            _dragStarted = true;
+            if (sender is Border b) b.ReleaseMouseCapture();
+            _dragStartPoint = null;
+
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                ReleaseCapture();
+                SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+            }
+        }
+    }
+
+    private void NoteIcon_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_dragStartPoint == null || _dragStarted ||
+            sender is not Border border || border.Tag is not Guid noteId)
+        {
+            _dragStartPoint = null;
+            return;
+        }
+
+        // Dragged less than threshold — treat as click
+        _dragStartPoint = null;
+        if (sender is Border b) b.ReleaseMouseCapture();
+
         if (e.ClickCount >= 2)
         {
-            // Double-click: force reposition to dock with default size
             var note = _store.Notes.FirstOrDefault(n => n.Id == noteId);
             if (note == null) return;
 
@@ -144,7 +189,6 @@ public partial class DockWindow : Window
 
             if (existing != null)
             {
-                // Show if minimized, then reposition
                 if (!existing.IsVisible)
                 {
                     existing.Show();
@@ -159,7 +203,6 @@ public partial class DockWindow : Window
             return;
         }
 
-        // Single click: normal open
         OpenNote(noteId);
     }
 
