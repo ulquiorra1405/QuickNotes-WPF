@@ -42,8 +42,9 @@
                                 Padding="4">
                             <ScrollViewer Style="{x:Null}" Padding="0" Margin="0"
                                           HorizontalScrollBarVisibility="Hidden"
-                                          VerticalScrollBarVisibility="Auto">
-                                <ItemsPresenter Margin="0"/>
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalContentAlignment="Stretch">
+                                <ItemsPresenter Margin="0" HorizontalAlignment="Stretch"/>
                             </ScrollViewer>
                         </Border>
                     </ControlTemplate>
@@ -64,7 +65,8 @@
                                             Background="{TemplateBinding Background}"
                                             CornerRadius="4"
                                             Padding="{TemplateBinding Padding}"
-                                            SnapsToDevicePixels="True">
+                                            SnapsToDevicePixels="True"
+                                            HorizontalAlignment="Stretch">
                                         <ContentPresenter ContentSource="Header"
                                                           RecognizesAccessKey="False"
                                                           HorizontalAlignment="Left"
@@ -88,7 +90,8 @@
                                 <ControlTemplate TargetType="Separator">
                                     <Border Height="1"
                                             Background="#40FFFFFF"
-                                            Margin="10,4"/>
+                                            Margin="10,4"
+                                            HorizontalAlignment="Stretch"/>
                                 </ControlTemplate>
                             </Setter.Value>
                         </Setter>
