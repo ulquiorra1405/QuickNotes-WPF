@@ -198,11 +198,19 @@ public partial class DockWindow : Window
                 if (srcIndex < slot) insertAt--; // account for removal shift
 
                 var note = notes[srcIndex];
+
+                // Build the new order as a list and replace ObservableCollection entirely
                 notes.RemoveAt(srcIndex);
                 notes.Insert(insertAt, note);
 
-                for (int i = 0; i < notes.Count; i++)
-                    notes[i].Order = i;
+                var obs = _store.Notes;
+                obs.Clear();
+                foreach (var n in notes)
+                {
+                    obs.Add(n);
+                    n.Order = obs.Count - 1;
+                }
+
                 _store.Save();
                 RefreshNotes();
             }

@@ -134,7 +134,8 @@ public partial class MainWindow : Window
         var color = !string.IsNullOrEmpty(store.DefaultColor)
             ? store.DefaultColor
             : Note.RandomColor();
-        var note = new Note { Color = color };
+        var maxOrder = store.Notes.Count > 0 ? store.Notes.Max(n => n.Order) : -1;
+        var note = new Note { Color = color, Order = maxOrder + 1 };
         store.Notes.Add(note);
         store.Save();
         statusText.Text = "Note added";

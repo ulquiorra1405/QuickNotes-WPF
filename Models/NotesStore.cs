@@ -130,8 +130,8 @@ public class NotesStore
             del.ExecuteNonQuery();
         }
 
-        for (int i = 0; i < Notes.Count; i++)
-            Notes[i].Order = i;
+        // Note: Order is managed externally (dock reorder, etc.) — do NOT overwrite it here
+        // because the ObservableCollection index may not reflect the intended Order.
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
