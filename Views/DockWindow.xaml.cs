@@ -249,28 +249,23 @@ public partial class DockWindow : Window
             var source = notesList.ItemsSource as System.Collections.IList;
             if (source == null) return;
 
-            // Shift items between srcIdx and slot to make/close a gap
-            int shiftStart, shiftEnd;
-            double shiftAmount;
-            if (slot > srcIdx)
-            {
-                // Dragging downward: items between srcIdx+1 and slot-1 shift UP to close the gap
-                shiftStart = srcIdx + 1;
-                shiftEnd = slot - 1;
-                shiftAmount = -38;
-            }
-            else
-            {
-                // Dragging upward: items between slot and srcIdx-1 shift DOWN to open a gap
-                shiftStart = slot;
-                shiftEnd = srcIdx - 1;
-                shiftAmount = 38;
-            }
+            // Shift items from slot downward to open space (always positive Y = down)
+            // The dragged item's original position handles itself (ghost + dimmed original)
+            int shiftStart = slot;
+            int shiftEnd = source.Count - 1;
+            double shiftAmount = 38;
 
             for (int i = 0; i < source.Count; i++)
             {
                 if (i >= shiftStart && i <= shiftEnd)
-                    SetItemShift(i, shiftAmount);
+                {
+                    // Skip the item being dragged (it has its own ghost)
+                    var di = source[i] as DockNoteItem;
+                    if (di?.NoteId == _reorderNoteId)
+                        SetItemShift(i, 0);
+                    else
+                        SetItemShift(i, shiftAmount);
+                }
                 else
                     SetItemShift(i, 0);
             }
