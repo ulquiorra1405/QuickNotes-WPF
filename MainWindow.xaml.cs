@@ -477,12 +477,12 @@ public partial class MainWindow : Window
     {
         if (e.OriginalSource is not MenuItem mi) return;
 
-        // Walk up to find the NoteCard
+        // ContextMenu lives in a Popup (separate visual tree).
+        // Get the card via ContextMenu.PlacementTarget instead.
         NoteCard? card = null;
-        for (var el = mi as DependencyObject; el != null; el = VisualTreeHelper.GetParent(el))
-        {
-            if (el is NoteCard c) { card = c; break; }
-        }
+        if (mi.Parent is ContextMenu cm)
+            card = FindParent<NoteCard>(cm.PlacementTarget);
+
         if (card?.DataContext is not Note note) return;
 
         switch (mi.Tag?.ToString())
