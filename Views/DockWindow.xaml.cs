@@ -135,80 +135,67 @@ public partial class DockWindow : Window
 
     // ── Note opening (click) + reorder (drag) ──
 
-    private void NoteIcon_MouseDown(object sender, MouseButtonEventArgs e)
+    private Border? FindNoteIcon(DependencyObject? el)
     {
-        if (e.LeftButton != MouseButtonState.Pressed ||
-            sender is not Border border || border.Tag is not Guid noteId)
-            return;
-
-        _dragStartPoint = e.GetPosition(this);
-        _reorderNoteId = noteId;
-        _isReorderDragging = false;
-        border.CaptureMouse();
+        while (el != null)
+        {
+            if (el is Border b && b.Tag is Guid) return b;
+            el = VisualTreeHelper.GetParent(el);
+        }
+        return null;
     }
 
-    private void NoteIcon_PreviewMouseMove(object sender, MouseEventArgs e)
+    private void DockScroller_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var border = FindNoteIcon(e.OriginalSource as DependencyObject);
+        if (border?.Tag is not Guid noteId) return;
+
+        _dragStartPoint = e.GetPosition(dockScroller);
+        _reorderNoteId = noteId;
+        _isReorderDragging = false;
+        dockScroller.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void DockScroller_PreviewMouseMove(object sender, MouseEventArgs e)
     {
         if (_dragStartPoint == null) return;
+        var pos = e.GetPosition(dockScroller);
 
         if (_isReorderDragging)
         {
-            UpdateDropIndicator(e.GetPosition(this));
+            UpdateDropIndicator(pos);
+            e.Handled = true;
             return;
         }
 
-        var pos = e.GetPosition(this);
-        var diff = (pos - _dragStartPoint.Value).Length;
-
-        if (diff > DragThreshold)
+        if ((pos - _dragStartPoint.Value).Length > DragThreshold)
         {
             _isReorderDragging = true;
-            Mouse.SetCursor(Cursors.SizeAll);
             dropIndicator.Visibility = Visibility.Visible;
             UpdateDropIndicator(pos);
         }
     }
 
-    private void UpdateDropIndicator(Point mousePos)
+    private void DockScroller_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        // Convert mouse position relative to the ScrollViewer viewport
-        var scrollerPos = dockScroller.TranslatePoint(new Point(0, 0), this);
-        var items = _store.Notes.OrderBy(n => n.Order).ToList();
-        int count = items.Count;
-
-        // Y in scrollable content space
-        double scrollTop = mousePos.Y - scrollerPos.Y + dockScroller.VerticalOffset;
-
-        // Each item is ~38px. Compute nearest slot index.
-        int slot = (int)(scrollTop / 38);
-        slot = Math.Clamp(slot, 0, count);
-
-        // Position indicator (same parent as ScrollViewer, so relative to viewport)
-        dropIndicatorTransform.Y = slot * 38 - dockScroller.VerticalOffset;
-    }
-
-    private void NoteIcon_PreviewMouseUp(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is Border b) b.ReleaseMouseCapture();
+        dockScroller.ReleaseMouseCapture();
         dropIndicator.Visibility = Visibility.Collapsed;
 
-        if (_isReorderDragging && _store.Notes.Count > 0)
+        if (_isReorderDragging)
         {
             _isReorderDragging = false;
-            var pos = e.GetPosition(this);
-
-            // Calculate target index with scroll offset
-            var scrollerPos = dockScroller.TranslatePoint(new Point(0, 0), this);
-            double scrollTop = pos.Y - scrollerPos.Y + dockScroller.VerticalOffset;
-            int targetIndex = Math.Clamp((int)(scrollTop / 38), 0, _store.Notes.Count - 1);
-
+            var pos = e.GetPosition(dockScroller);
+            int slot = (int)(pos.Y / 38);
             var notes = _store.Notes.OrderBy(n => n.Order).ToList();
+            int count = notes.Count;
+            slot = Math.Clamp(slot, 0, count - 1);
+
             var srcIndex = notes.FindIndex(n => n.Id == _reorderNoteId);
-            if (srcIndex >= 0 && srcIndex != targetIndex)
+            if (srcIndex >= 0 && srcIndex != slot)
             {
-                // Avoid index shift when removing before target
-                int insertAt = targetIndex;
-                if (srcIndex < targetIndex) insertAt--;
+                int insertAt = slot;
+                if (srcIndex < slot) insertAt--; // account for removal shift
 
                 var note = notes[srcIndex];
                 notes.RemoveAt(srcIndex);
@@ -221,45 +208,41 @@ public partial class DockWindow : Window
             }
 
             _dragStartPoint = null;
-            Mouse.SetCursor(Cursors.Arrow);
             return;
         }
 
-        // Click (no drag detected)
-        if (_dragStartPoint == null ||
-            sender is not Border border || border.Tag is not Guid noteId)
+        // Was a click, not drag
+        if (FindNoteIcon(e.OriginalSource as DependencyObject) is Border border && border.Tag is Guid noteId)
         {
-            _dragStartPoint = null;
-            return;
-        }
-
-        _dragStartPoint = null;
-
-        if (e.ClickCount >= 2)
-        {
-            var note = _store.Notes.FirstOrDefault(n => n.Id == noteId);
-            if (note == null) return;
-
-            var existing = Application.Current.Windows.OfType<NoteWindow>()
-                .FirstOrDefault(w => w.DataContext is Note n && n.Id == noteId);
-
-            if (existing != null)
+            if (e.ClickCount >= 2)
             {
-                if (!existing.IsVisible)
+                var note = _store.Notes.FirstOrDefault(n => n.Id == noteId);
+                if (note == null) { _dragStartPoint = null; return; }
+
+                var existing = Application.Current.Windows.OfType<NoteWindow>()
+                    .FirstOrDefault(w => w.DataContext is Note n && n.Id == noteId);
+
+                if (existing != null)
                 {
-                    existing.Show();
-                    existing.Focus();
+                    if (!existing.IsVisible) { existing.Show(); existing.Focus(); }
+                    NoteWindow.ResetToDefaultPosition(existing, Left);
                 }
-                NoteWindow.ResetToDefaultPosition(existing, Left);
+                else OpenNote(noteId, forceDefault: true);
             }
             else
             {
-                OpenNote(noteId, forceDefault: true);
+                OpenNote(noteId);
             }
-            return;
         }
 
-        OpenNote(noteId);
+        _dragStartPoint = null;
+    }
+
+    private void UpdateDropIndicator(Point pos)
+    {
+        int slot = (int)(pos.Y / 38);
+        slot = Math.Clamp(slot, 0, _store.Notes.Count);
+        dropIndicatorTransform.Y = slot * 38;
     }
 
     private void OpenNote(Guid noteId, bool forceDefault = false)
