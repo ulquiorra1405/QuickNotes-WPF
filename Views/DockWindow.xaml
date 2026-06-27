@@ -54,7 +54,7 @@
             </Grid.RowDefinitions>
 
             <!-- Note icons list -->
-            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Hidden"
+            <ScrollViewer x:Name="dockScroller" Grid.Row="0" VerticalScrollBarVisibility="Hidden"
                           HorizontalScrollBarVisibility="Disabled">
                 <ItemsControl x:Name="notesList">
                     <ItemsControl.ItemTemplate>
@@ -211,6 +211,21 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
+            <!-- Drop indicator for reorder -->
+            <Rectangle x:Name="dropIndicator"
+                       Grid.Row="0"
+                       Width="44" Height="2"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Top"
+                       Fill="#80FFFFFF"
+                       RadiusX="1" RadiusY="1"
+                       IsHitTestVisible="False"
+                       Visibility="Collapsed"
+                       RenderTransformOrigin="0.5,0.5">
+                <Rectangle.RenderTransform>
+                    <TranslateTransform x:Name="dropIndicatorTransform" X="0" Y="0"/>
+                </Rectangle.RenderTransform>
+            </Rectangle>
 
             <!-- Exit button ⛶ -->
             <Button x:Name="exitDockBtn" Grid.Row="1"

@@ -153,7 +153,7 @@ public partial class DockWindow : Window
 
         if (_isReorderDragging)
         {
-            // Update visual feedback — not much we can do here without a drag adorner
+            UpdateDropIndicator(e.GetPosition(this));
             return;
         }
 
@@ -162,40 +162,66 @@ public partial class DockWindow : Window
 
         if (diff > DragThreshold)
         {
-            // Enter reorder mode
             _isReorderDragging = true;
             Mouse.SetCursor(Cursors.SizeAll);
-            if (sender is Border b) b.CaptureMouse(); // keep capture
+            dropIndicator.Visibility = Visibility.Visible;
+            UpdateDropIndicator(pos);
         }
+    }
+
+    private void UpdateDropIndicator(Point mousePos)
+    {
+        // Convert mouse position relative to the ScrollViewer viewport
+        var scrollerPos = dockScroller.TranslatePoint(new Point(0, 0), this);
+        var items = _store.Notes.OrderBy(n => n.Order).ToList();
+        int count = items.Count;
+
+        // Y in scrollable content space
+        double scrollTop = mousePos.Y - scrollerPos.Y + dockScroller.VerticalOffset;
+
+        // Each item is ~38px. Compute nearest slot index.
+        int slot = (int)(scrollTop / 38);
+        slot = Math.Clamp(slot, 0, count);
+
+        // Position indicator (same parent as ScrollViewer, so relative to viewport)
+        dropIndicatorTransform.Y = slot * 38 - dockScroller.VerticalOffset;
     }
 
     private void NoteIcon_PreviewMouseUp(object sender, MouseButtonEventArgs e)
     {
         if (sender is Border b) b.ReleaseMouseCapture();
+        dropIndicator.Visibility = Visibility.Collapsed;
 
-        if (_isReorderDragging)
+        if (_isReorderDragging && _store.Notes.Count > 0)
         {
             _isReorderDragging = false;
+            var pos = e.GetPosition(this);
+
+            // Calculate target index with scroll offset
+            var scrollerPos = dockScroller.TranslatePoint(new Point(0, 0), this);
+            double scrollTop = pos.Y - scrollerPos.Y + dockScroller.VerticalOffset;
+            int targetIndex = Math.Clamp((int)(scrollTop / 38), 0, _store.Notes.Count - 1);
+
+            var notes = _store.Notes.OrderBy(n => n.Order).ToList();
+            var srcIndex = notes.FindIndex(n => n.Id == _reorderNoteId);
+            if (srcIndex >= 0 && srcIndex != targetIndex)
+            {
+                // Avoid index shift when removing before target
+                int insertAt = targetIndex;
+                if (srcIndex < targetIndex) insertAt--;
+
+                var note = notes[srcIndex];
+                notes.RemoveAt(srcIndex);
+                notes.Insert(insertAt, note);
+
+                for (int i = 0; i < notes.Count; i++)
+                    notes[i].Order = i;
+                _store.Save();
+                RefreshNotes();
+            }
+
             _dragStartPoint = null;
             Mouse.SetCursor(Cursors.Arrow);
-
-            // Calculate target index from mouse Y position relative to the items control
-            var pos = e.GetPosition(notesList);
-            int targetIndex = (int)(pos.Y / 38);
-            var notes = _store.Notes.OrderBy(n => n.Order).ToList();
-            targetIndex = Math.Clamp(targetIndex, 0, notes.Count - 1);
-
-            var srcIndex = notes.FindIndex(n => n.Id == _reorderNoteId);
-            if (srcIndex < 0 || srcIndex == targetIndex) return;
-
-            // Reorder: remove from current position, insert at target, reassign Order
-            var note = notes[srcIndex];
-            notes.RemoveAt(srcIndex);
-            notes.Insert(targetIndex, note);
-            for (int i = 0; i < notes.Count; i++)
-                notes[i].Order = i;
-            _store.Save();
-            RefreshNotes();
             return;
         }
 
