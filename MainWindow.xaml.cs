@@ -78,6 +78,7 @@ public partial class MainWindow : Window
         AddHandler(NoteCard.PinToggleEvent, new RoutedEventHandler(NoteCard_PinToggle));
         AddHandler(NoteCard.ColorChangedEvent, new RoutedEventHandler(NoteCard_ColorChanged));
         AddHandler(NoteCard.TitleChangedEvent, new RoutedEventHandler(NoteCard_TitleChanged));
+        AddHandler(NoteCard.ContextMenuActionEvent, new RoutedEventHandler(NoteCard_ContextMenuAction));
 
         // Handle action button clicks via standard Button.Click (reliable across DataTemplates)
         AddHandler(Button.ClickEvent, new RoutedEventHandler(NoteCardAction_Click));
@@ -470,6 +471,57 @@ public partial class MainWindow : Window
             note.IsDirty = true;
         }
         DebounceSave();
+    }
+
+    private void NoteCard_ContextMenuAction(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is not MenuItem mi) return;
+
+        // Walk up to find the NoteCard
+        NoteCard? card = null;
+        for (var el = mi as DependencyObject; el != null; el = VisualTreeHelper.GetParent(el))
+        {
+            if (el is NoteCard c) { card = c; break; }
+        }
+        if (card?.DataContext is not Note note) return;
+
+        switch (mi.Tag?.ToString())
+        {
+            case "Duplicate":
+                CopyNote(note);
+                break;
+            case "Delete":
+                // Find the delete button within this card for undo animation
+                var delBtn = FindCardButton(card, "Delete");
+                DeleteNote(note, delBtn ?? new Button { Tag = "Delete" });
+                break;
+            case "Pin":
+                note.IsPinned = !note.IsPinned;
+                note.LastModified = DateTime.Now;
+                note.IsDirty = false;
+                MoveNoteToCorrectPosition(note);
+                store.Save();
+                statusText.Text = note.IsPinned ? "Nota anclada" : "Nota desanclada";
+                break;
+            case "Archive":
+                statusText.Text = "⏳ Archivar disponible en Fase 2";
+                break;
+            case "Export":
+                statusText.Text = "⏳ Exportar disponible en Fase 4";
+                break;
+        }
+    }
+
+    private static Button? FindCardButton(DependencyObject parent, string tag)
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is Button btn && btn.Tag?.ToString() == tag) return btn;
+            var found = FindCardButton(child, tag);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private void Topmost_Changed(object sender, RoutedEventArgs e)

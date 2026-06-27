@@ -49,6 +49,8 @@ public partial class NoteWindow : Window
         Color.FromArgb(0x55, 0xFF, 0x55, 0x55), // Red
     ];
 
+    private static readonly Color _noHighlightColor = Color.FromArgb(0x00, 0x00, 0x00, 0x00);
+
 
 
     public NoteWindow(Note note, NotesStore? store = null)
@@ -715,18 +717,59 @@ public partial class NoteWindow : Window
                 border.BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0x00, 0x00));
             highlightPanel.Children.Add(border);
         }
+
+        // "Sin color" button — removes highlight
+        var noColorBorder = new Border
+        {
+            Width = 14,
+            Height = 14,
+            CornerRadius = new CornerRadius(2),
+            Margin = new Thickness(2),
+            Cursor = Cursors.Hand,
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x60, 0xFF, 0x00, 0x00)),
+            BorderThickness = new Thickness(1.5),
+            Background = Brushes.Transparent,
+            ToolTip = "Quitar resaltado",
+        };
+        // Draw an X using a TextBlock
+        noColorBorder.Child = new System.Windows.Controls.TextBlock
+        {
+            Text = "✕",
+            FontSize = 10,
+            Foreground = new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0x44, 0x44)),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+            VerticalAlignment = System.Windows.VerticalAlignment.Center,
+        };
+        noColorBorder.MouseDown += (_, e) =>
+        {
+            if (e.LeftButton == MouseButtonState.Pressed)
+                SelectHighlightColor(_noHighlightColor, noColorBorder);
+        };
+        noColorBorder.MouseEnter += (_, _) =>
+            noColorBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0x00, 0x00));
+        noColorBorder.MouseLeave += (_, _) =>
+            noColorBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0x60, 0xFF, 0x00, 0x00));
+        highlightPanel.Children.Add(noColorBorder);
     }
 
     private void HighlightBtn_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton == MouseButtonState.Pressed)
+        {
             highlightPopup.IsOpen = !highlightPopup.IsOpen;
+            try { noteText.Focus(); } catch { }
+        }
     }
 
     private void SelectHighlightColor(Color color, Border selected)
     {
         _currentHighlightColor = color;
-        highlightBtn.Background = new SolidColorBrush(color);
+
+        if (color == _noHighlightColor)
+            highlightBtn.Background = Brushes.Transparent;
+        else
+            highlightBtn.Background = new SolidColorBrush(color);
+
         highlightPopup.IsOpen = false;
         ApplyHighlight(color);
     }
@@ -737,6 +780,15 @@ public partial class NoteWindow : Window
         if (sel.IsEmpty) return;
 
         var range = new TextRange(sel.Start, sel.End);
+
+        // "Sin color" — remove all highlighting
+        if (color == _noHighlightColor)
+        {
+            range.ApplyPropertyValue(TextElement.BackgroundProperty, Brushes.Transparent);
+            MarkDirtyAndDebounce();
+            return;
+        }
+
         var existing = range.GetPropertyValue(TextElement.BackgroundProperty);
 
         if (existing is SolidColorBrush scb && scb.Color == color)
@@ -1199,16 +1251,22 @@ public partial class NoteWindow : Window
         }
     }
 
-    private void BoldBtn_Click(object sender, RoutedEventArgs e) => ToggleBold();
-    private void ItalicBtn_Click(object sender, RoutedEventArgs e) => ToggleItalic();
-    private void UnderlineBtn_Click(object sender, RoutedEventArgs e) => ToggleUnderline();
-    private void StrikeBtn_Click(object sender, RoutedEventArgs e) => ToggleStrikethrough();
-    private void BulletBtn_Click(object sender, RoutedEventArgs e) => ToggleBulletList();
-    private void NumberBtn_Click(object sender, RoutedEventArgs e) => ToggleNumberList();
-    private void CheckboxBtn_Click(object sender, RoutedEventArgs e) => InsertCheckbox();
+    private void ToolbarClick(System.Action action)
+    {
+        action();
+        try { noteText.Focus(); } catch { }
+    }
 
-    private void UndoBtn_Click(object sender, RoutedEventArgs e) => Undo();
-    private void RedoBtn_Click(object sender, RoutedEventArgs e) => Redo();
+    private void BoldBtn_Click(object sender, RoutedEventArgs e) => ToolbarClick(ToggleBold);
+    private void ItalicBtn_Click(object sender, RoutedEventArgs e) => ToolbarClick(ToggleItalic);
+    private void UnderlineBtn_Click(object sender, RoutedEventArgs e) => ToolbarClick(ToggleUnderline);
+    private void StrikeBtn_Click(object sender, RoutedEventArgs e) => ToolbarClick(ToggleStrikethrough);
+    private void BulletBtn_Click(object sender, RoutedEventArgs e) => ToolbarClick(ToggleBulletList);
+    private void NumberBtn_Click(object sender, RoutedEventArgs e) => ToolbarClick(ToggleNumberList);
+    private void CheckboxBtn_Click(object sender, RoutedEventArgs e) => ToolbarClick(InsertCheckbox);
+
+    private void UndoBtn_Click(object sender, RoutedEventArgs e) => ToolbarClick(Undo);
+    private void RedoBtn_Click(object sender, RoutedEventArgs e) => ToolbarClick(Redo);
 
     private void Undo()
     {

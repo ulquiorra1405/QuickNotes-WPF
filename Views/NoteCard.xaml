@@ -13,7 +13,20 @@
     <Border x:Name="mainBorder"
             Background="{Binding Color}"
             BorderBrush="#30FFFFFF" BorderThickness="1"
-            AllowDrop="True">
+            AllowDrop="True"
+            ContextMenuOpening="MainBorder_ContextMenuOpening">
+        <Border.ContextMenu>
+            <ContextMenu Background="#2A2A2A" Foreground="#EEEEEE"
+                         BorderBrush="#555555" BorderThickness="1">
+                <MenuItem Header="Duplicar" Tag="Duplicate" Click="ContextMenuItem_Click"/>
+                <MenuItem Header="Eliminar" Tag="Delete" Click="ContextMenuItem_Click"/>
+                <Separator Background="#444444"/>
+                <MenuItem Header="Archivar" Tag="Archive" Click="ContextMenuItem_Click"/>
+                <MenuItem Header="Anclar" Tag="Pin" Click="ContextMenuItem_Click"/>
+                <Separator Background="#444444"/>
+                <MenuItem Header="Exportar" Tag="Export" Click="ContextMenuItem_Click"/>
+            </ContextMenu>
+        </Border.ContextMenu>
         <Border.Style>
             <Style TargetType="Border" BasedOn="{DynamicResource NoteCard}">
                 <Setter Property="Opacity" Value="1"/>

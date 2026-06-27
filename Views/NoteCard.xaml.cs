@@ -32,6 +32,11 @@ public partial class NoteCard : UserControl
     public event RoutedEventHandler TitleChanged
     { add => AddHandler(TitleChangedEvent, value); remove => RemoveHandler(TitleChangedEvent, value); }
 
+    public static readonly RoutedEvent ContextMenuActionEvent =
+        EventManager.RegisterRoutedEvent("ContextMenuAction", RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(NoteCard));
+    public event RoutedEventHandler ContextMenuAction
+    { add => AddHandler(ContextMenuActionEvent, value); remove => RemoveHandler(ContextMenuActionEvent, value); }
+
     // === Initialization ===
 
     private void Card_Loaded(object sender, RoutedEventArgs e)
@@ -115,6 +120,33 @@ public partial class NoteCard : UserControl
             // Close popup
             var popup = FindVisualChild<Popup>(this);            if (popup != null)
                 popup.IsOpen = false;
+        }
+    }
+
+    // === Context menu ===
+
+    private void MainBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        // Update "Anclar" text based on current pin state
+        if (DataContext is Note note && mainBorder.ContextMenu != null)
+        {
+            foreach (var item in mainBorder.ContextMenu.Items)
+            {
+                if (item is MenuItem mi && mi.Tag?.ToString() == "Pin")
+                {
+                    mi.Header = note.IsPinned ? "Desanclar" : "Anclar";
+                    break;
+                }
+            }
+        }
+    }
+
+    private void ContextMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem mi)
+        {
+            var args = new RoutedEventArgs(ContextMenuActionEvent, mi);
+            RaiseEvent(args);
         }
     }
 
