@@ -213,24 +213,6 @@ public partial class NoteWindow : Window
         _note.LastModified = DateTime.Now;
         var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is MainWindow) as MainWindow;
         mainWin?.DebounceSave();
-
-        // Debounce URL formatting: reset timer on each keystroke
-        if (_urlFormatTimer == null)
-        {
-            _urlFormatTimer = new System.Windows.Threading.DispatcherTimer(
-                System.Windows.Threading.DispatcherPriority.Background);
-            _urlFormatTimer.Interval = TimeSpan.FromMilliseconds(600);
-            _urlFormatTimer.Tick += (_, _) =>
-            {
-                _urlFormatTimer?.Stop();
-                HighlightUrls();
-            };
-        }
-        else
-        {
-            _urlFormatTimer.Stop();
-        }
-        _urlFormatTimer.Start();
     }
 
     private void HighlightUrls()
@@ -246,61 +228,22 @@ public partial class NoteWindow : Window
             {
                 if (block is not Paragraph para) continue;
 
-                // Iterate over all Inlines recursively
-                var inlines = new System.Collections.Generic.List<Inline>(para.Inlines);
-                foreach (var inline in inlines)
+                foreach (var inline in para.Inlines)
                 {
-                    if (inline is not Run run) continue;
-                    if (string.IsNullOrEmpty(run.Text)) continue;
+                    if (inline is not Run run || string.IsNullOrEmpty(run.Text)) continue;
 
                     var matches = _urlRegex.Matches(run.Text);
-                    if (matches.Count == 0) continue;
-
-                    // If the entire run is one URL, just style it
-                    if (matches.Count == 1 && matches[0].Index == 0 && matches[0].Length == run.Text.Length)
-                    {
-                        run.Foreground = linkBrush;
-                        run.TextDecorations = TextDecorations.Underline;
-                        continue;
-                    }
-
-                    // Multiple URLs or text+URL in same run: split the run
-                    int offset = 0;
-                    Inline? prevInline = run;
                     foreach (System.Text.RegularExpressions.Match m in matches)
                     {
-                        // Text before the URL
-                        if (m.Index > offset)
-                        {
-                            var beforeText = run.Text.Substring(offset, m.Index - offset);
-                            var beforeRun = new Run(beforeText);
-                            para.Inlines.InsertBefore(prevInline ?? run, beforeRun);
-                            prevInline = beforeRun;
-                        }
+                        // Use TextRange to apply formatting — no Inlines splitting!
+                        var start = run.ContentStart.GetPositionAtOffset(m.Index);
+                        var end = run.ContentStart.GetPositionAtOffset(m.Index + m.Length);
+                        if (start == null || end == null) continue;
 
-                        // The URL itself
-                        var urlText = m.Value;
-                        var urlRun = new Run(urlText)
-                        {
-                            Foreground = linkBrush,
-                            TextDecorations = TextDecorations.Underline
-                        };
-                        para.Inlines.InsertBefore(prevInline ?? run, urlRun);
-                        prevInline = urlRun;
-
-                        offset = m.Index + m.Length;
+                        var range = new TextRange(start, end);
+                        range.ApplyPropertyValue(TextElement.ForegroundProperty, linkBrush);
+                        range.ApplyPropertyValue(Inline.TextDecorationsProperty, TextDecorations.Underline);
                     }
-
-                    // Text after the last URL
-                    if (offset < run.Text.Length)
-                    {
-                        var afterText = run.Text.Substring(offset);
-                        var afterRun = new Run(afterText);
-                        para.Inlines.InsertBefore(prevInline ?? run, afterRun);
-                    }
-
-                    // Remove the original run
-                    para.Inlines.Remove(run);
                 }
             }
         }
@@ -345,6 +288,42 @@ public partial class NoteWindow : Window
         SaveRichText();
         _note.IsDirty = false;
         _store.Save();
+    }
+
+    private void FormatUrlsInCurrentParagraph()
+    {
+        if (_isUpdatingUrlFormats) return;
+        _isUpdatingUrlFormats = true;
+
+        var linkBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x60, 0xA0, 0xFF));
+        var para = noteText.CaretPosition.Paragraph;
+        if (para == null) { _isUpdatingUrlFormats = false; return; }
+
+        try
+        {
+            foreach (var inline in para.Inlines)
+            {
+                if (inline is not Run run || string.IsNullOrEmpty(run.Text)) continue;
+
+                var matches = _urlRegex.Matches(run.Text);
+                foreach (System.Text.RegularExpressions.Match m in matches)
+                {
+                    // Use TextRange to apply formatting to just the URL portion
+                    // without splitting the run (avoid modifying Inlines collection)
+                    var start = run.ContentStart.GetPositionAtOffset(m.Index);
+                    var end = run.ContentStart.GetPositionAtOffset(m.Index + m.Length);
+                    if (start == null || end == null) continue;
+
+                    var range = new TextRange(start, end);
+                    range.ApplyPropertyValue(TextElement.ForegroundProperty, linkBrush);
+                    range.ApplyPropertyValue(Inline.TextDecorationsProperty, TextDecorations.Underline);
+                }
+            }
+        }
+        finally
+        {
+            _isUpdatingUrlFormats = false;
+        }
     }
 
     private void NoteText_Loaded(object sender, RoutedEventArgs e)
@@ -416,8 +395,6 @@ public partial class NoteWindow : Window
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
-        _urlFormatTimer?.Stop();
-        _urlFormatTimer = null;
         SaveRichText();
         _note.IsDirty = false;
         // Reset position on individual close (not during app shutdown)
@@ -1049,6 +1026,14 @@ public partial class NoteWindow : Window
                     return;
                 }
             }
+
+            // Always format URLs in current paragraph on Space or Enter
+            // The Space/Enter has already been processed by the RichTextBox at this point.
+            // We dispatch this async so the document is stable before we modify it.
+            if (e.Key == Key.Space || e.Key == Key.Enter)
+            {
+                Dispatcher.BeginInvoke(new Action(FormatUrlsInCurrentParagraph));
+            }
         }
 
         if (e.Key == Key.Escape && noteSearchBorder.Visibility == Visibility.Visible)
@@ -1332,7 +1317,6 @@ public partial class NoteWindow : Window
     }
 
     private static readonly Regex _urlRegex = new(@"https?://[\w./?=&%#@!~$'()*+,;:–—\[\]_-]+", RegexOptions.Compiled);
-    private System.Windows.Threading.DispatcherTimer? _urlFormatTimer;
     private bool _isUpdatingUrlFormats;
 
     private void NoteText_PreviewMouseDown(object sender, MouseButtonEventArgs e)
