@@ -28,7 +28,7 @@
             </ContextMenu>
         </Border.ContextMenu>
         <Border.Style>
-            <Style TargetType="Border" BasedOn="{DynamicResource NoteCard}">
+            <Style TargetType="Border" BasedOn="{StaticResource NoteCard}">
                 <Setter Property="Opacity" Value="1"/>
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding IsSearchMatch}" Value="False">
