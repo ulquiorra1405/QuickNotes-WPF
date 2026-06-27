@@ -27,14 +27,53 @@
             AllowDrop="True"
             ContextMenuOpening="MainBorder_ContextMenuOpening">
         <Border.ContextMenu>
-            <ContextMenu Background="#2A2A2A" Foreground="#EEEEEE"
-                         BorderBrush="#555555" BorderThickness="1">
+            <ContextMenu Background="#2A2A2A" Foreground="#CCFFFFFF"
+                         BorderBrush="#40FFFFFF" BorderThickness="1"
+                         FontSize="13"
+                         HasDropShadow="False">
+                <ContextMenu.Resources>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Foreground" Value="#CCFFFFFF"/>
+                        <Setter Property="FontSize" Value="13"/>
+                        <Setter Property="Height" Value="30"/>
+                        <Setter Property="Padding" Value="10,0"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="MenuItem">
+                                    <Border x:Name="bg" Background="{TemplateBinding Background}"
+                                            CornerRadius="4"
+                                            Padding="{TemplateBinding Padding}"
+                                            Margin="4,1">
+                                        <ContentPresenter ContentSource="Header"
+                                                          HorizontalAlignment="Left"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsHighlighted" Value="True">
+                                            <Setter TargetName="bg" Property="Background" Value="#3FFFFFFF"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="bg" Property="Background" Value="#6FFFFFFF"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                    <Style TargetType="Separator">
+                        <Setter Property="Background" Value="#40FFFFFF"/>
+                        <Setter Property="Margin" Value="8,4"/>
+                        <Setter Property="Height" Value="1"/>
+                    </Style>
+                </ContextMenu.Resources>
                 <MenuItem Header="Duplicar" Tag="Duplicate" Click="ContextMenuItem_Click"/>
                 <MenuItem Header="Eliminar" Tag="Delete" Click="ContextMenuItem_Click"/>
-                <Separator Background="#444444"/>
+                <Separator/>
                 <MenuItem Header="Archivar" Tag="Archive" Click="ContextMenuItem_Click"/>
                 <MenuItem Header="Anclar" Tag="Pin" Click="ContextMenuItem_Click"/>
-                <Separator Background="#444444"/>
+                <Separator/>
                 <MenuItem Header="Exportar" Tag="Export" Click="ContextMenuItem_Click"/>
             </ContextMenu>
         </Border.ContextMenu>
