@@ -211,19 +211,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
-            <!-- Drag ghost overlay -->
-            <Canvas Grid.Row="0" IsHitTestVisible="False">
-                <Rectangle x:Name="dragGhost"
-                           Width="32" Height="32"
-                           RadiusX="8" RadiusY="8"
-                           IsHitTestVisible="False"
-                           Visibility="Collapsed">
-                    <Rectangle.Effect>
-                        <DropShadowEffect ShadowDepth="3" Color="#000000" Opacity="0.5"
-                                          BlurRadius="8" Direction="315"/>
-                    </Rectangle.Effect>
-                </Rectangle>
-            </Canvas>
+
 
             <!-- Exit button ⛶ -->
             <Button x:Name="exitDockBtn" Grid.Row="1"

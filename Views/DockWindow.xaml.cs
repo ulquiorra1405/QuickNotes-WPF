@@ -32,7 +32,9 @@ public partial class DockWindow : Window
     private Guid _reorderNoteId;
     private bool _isReorderDragging;
     private ContentPresenter? _dragSourceContainer;
-    private int _dragHoverSlot = -1;
+    private List<DockNoteItem>? _dragItems;
+    // Flag so we don't re-save on drop if the order never changed
+    private bool _orderChangedDuringDrag;
 
 
     private readonly NotesStore _store;
@@ -202,18 +204,22 @@ public partial class DockWindow : Window
         var border = FindBorderInContainer(container, _reorderNoteId);
         if (border == null) return;
 
-        dragGhost.Width = Math.Max(border.ActualWidth, 32);
-        dragGhost.Height = Math.Max(border.ActualHeight, 32);
-        dragGhost.Fill = border.Background;
-        dragGhost.Opacity = 0.85;
-        dragGhost.Visibility = Visibility.Visible;
+        // Dim the source item
+        border.Opacity = 0.25;
 
-        var ghostStart = container.TransformToAncestor(this).Transform(new Point(0, 0));
-        Canvas.SetLeft(dragGhost, this.ActualWidth / 2 - 16);
-        Canvas.SetTop(dragGhost, ghostStart.Y);
+        // Build a temp ordered list for live reorder
+        _dragItems = (notesList.ItemsSource as System.Collections.IList)
+            ?.Cast<DockNoteItem>().ToList() ?? new();
+        _orderChangedDuringDrag = false;
+    }
 
-        // Collapse the ContentPresenter so it takes ZERO layout space
-        container.Visibility = Visibility.Collapsed;
+    private int FindItemIndex(Guid noteId)
+    {
+        var items = notesList.ItemsSource as System.Collections.IList;
+        if (items == null) return 0;
+        for (int i = 0; i < items.Count; i++)
+            if (items[i] is DockNoteItem di && di.NoteId == noteId) return i;
+        return 0;
     }
 
     private static Border? FindBorderInContainer(DependencyObject parent, Guid noteId)
@@ -232,127 +238,105 @@ public partial class DockWindow : Window
 
     private void UpdateDragVisual(Point pos)
     {
-        var items = _store.Notes.OrderBy(n => n.Order).ToList();
-        int count = items.Count;
-        int slot = (int)(pos.Y / 38);
-        slot = Math.Clamp(slot, 0, count);
+        if (_dragItems == null) return;
 
-        if (_dragHoverSlot != slot)
-        {
-            _dragHoverSlot = slot;
-            ApplyItemShifts(slot);
-        }
+        // Find which visual slot the cursor is at by checking actual item positions
+        int slot = GetSlotFromVisualPosition(pos);
 
-        Canvas.SetTop(dragGhost, pos.Y - 16);
-    }
-
-    private void ApplyItemShifts(int slot)
-    {
-        var source = notesList.ItemsSource as System.Collections.IList;
-        if (source == null) return;
-
-        var ordered = _store.Notes.OrderBy(n => n.Order).ToList();
-        int srcIdx = ordered.FindIndex(n => n.Id == _reorderNoteId);
+        int srcIdx = _dragItems.FindIndex(d => d.NoteId == _reorderNoteId);
         if (srcIdx < 0) return;
-        if (slot == srcIdx) { ClearItemShifts(); return; }
 
-        if (slot > srcIdx)
+        // Adjust insert for removal when dragging down
+        int insertAt = slot;
+        if (srcIdx < slot) insertAt--;
+        insertAt = Math.Clamp(insertAt, 0, _dragItems.Count - 1);
+
+        // If already at the right spot, just move the ghost
+        if (insertAt == srcIdx) return;
+
+        // Reorder: create a NEW list so WPF sees a different reference
+        var newList = new List<DockNoteItem>(_dragItems);
+        var movedItem = newList[srcIdx];
+        newList.RemoveAt(srcIdx);
+        newList.Insert(insertAt, movedItem);
+        _dragItems = newList;
+
+        // Set fresh ItemsSource so WPF regenerates containers
+        notesList.ItemsSource = _dragItems;
+        UpdateLayout();
+
+        // Keep source item dimmed in its new container
+        var newContainer = FindNoteContainer(_reorderNoteId);
+        if (newContainer != null)
         {
-            // Dragging DOWN: source container collapsed → layout shrinks by 38px.
-            // Items srcIdx+1 to slot-1 shift UP to fill the gap.
-            for (int i = 0; i < source.Count; i++)
-            {
-                if (i > srcIdx && i < slot)
-                    SetItemShift(i, -38);
-                else
-                    SetItemShift(i, 0);
-            }
+            var srcBorder = FindBorderInContainer(newContainer, _reorderNoteId);
+            if (srcBorder != null) srcBorder.Opacity = 0.25;
         }
-        else
-        {
-            // Dragging UP: source container collapsed → layout shrinks by 38px.
-            // Items slot to srcIdx-1 shift DOWN to open a gap at the target.
-            for (int i = 0; i < source.Count; i++)
-            {
-                if (i >= slot && i < srcIdx)
-                    SetItemShift(i, 38);
-                else
-                    SetItemShift(i, 0);
-            }
-        }
+
+        _orderChangedDuringDrag = true;
     }
 
-    private void ClearItemShifts()
+    private int GetSlotFromVisualPosition(Point pos)
     {
         var source = notesList.ItemsSource as System.Collections.IList;
-        if (source == null) return;
-        for (int i = 0; i < source.Count; i++)
-            SetItemShift(i, 0);
-    }
+        if (source == null) return 0;
+        int count = source.Count;
+        if (count == 0) return 0;
 
-    private void SetItemShift(int index, double shiftY)
-    {
-        var item = notesList.ItemsSource is System.Collections.IList list && index < list.Count
-            ? list[index] : null;
-        if (item == null) return;
-        var cp = notesList.ItemContainerGenerator.ContainerFromItem(item) as ContentPresenter;
-        if (cp == null) return;
-
-        var tr = cp.RenderTransform as TranslateTransform;
-        if (tr == null)
+        // Walk containers and find where the cursor Y falls
+        for (int i = 0; i < count; i++)
         {
-            tr = new TranslateTransform();
-            cp.RenderTransform = tr;
+            var cp = notesList.ItemContainerGenerator.ContainerFromIndex(i) as ContentPresenter;
+            if (cp == null) continue;
+
+            var itemPos = cp.TransformToAncestor(dockScroller).Transform(new Point(0, 0));
+            double itemCenter = itemPos.Y + cp.ActualHeight / 2;
+
+            if (pos.Y < itemCenter)
+                return i;
         }
-        tr.Y = shiftY;
+
+        return count; // past the last item
     }
+
+
 
     private void DockScroller_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         dockScroller.ReleaseMouseCapture();
 
-        // Hide ghost + clear shifts + restore container visibility
-        dragGhost.Visibility = Visibility.Collapsed;
-        ClearItemShifts();
-        if (_dragSourceContainer != null)
-        {
-            _dragSourceContainer.Visibility = Visibility.Visible;
-            _dragSourceContainer = null;
-        }
-        _dragHoverSlot = -1;
+        // Restore source opacity
+        RestoreSourceOpacity();
 
         if (_isReorderDragging)
         {
             _isReorderDragging = false;
 
-            var pos = e.GetPosition(dockScroller);
-            int slot = (int)(pos.Y / 38);
-            var notes = _store.Notes.OrderBy(n => n.Order).ToList();
-            int count = notes.Count;
-            slot = Math.Clamp(slot, 0, count - 1);
-
-            var srcIndex = notes.FindIndex(n => n.Id == _reorderNoteId);
-            if (srcIndex >= 0 && srcIndex != slot)
+            // Persist the new order from _dragItems to the store (only if changed)
+            if (_orderChangedDuringDrag && _dragItems != null)
             {
-                int insertAt = slot;
-                if (srcIndex < slot) insertAt--;
+                // Re-order the store's ObservableCollection to match _dragItems
+                var storeNotes = _store.Notes;
+                var ordered = _dragItems
+                    .Select(di => storeNotes.FirstOrDefault(n => n.Id == di.NoteId))
+                    .Where(n => n != null)
+                    .ToList();
 
-                var note = notes[srcIndex];
-                notes.RemoveAt(srcIndex);
-                notes.Insert(insertAt, note);
-
-                var obs = _store.Notes;
-                obs.Clear();
-                foreach (var n in notes)
+                storeNotes.Clear();
+                int order = 0;
+                foreach (var note in ordered)
                 {
-                    obs.Add(n);
-                    n.Order = obs.Count - 1;
+                    if (note == null) continue;
+                    storeNotes.Add(note);
+                    note.Order = order++;
                 }
 
                 _store.Save();
-                RefreshNotes();
             }
 
+            RefreshNotes();
+            _dragItems = null;
+            _dragSourceContainer = null;
             _dragStartPoint = null;
             return;
         }
@@ -383,6 +367,21 @@ public partial class DockWindow : Window
 
         _dragStartPoint = null;
     }
+
+    private void RestoreSourceOpacity()
+    {
+        // After live reorder the original container may be gone,
+        // so find the source by NoteId in the current ItemsSource
+        var container = FindNoteContainer(_reorderNoteId);
+        if (container != null)
+        {
+            var b = FindBorderInContainer(container, _reorderNoteId);
+            if (b != null) b.Opacity = 1.0;
+        }
+        _dragSourceContainer = null;
+    }
+
+
 
 
     private void OpenNote(Guid noteId, bool forceDefault = false)
