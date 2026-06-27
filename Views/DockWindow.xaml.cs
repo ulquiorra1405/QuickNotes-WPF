@@ -32,6 +32,7 @@ public partial class DockWindow : Window
     private Guid _reorderNoteId;
     private bool _isReorderDragging;
     private Border? _dragSourceBorder;
+    private int _dragHoverSlot = -1;
 
 
     private readonly NotesStore _store;
@@ -232,22 +233,79 @@ public partial class DockWindow : Window
 
     private void UpdateDragVisual(Point pos)
     {
-        int slot = (int)(pos.Y / 38);
         var items = _store.Notes.OrderBy(n => n.Order).ToList();
-        slot = Math.Clamp(slot, 0, items.Count);
+        int count = items.Count;
+        int slot = (int)(pos.Y / 38);
+        slot = Math.Clamp(slot, 0, count);
+
+        // Reset previous slot shift
+        if (_dragHoverSlot != slot)
+        {
+            ClearItemShifts();
+            _dragHoverSlot = slot;
+
+            // Shift items below the hover slot down by 38px
+            var source = notesList.ItemsSource as System.Collections.IList;
+            if (source != null)
+            {
+                for (int i = 0; i < source.Count; i++)
+                {
+                    if (i < slot)
+                    {
+                        // Items above the slot: no shift
+                        SetItemShift(i, 0);
+                    }
+                    else
+                    {
+                        // Items at and below the slot: shift down by 38px
+                        // Skip the dragged item itself
+                        var di = source[i] as DockNoteItem;
+                        if (di?.NoteId == _reorderNoteId)
+                            SetItemShift(i, 0);
+                        else
+                            SetItemShift(i, 38);
+                    }
+                }
+            }
+        }
 
         // Position ghost centered around the cursor
-        double ghostY = pos.Y + dockScroller.VerticalOffset - 16;
-        // The ghost is in the Canvas overlay (same container as ScrollViewer), so pos is already relative
         Canvas.SetTop(dragGhost, pos.Y - 16);
+    }
+
+    private void ClearItemShifts()
+    {
+        var source = notesList.ItemsSource as System.Collections.IList;
+        if (source == null) return;
+        for (int i = 0; i < source.Count; i++)
+            SetItemShift(i, 0);
+    }
+
+    private void SetItemShift(int index, double shiftY)
+    {
+        var item = notesList.ItemsSource is System.Collections.IList list && index < list.Count
+            ? list[index] : null;
+        if (item == null) return;
+        var container = notesList.ItemContainerGenerator.ContainerFromItem(item) as ContentPresenter;
+        if (container == null) return;
+
+        var transform = container.RenderTransform as TranslateTransform;
+        if (transform == null)
+        {
+            transform = new TranslateTransform();
+            container.RenderTransform = transform;
+        }
+        transform.Y = shiftY;
     }
 
     private void DockScroller_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         dockScroller.ReleaseMouseCapture();
 
-        // Hide ghost
+        // Hide ghost and clear item shifts
         dragGhost.Visibility = Visibility.Collapsed;
+        ClearItemShifts();
+        _dragHoverSlot = -1;
 
         // Restore original item opacity
         if (_dragSourceBorder != null)
