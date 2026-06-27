@@ -31,6 +31,24 @@
                          BorderBrush="#40FFFFFF" BorderThickness="1"
                          FontSize="13"
                          HasDropShadow="False">
+
+                <!-- ContextMenu template: rounded corners, no shadow chrome -->
+                <ContextMenu.Template>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="4">
+                            <ScrollViewer Style="{x:Null}" Padding="0" Margin="0"
+                                          HorizontalScrollBarVisibility="Hidden"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsPresenter Margin="0"/>
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </ContextMenu.Template>
+
                 <ContextMenu.Resources>
                     <Style TargetType="MenuItem">
                         <Setter Property="Background" Value="Transparent"/>
@@ -42,11 +60,13 @@
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="MenuItem">
-                                    <Border x:Name="bg" Background="{TemplateBinding Background}"
+                                    <Border x:Name="bg"
+                                            Background="{TemplateBinding Background}"
                                             CornerRadius="4"
                                             Padding="{TemplateBinding Padding}"
-                                            Margin="4,1">
+                                            SnapsToDevicePixels="True">
                                         <ContentPresenter ContentSource="Header"
+                                                          RecognizesAccessKey="False"
                                                           HorizontalAlignment="Left"
                                                           VerticalAlignment="Center"/>
                                     </Border>
@@ -63,9 +83,15 @@
                         </Setter>
                     </Style>
                     <Style TargetType="Separator">
-                        <Setter Property="Background" Value="#40FFFFFF"/>
-                        <Setter Property="Margin" Value="8,4"/>
-                        <Setter Property="Height" Value="1"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Separator">
+                                    <Border Height="1"
+                                            Background="#40FFFFFF"
+                                            Margin="10,4"/>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
                     </Style>
                 </ContextMenu.Resources>
                 <MenuItem Header="Duplicar" Tag="Duplicate" Click="ContextMenuItem_Click"/>
