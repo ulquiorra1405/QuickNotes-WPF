@@ -193,28 +193,24 @@ public partial class DockWindow : Window
 
     private void ShowDragGhost()
     {
-        // Find the source Border to copy its appearance
         var container = FindNoteContainer(_reorderNoteId);
         if (container == null) return;
 
-        // Walk visual tree to find the actual Border with matching Tag
         _dragSourceBorder = FindBorderInContainer(container, _reorderNoteId);
         if (_dragSourceBorder == null) return;
 
-        // Copy visual state to ghost
         dragGhost.Width = Math.Max(_dragSourceBorder.ActualWidth, 32);
         dragGhost.Height = Math.Max(_dragSourceBorder.ActualHeight, 32);
         dragGhost.Fill = _dragSourceBorder.Background;
         dragGhost.Opacity = 0.85;
         dragGhost.Visibility = Visibility.Visible;
 
-        // Position ghost over the source item
         var ghostStart = container.TransformToAncestor(this).Transform(new Point(0, 0));
         Canvas.SetLeft(dragGhost, this.ActualWidth / 2 - 16);
         Canvas.SetTop(dragGhost, ghostStart.Y);
 
-        // Dim the original item
-        _dragSourceBorder.Opacity = 0.25;
+        // Hide the source item (no dimming) — the ghost replaces it visually
+        _dragSourceBorder.Visibility = Visibility.Collapsed;
     }
 
     private static Border? FindBorderInContainer(DependencyObject parent, Guid noteId)
@@ -308,10 +304,10 @@ public partial class DockWindow : Window
         ClearItemShifts();
         _dragHoverSlot = -1;
 
-        // Restore original item opacity
+        // Restore original item visibility
         if (_dragSourceBorder != null)
         {
-            _dragSourceBorder.ClearValue(UIElement.OpacityProperty);
+            _dragSourceBorder.Visibility = Visibility.Visible;
             _dragSourceBorder = null;
         }
 
