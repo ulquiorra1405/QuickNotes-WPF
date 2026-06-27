@@ -87,7 +87,7 @@ public partial class NoteWindow : Window
             BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(0, 1, 200));
             LoadRichText();
             UpdateButtonForegrounds();
-            HighlightUrls();
+            FormatUrlsInDocument();
         };
 
         Activated += (_, _) => ToggleBars(show: true);
@@ -215,44 +215,6 @@ public partial class NoteWindow : Window
         mainWin?.DebounceSave();
     }
 
-    private void HighlightUrls()
-    {
-        if (_isUpdatingUrlFormats) return;
-        _isUpdatingUrlFormats = true;
-
-        var linkBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x60, 0xA0, 0xFF)); // soft blue
-
-        try
-        {
-            foreach (var block in noteText.Document.Blocks)
-            {
-                if (block is not Paragraph para) continue;
-
-                foreach (var inline in para.Inlines)
-                {
-                    if (inline is not Run run || string.IsNullOrEmpty(run.Text)) continue;
-
-                    var matches = _urlRegex.Matches(run.Text);
-                    foreach (System.Text.RegularExpressions.Match m in matches)
-                    {
-                        // Use TextRange to apply formatting — no Inlines splitting!
-                        var start = run.ContentStart.GetPositionAtOffset(m.Index);
-                        var end = run.ContentStart.GetPositionAtOffset(m.Index + m.Length);
-                        if (start == null || end == null) continue;
-
-                        var range = new TextRange(start, end);
-                        range.ApplyPropertyValue(TextElement.ForegroundProperty, linkBrush);
-                        range.ApplyPropertyValue(Inline.TextDecorationsProperty, TextDecorations.Underline);
-                    }
-                }
-            }
-        }
-        finally
-        {
-            _isUpdatingUrlFormats = false;
-        }
-    }
-
     private void Title_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (sender is TextBox { IsLoaded: false }) return;
@@ -290,33 +252,54 @@ public partial class NoteWindow : Window
         _store.Save();
     }
 
-    private void FormatUrlsInCurrentParagraph()
+    private void FormatUrlsInDocument()
     {
         if (_isUpdatingUrlFormats) return;
         _isUpdatingUrlFormats = true;
 
         var linkBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x60, 0xA0, 0xFF));
-        var para = noteText.CaretPosition.Paragraph;
-        if (para == null) { _isUpdatingUrlFormats = false; return; }
 
         try
         {
-            foreach (var inline in para.Inlines)
+            var blocks = new List<Block>(noteText.Document.Blocks);
+            foreach (var block in blocks)
             {
-                if (inline is not Run run || string.IsNullOrEmpty(run.Text)) continue;
+                if (block is not Paragraph para) continue;
 
-                var matches = _urlRegex.Matches(run.Text);
-                foreach (System.Text.RegularExpressions.Match m in matches)
+                var inlines = new List<Inline>(para.Inlines);
+                foreach (var inline in inlines)
                 {
-                    // Use TextRange to apply formatting to just the URL portion
-                    // without splitting the run (avoid modifying Inlines collection)
-                    var start = run.ContentStart.GetPositionAtOffset(m.Index);
-                    var end = run.ContentStart.GetPositionAtOffset(m.Index + m.Length);
-                    if (start == null || end == null) continue;
+                    if (inline is not Run run || string.IsNullOrEmpty(run.Text)) continue;
 
-                    var range = new TextRange(start, end);
-                    range.ApplyPropertyValue(TextElement.ForegroundProperty, linkBrush);
-                    range.ApplyPropertyValue(Inline.TextDecorationsProperty, TextDecorations.Underline);
+                    var matches = _urlRegex.Matches(run.Text);
+                    if (matches.Count == 0) continue;
+
+                    int offset = 0;
+                    foreach (System.Text.RegularExpressions.Match m in matches)
+                    {
+                        if (m.Index > offset)
+                        {
+                            var beforeRun = new Run(run.Text.Substring(offset, m.Index - offset));
+                            para.Inlines.InsertBefore(run, beforeRun);
+                        }
+
+                        var urlRun = new Run(m.Value)
+                        {
+                            Foreground = linkBrush,
+                            TextDecorations = TextDecorations.Underline
+                        };
+                        para.Inlines.InsertBefore(run, urlRun);
+
+                        offset = m.Index + m.Length;
+                    }
+
+                    if (offset < run.Text.Length)
+                    {
+                        var afterRun = new Run(run.Text.Substring(offset));
+                        para.Inlines.InsertBefore(run, afterRun);
+                    }
+
+                    para.Inlines.Remove(run);
                 }
             }
         }
@@ -1032,7 +1015,7 @@ public partial class NoteWindow : Window
             // We dispatch this async so the document is stable before we modify it.
             if (e.Key == Key.Space || e.Key == Key.Enter)
             {
-                Dispatcher.BeginInvoke(new Action(FormatUrlsInCurrentParagraph));
+                Dispatcher.BeginInvoke(new Action(FormatUrlsInDocument));
             }
         }
 
