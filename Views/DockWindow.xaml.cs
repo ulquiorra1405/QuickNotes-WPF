@@ -73,6 +73,7 @@ public partial class DockWindow : Window
     public void RefreshNotes()
     {
         var items = _store.Notes
+            .Where(n => !n.IsArchived && !n.IsDeleted)
             .OrderBy(n => n.Order)
             .Select(n => new DockNoteItem(n, _store)).ToList();
         notesList.ItemsSource = items;
