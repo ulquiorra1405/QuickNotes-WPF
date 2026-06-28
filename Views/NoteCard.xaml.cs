@@ -277,8 +277,8 @@ public partial class NoteCard : UserControl
                         break;
 
                     case "Restore":
-                        mi.Visibility = (isArchived || isDeleted)
-                            ? Visibility.Visible : Visibility.Collapsed;
+                        // Only show in papelera — Desarchivar handles archivadas
+                        mi.Visibility = isDeleted ? Visibility.Visible : Visibility.Collapsed;
                         break;
 
                     case "Pin":
@@ -295,6 +295,12 @@ public partial class NoteCard : UserControl
                 }
             }
         }
+
+        // Hide separators if surrounded by hidden items
+        bool midVisible = notebookSubmenu.Visibility == Visibility.Visible
+            || tagsSubmenu.Visibility == Visibility.Visible;
+        sep1.Visibility = midVisible ? Visibility.Visible : Visibility.Collapsed;
+        sep2.Visibility = midVisible ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ContextMenuItem_Click(object sender, RoutedEventArgs e)
