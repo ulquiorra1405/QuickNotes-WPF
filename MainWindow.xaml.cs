@@ -22,14 +22,15 @@ public partial class MainWindow : Window
     private readonly NotesStore store = new();
     private readonly ListCollectionView _view;
     private readonly DispatcherTimer _saveTimer = new();
-    private readonly DispatcherTimer _undoTimer = new();
-    private Note? _deletedNote;
-    private Note? _deletedBackup;
     private Note? _dragNote;
     private FrameworkElement? _dragCard;
     private Point _dragStart;
     private bool _isDragging;
     private DockWindow? _dockWindow;
+    private string _activeSection = "all";
+    private string _searchFilter = "";
+    private bool _sidebarExpanded;
+    private Brush _sidebarActiveBg = new SolidColorBrush(Color.FromArgb(0xFF, 0x3A, 0x3A, 0x3A));
 
     public MainWindow()
     {
@@ -71,8 +72,6 @@ public partial class MainWindow : Window
             catch (Exception ex) { ErrorLog.Write(ex, "AutoSave"); ShowStatus("Error al guardar", true); }
             UpdateStats();
         };
-        _undoTimer.Interval = TimeSpan.FromMilliseconds(5000);
-        _undoTimer.Tick += (_, _) => FinalizeDelete();
 
         // Wire NoteCard routed events
         AddHandler(NoteCard.PinToggleEvent, new RoutedEventHandler(NoteCard_PinToggle));
@@ -92,6 +91,21 @@ public partial class MainWindow : Window
                 store.Save();
                 store.SaveSettings();
             }
+        };
+
+        // Restore active section after Load
+        Loaded += (_, _) =>
+        {
+            _activeSection = store.SidebarSection switch
+            {
+                "all" or "archived" or "trash" or "timeline" => store.SidebarSection,
+                string s when s.StartsWith("notebook:") => s,
+                string s when s.StartsWith("tag:") => s,
+                _ => "all"
+            };
+            UpdateTagNotebookLookups();
+            SetActiveSection(_activeSection);
+            UpdateCounters();
         };
     }
 
@@ -167,7 +181,7 @@ public partial class MainWindow : Window
 
     private void UndoLastDelete()
     {
-        if (_deletedNote != null) Undo_Click(null!, null!);
+        // No-op in new trash system; use Restore from context menu or sidebar
     }
 
     private void NoteCardAction_Click(object sender, RoutedEventArgs e)
@@ -226,90 +240,134 @@ public partial class MainWindow : Window
 
     private void DeleteNote(Note note, Button btn)
     {
-        _undoTimer.Stop();
-        if (_deletedNote != null) FinalizeDelete();
-
-        if (notesList.ItemContainerGenerator.ContainerFromItem(note) is ContentPresenter cp)
-        {
-            var noteCard = FindChild<NoteCard>(cp);
-                if (noteCard != null)
-                {
-                    noteCard.MaxHeight = noteCard.ActualHeight;
-                    var fade = AnimationHelper.MakeAnimation(0, 180);
-                    var shrink = AnimationHelper.MakeAnimation(0, 180);
-                    fade.Completed += (_, _) =>
-                    {
-                        noteCard.Visibility = Visibility.Collapsed;
-                        ShowUndo(note);
-                    };
-                    noteCard.BeginAnimation(OpacityProperty, fade);
-                    noteCard.BeginAnimation(MaxHeightProperty, shrink);
-                    return;
-                }
-            }
+        MoveToTrash(note);
     }
 
-    private void ShowUndo(Note note)
+    private void MoveToTrash(Note note)
     {
-        _deletedNote = note;
-        _deletedBackup = new Note
-        {
-            Id = note.Id,
-            Title = note.Title,
-            Text = note.Text,
-            Color = note.Color,
-            LastModified = note.LastModified,
-            Order = note.Order,
-            IsPinned = note.IsPinned,
-            WinLeft = note.WinLeft,
-            WinTop = note.WinTop,
-            WinWidth = note.WinWidth,
-            WinHeight = note.WinHeight,
-        };
-        // Close any NoteWindows for this note (in Mini or Normal mode)
+        // Close any NoteWindows for this note
         for (int i = Application.Current.Windows.Count - 1; i >= 0; i--)
         {
             if (Application.Current.Windows[i] is NoteWindow nw && nw.DataContext == note)
                 nw.Close();
         }
-        store.Notes.Remove(note);
+
+        // Fade animation, then mark as deleted in-place
+        if (notesList.ItemContainerGenerator.ContainerFromItem(note) is ContentPresenter cp)
+        {
+            var noteCard = FindChild<NoteCard>(cp);
+            if (noteCard != null)
+            {
+                noteCard.MaxHeight = noteCard.ActualHeight;
+                var fade = AnimationHelper.MakeAnimation(0, 180);
+                fade.Completed += (_, _) =>
+                {
+                    note.IsDeleted = true;
+                    note.DeletedAt = DateTime.Now;
+                    note.IsDirty = true;
+                    MaybeAddDefaultNote();
+                    store.Save();
+                    ApplyFilters();
+                    UpdateCounters();
+                    ShowStatus("Nota movida a papelera", false);
+                };
+                noteCard.BeginAnimation(OpacityProperty, fade);
+                noteCard.BeginAnimation(MaxHeightProperty, AnimationHelper.MakeAnimation(0, 180));
+                return;
+            }
+        }
+
+        // Fallback: no animation
+        note.IsDeleted = true;
+        note.DeletedAt = DateTime.Now;
+        note.IsDirty = true;
+        MaybeAddDefaultNote();
         store.Save();
-        statusText.Text = "Nota eliminada";
-        undoLink.Visibility = Visibility.Visible;
-        _undoTimer.Start();
+        ApplyFilters();
+        UpdateCounters();
     }
 
-    private void Undo_Click(object sender, MouseButtonEventArgs e)
+    private void RestoreFromTrash(Note note)
     {
-        _undoTimer.Stop();
-        if (_deletedNote == null || _deletedBackup == null) return;
-        store.Notes.Add(_deletedNote);
+        note.IsDeleted = false;
+        note.DeletedAt = null;
+        note.IsDirty = true;
         store.Save();
-        if (notesList.ItemContainerGenerator.ContainerFromItem(_deletedNote) is ContentPresenter cp)
+        ApplyFilters();
+        UpdateCounters();
+
+        // Check if we need to remove the extra default note
+        var active = store.Notes.Where(n => !n.IsArchived && !n.IsDeleted).ToList();
+        if (active.Count > 1 && active.Any(n => string.IsNullOrEmpty(n.Title) && string.IsNullOrEmpty(n.Text)))
         {
-            var card = FindChild<NoteCard>(cp);
+            var empty = active.FirstOrDefault(n => string.IsNullOrEmpty(n.Title) && string.IsNullOrEmpty(n.Text) && n.Id != note.Id);
+            if (empty != null) store.Notes.Remove(empty);
+            ApplyFilters();
+        }
+
+        // Animate the restored card if visible
+        if (notesList.ItemContainerGenerator.ContainerFromItem(note) is ContentPresenter cp2)
+        {
+            var card = FindChild<NoteCard>(cp2);
             if (card != null)
             {
-                card.Visibility = Visibility.Visible;
+                card.Opacity = 0;
                 var fadeIn = AnimationHelper.MakeAnimation(0, 1, 220);
                 fadeIn.EasingFunction = new QuadraticEase();
                 card.BeginAnimation(OpacityProperty, fadeIn);
             }
         }
-        _deletedNote = null;
-        _deletedBackup = null;
-        undoLink.Visibility = Visibility.Collapsed;
-        statusText.Text = "Restaurada";
-        UpdateStats();
+
+        ShowStatus("Nota restaurada", false);
     }
 
-    private void FinalizeDelete()
+    private void PermanentDeleteNote(Note note)
     {
-        _deletedNote = null;
-        _deletedBackup = null;
-        undoLink.Visibility = Visibility.Collapsed;
-        statusText.Text = "Nota eliminada";
-        UpdateStats();
+        store.Notes.Remove(note);
+        store.Save();
+        UpdateCounters();
+        ApplyFilters();
+        MaybeAddDefaultNote();
+        ShowStatus("Nota eliminada permanentemente", false);
+    }
+
+    private void ArchiveNote(Note note)
+    {
+        note.IsArchived = true;
+        note.IsDirty = true;
+        MaybeAddDefaultNote();
+        store.Save();
+        ApplyFilters();
+        UpdateCounters();
+        ShowStatus("Nota archivada", false);
+    }
+
+    private void RestoreFromArchive(Note note)
+    {
+        note.IsArchived = false;
+        note.IsDirty = true;
+        store.Save();
+        ApplyFilters();
+        UpdateCounters();
+
+        var active = store.Notes.Where(n => !n.IsArchived && !n.IsDeleted).ToList();
+        if (active.Count > 1 && active.Any(n => string.IsNullOrEmpty(n.Title) && string.IsNullOrEmpty(n.Text)))
+        {
+            var empty = active.FirstOrDefault(n => string.IsNullOrEmpty(n.Title) && string.IsNullOrEmpty(n.Text) && n.Id != note.Id);
+            if (empty != null) store.Notes.Remove(empty);
+            ApplyFilters();
+        }
+
+        ShowStatus("Nota restaurada", false);
+    }
+
+    private void MaybeAddDefaultNote()
+    {
+        var active = store.Notes.Where(n => !n.IsArchived && !n.IsDeleted).ToList();
+        if (active.Count == 0)
+        {
+            store.Notes.Add(new Note());
+        }
     }
 
     private void UpdateStats()
@@ -478,11 +536,11 @@ public partial class MainWindow : Window
     {
         if (e.OriginalSource is not MenuItem mi) return;
 
-        // ContextMenu lives in a Popup (separate visual tree).
-        // Get the card via ContextMenu.PlacementTarget instead.
         NoteCard? card = null;
         if (mi.Parent is ContextMenu cm)
             card = FindParent<NoteCard>(cm.PlacementTarget);
+        else
+            card = NoteCard.CurrentContextCard;
 
         if (card?.DataContext is not Note note) return;
 
@@ -492,9 +550,11 @@ public partial class MainWindow : Window
                 CopyNote(note);
                 break;
             case "Delete":
-                // Find the delete button within this card for undo animation
                 var delBtn = FindCardButton(card, "Delete");
                 DeleteNote(note, delBtn ?? new Button { Tag = "Delete" });
+                break;
+            case "PermanentDelete":
+                PermanentDeleteNote(note);
                 break;
             case "Pin":
                 note.IsPinned = !note.IsPinned;
@@ -505,12 +565,62 @@ public partial class MainWindow : Window
                 statusText.Text = note.IsPinned ? "Nota anclada" : "Nota desanclada";
                 break;
             case "Archive":
-                statusText.Text = "⏳ Archivar disponible en Fase 2";
+                if (note.IsArchived)
+                    RestoreFromArchive(note);
+                else
+                    ArchiveNote(note);
+                break;
+            case "Restore":
+                if (note.IsDeleted)
+                    RestoreFromTrash(note);
+                else if (note.IsArchived)
+                    RestoreFromArchive(note);
                 break;
             case "Export":
                 statusText.Text = "⏳ Exportar disponible en Fase 4";
                 break;
+
+            case string s when s.StartsWith("notebook:"):
+                {
+                    var idStr = s.AsSpan(9);
+                    if (idStr.Length == 0)
+                        note.NotebookId = null;
+                    else if (Guid.TryParse(idStr, out var nbId))
+                        note.NotebookId = nbId;
+                    note.IsDirty = true;
+                    store.Save();
+                    ApplyFilters();
+                    ShowStatus("Nota movida", false);
+                    break;
+                }
+
+            case string s when s.StartsWith("tagtoggle:"):
+                {
+                    if (Guid.TryParse(s.AsSpan(10), out var tId))
+                    {
+                        if (note.TagIds.Contains(tId))
+                            note.TagIds.Remove(tId);
+                        else
+                            note.TagIds.Add(tId);
+                        note.IsDirty = true;
+                        store.Save();
+                        ApplyFilters();
+                        ShowStatus("Tags actualizados", false);
+                    }
+                    break;
+                }
         }
+    }
+
+    internal void HandleNoteAction(Note note, string actionTag)
+    {
+        note.IsDirty = true;
+        store.Save();
+        ApplyFilters();
+        if (actionTag.StartsWith("notebook:"))
+            ShowStatus("Nota movida", false);
+        else if (actionTag.StartsWith("tagtoggle:"))
+            ShowStatus("Tags actualizados", false);
     }
 
     private static Button? FindCardButton(DependencyObject parent, string tag)
@@ -630,10 +740,21 @@ public partial class MainWindow : Window
         searchBox.CaretBrush = new SolidColorBrush(textColor);
         searchBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, textColor.R, textColor.G, textColor.B));
 
+        // Sidebar
+        var sidebarBg = effective == "light"
+            ? Color.FromArgb(0xFF, 0xEA, 0xEA, 0xEA)
+            : Color.FromArgb(0xFF, 0x23, 0x23, 0x23);
+        sidebarBorder.Background = new SolidColorBrush(sidebarBg);
+
+        var sidebarMuted = new SolidColorBrush(Color.FromArgb(effective == "light" ? (byte)0x66 : (byte)0x88, textColor.R, textColor.G, textColor.B));
+        var activeBg = effective == "light"
+            ? new SolidColorBrush(Color.FromArgb(0xFF, 0xD0, 0xD0, 0xD0))
+            : new SolidColorBrush(Color.FromArgb(0xFF, 0x3A, 0x3A, 0x3A));
+        UpdateSidebarHighlightColors(activeBg, sidebarMuted);
+
         // Status bar
         statusText.Foreground = new SolidColorBrush(textMuted);
         statsText.Foreground = new SolidColorBrush(textMuted);
-        undoLink.Foreground = new SolidColorBrush(Color.FromRgb(0x22, 0x88, 0x55));
         clearAllLink.Foreground = new SolidColorBrush(textMuted);
     }
 
@@ -836,28 +957,9 @@ public partial class MainWindow : Window
 
     private void Search_TextChanged(object sender, TextChangedEventArgs e)
     {
-        var filter = searchBox.Text.Trim();
-
-        if (string.IsNullOrEmpty(filter))
-        {
-            foreach (var n in store.Notes)
-                n.IsSearchMatch = true;
-            _view.Filter = null;
-        }
-        else
-        {
-            foreach (var n in store.Notes)
-                n.IsSearchMatch =
-                    n.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                    n.PlainText.Contains(filter, StringComparison.OrdinalIgnoreCase);
-
-            // Filter to show only matching + highlight bar on matches
-            _view.Filter = obj => obj is Note note && note.IsSearchMatch;
-        }
-
-        // Pass search filter to NoteCards for inline text highlighting
-        Views.NoteCard.SearchFilter = filter ?? "";
-
+        _searchFilter = searchBox.Text.Trim();
+        ApplyFilters();
+        Views.NoteCard.SearchFilter = _searchFilter ?? "";
         UpdateSearchHint();
     }
 
@@ -869,6 +971,534 @@ public partial class MainWindow : Window
     {
         searchHint.Visibility = string.IsNullOrEmpty(searchBox.Text) && !searchBox.IsFocused
             ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // ── Sidebar ──
+
+    private void SidebarToggle_Click(object sender, MouseButtonEventArgs e)
+    {
+        ToggleSidebar();
+    }
+
+    private void ToggleSidebar()
+    {
+        _sidebarExpanded = !_sidebarExpanded;
+        double targetWidth = _sidebarExpanded ? 160 : 48;
+
+        // Animate the sidebar border width directly
+        var anim = AnimationHelper.MakeAnimation(sidebarBorder.Width, targetWidth, 180);
+        anim.EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+        sidebarBorder.BeginAnimation(Border.WidthProperty, anim);
+
+        // Fade labels in/out
+        double labelTarget = _sidebarExpanded ? 1.0 : 0.0;
+        var fade = AnimationHelper.MakeAnimation(1 - labelTarget, labelTarget, 150);
+        fade.BeginTime = _sidebarExpanded ? TimeSpan.FromMilliseconds(60) : TimeSpan.Zero;
+        sectAllLabel.BeginAnimation(OpacityProperty, fade);
+        sectAllCount.BeginAnimation(OpacityProperty, fade);
+        sectArchivedLabel.BeginAnimation(OpacityProperty, fade);
+        sectArchivedCount.BeginAnimation(OpacityProperty, fade);
+        sectTrashLabel.BeginAnimation(OpacityProperty, fade);
+        sectTrashCount.BeginAnimation(OpacityProperty, fade);
+        sectTimelineLabel.BeginAnimation(OpacityProperty, fade);
+        sectNotebooksLabel.BeginAnimation(OpacityProperty, fade);
+        sectNotebooksBtnAdd.BeginAnimation(OpacityProperty, fade);
+        sectTagsLabel.BeginAnimation(OpacityProperty, fade);
+        sectTagsBtnAdd.BeginAnimation(OpacityProperty, fade);
+    }
+
+    private void UpdateSidebarLabels()
+    {
+        double o = _sidebarExpanded ? 1.0 : 0.0;
+        sectAllLabel.Opacity = o;
+        sectAllCount.Opacity = o;
+        sectArchivedLabel.Opacity = o;
+        sectArchivedCount.Opacity = o;
+        sectTrashLabel.Opacity = o;
+        sectTrashCount.Opacity = o;
+        sectTimelineLabel.Opacity = o;
+        sectNotebooksLabel.Opacity = o;
+        sectNotebooksBtnAdd.Opacity = o;
+        sectTagsLabel.Opacity = o;
+        sectTagsBtnAdd.Opacity = o;
+    }
+
+    private void SidebarSection_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is Border b && b.Tag is string section)
+        {
+            SetActiveSection(section);
+        }
+    }
+
+    private void SetActiveSection(string section)
+    {
+        _activeSection = section;
+        store.SidebarSection = section;
+        UpdateSidebarHighlight();
+        ApplyFilters();
+    }
+
+    private void UpdateSidebarHighlight()
+    {
+        var sections = new[] { sectAll, sectArchived, sectTrash, sectTimeline };
+        var transparent = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+        foreach (var s in sections)
+            s.Background = transparent;
+
+        Border? target = _activeSection switch
+        {
+            "all" => sectAll,
+            "archived" => sectArchived,
+            "trash" => sectTrash,
+            "timeline" => sectTimeline,
+            _ => sectAll
+        };
+        if (target != null)
+            target.Background = _sidebarActiveBg;
+    }
+
+    private void UpdateSidebarHighlightColors(Brush activeBg, Brush mutedFg)
+    {
+        _sidebarActiveBg = activeBg;
+        UpdateSidebarHighlight();
+
+        sidebarToggleIcon.Foreground = mutedFg;
+        sectAllIcon.Foreground = mutedFg;
+        sectAllLabel.Foreground = mutedFg;
+        sectAllCount.Foreground = mutedFg;
+        sectArchivedIcon.Foreground = mutedFg;
+        sectArchivedLabel.Foreground = mutedFg;
+        sectArchivedCount.Foreground = mutedFg;
+        sectTrashIcon.Foreground = mutedFg;
+        sectTrashLabel.Foreground = mutedFg;
+        sectTrashCount.Foreground = mutedFg;
+        sectTimelineIcon.Foreground = mutedFg;
+        sectTimelineLabel.Foreground = mutedFg;
+        sectNotebooksIcon.Foreground = mutedFg;
+        sectNotebooksLabel.Foreground = mutedFg;
+        sectNotebooksBtnAdd.Foreground = mutedFg;
+        sectTagsIcon.Foreground = mutedFg;
+        sectTagsLabel.Foreground = mutedFg;
+    }
+
+    private void UpdateTagNotebookLookups()
+    {
+        // Count notes per tag/notebook
+        var allNotes = store.Notes.ToList();
+        foreach (var tag in store.Tags)
+            tag.Count = allNotes.Count(n => n.TagIds.Contains(tag.Id) && !n.IsDeleted);
+        foreach (var nb in store.Notebooks)
+            nb.Count = allNotes.Count(n => n.NotebookId == nb.Id && !n.IsDeleted);
+
+        // Build lookups for NoteCard
+        NoteCard.TagNameLookup.Clear();
+        foreach (var tag in store.Tags)
+            NoteCard.TagNameLookup[tag.Id] = tag.Name;
+        NoteCard.NotebookNameLookup.Clear();
+        foreach (var nb in store.Notebooks)
+            NoteCard.NotebookNameLookup[nb.Id] = nb.Name;
+    }
+
+    private void UpdateCounters()
+    {
+        var all = store.Notes.ToList();
+        sectAllCount.Text = $"({all.Count(n => !n.IsArchived && !n.IsDeleted)})";
+        sectArchivedCount.Text = $"({all.Count(n => n.IsArchived && !n.IsDeleted)})";
+        sectTrashCount.Text = $"({all.Count(n => n.IsDeleted)})";
+        UpdateTagNotebookLookups();
+    }
+
+    // ── Sidebar flyout (for notebooks / tags) ──
+
+    private void SidebarAccordion_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is Border b && b.Tag is string section)
+            ShowSidebarFlyout(b, section);
+    }
+
+    private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        // Close sidebar flyout when clicking outside it
+        if (sidebarFlyout.IsOpen && sidebarFlyout.Child is FrameworkElement child)
+        {
+            var dep = e.OriginalSource as DependencyObject;
+            bool inside = false;
+            while (dep != null)
+            {
+                if (dep == child)
+                { inside = true; break; }
+                dep = VisualTreeHelper.GetParent(dep);
+            }
+            if (!inside)
+                sidebarFlyout.IsOpen = false;
+        }
+    }
+
+    private void ShowSidebarFlyout(Border header, string section)
+    {
+        var popup = sidebarFlyout;
+        popup.PlacementTarget = header;
+        popup.Placement = PlacementMode.Right;
+        popup.HorizontalOffset = 4;
+        popup.VerticalOffset = -4;
+
+        // Build content
+        var border = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0x26, 0x26, 0x26)),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(6),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1),
+            MinWidth = 140,
+            MaxHeight = 300,
+        };
+
+        var stack = new StackPanel();
+
+        if (section == "notebooks")
+        {
+            if (store.Notebooks.Count == 0)
+            {
+                stack.Children.Add(new TextBlock
+                {
+                    Text = "Sin libretas",
+                    FontSize = 12,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
+                    Margin = new Thickness(10, 6, 10, 6),
+                });
+            }
+
+            foreach (var nb in store.Notebooks)
+            {
+                var captured = nb;
+                var item = CreateFlyoutItem($"📓 {nb.Name}", nb.Count, () =>
+                {
+                    SetActiveSection($"notebook:{captured.Id}");
+                    popup.IsOpen = false;
+                });
+                stack.Children.Add(item);
+            }
+        }
+        else if (section == "tags")
+        {
+            if (store.Tags.Count == 0)
+            {
+                stack.Children.Add(new TextBlock
+                {
+                    Text = "Sin tags",
+                    FontSize = 12,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
+                    Margin = new Thickness(10, 6, 10, 6),
+                });
+            }
+
+            foreach (var tag in store.Tags)
+            {
+                var captured = tag;
+                var item = CreateFlyoutItem($"#{tag.Name}", tag.Count, () =>
+                {
+                    SetActiveSection($"tag:{captured.Id}");
+                    popup.IsOpen = false;
+                });
+                stack.Children.Add(item);
+            }
+        }
+
+        border.Child = new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        popup.Child = border;
+        popup.IsOpen = true;
+    }
+
+    private Border CreateFlyoutItem(string label, int? count, Action onClick)
+    {
+        var b = new Border
+        {
+            Padding = new Thickness(10, 6, 10, 6),
+            Margin = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Cursor = Cursors.Hand,
+            Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)),
+        };
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var txt = new TextBlock
+        {
+            Text = label,
+            FontSize = 13,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(txt, 0);
+        grid.Children.Add(txt);
+
+        if (count.HasValue)
+        {
+            var ct = new TextBlock
+            {
+                Text = $"({count.Value})",
+                FontSize = 10,
+                Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 0, 0),
+            };
+            Grid.SetColumn(ct, 1);
+            grid.Children.Add(ct);
+        }
+
+        b.Child = grid;
+
+        b.MouseEnter += (_, _) =>
+            b.Background = new SolidColorBrush(Color.FromArgb(0x3F, 0xFF, 0xFF, 0xFF));
+        b.MouseLeave += (_, _) =>
+            b.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+        b.PreviewMouseDown += (_, _) => onClick();
+
+        return b;
+    }
+
+    private void AddNotebook_Click(object sender, MouseButtonEventArgs e)
+    {
+        var dialog = new Window
+        {
+            Title = "Nueva libreta",
+            Width = 340,
+            Height = 180,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)),
+            Owner = this,
+            ShowInTaskbar = false,
+        };
+
+        var border = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0x26, 0x26, 0x26)),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(20),
+        };
+
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var titleBlock = new TextBlock
+        {
+            Text = "Nueva libreta",
+            FontSize = 16,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+        };
+        Grid.SetRow(titleBlock, 0);
+        grid.Children.Add(titleBlock);
+
+        var input = new System.Windows.Controls.TextBox
+        {
+            FontSize = 14,
+            Margin = new Thickness(0, 12, 0, 12),
+            Padding = new Thickness(8, 6, 8, 6),
+            Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E)),
+            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1),
+            CaretBrush = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+        };
+        Grid.SetRow(input, 1);
+        grid.Children.Add(input);
+
+        var btnPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        Grid.SetRow(btnPanel, 2);
+        grid.Children.Add(btnPanel);
+
+        var cancelBtn = new Button { Content = "Cancelar", Width = 80, Height = 30, Cursor = Cursors.Hand, FontSize = 13, Margin = new Thickness(0, 0, 8, 0) };
+        cancelBtn.Style = MakeBtnStyle(Color.FromRgb(0xBB, 0xBB, 0xBB), Color.FromRgb(0x3A, 0x3A, 0x3A),
+            Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
+        cancelBtn.Click += (_, _) => dialog.Close();
+        btnPanel.Children.Add(cancelBtn);
+
+        var okBtn = new Button { Content = "Crear", Width = 80, Height = 30, Cursor = Cursors.Hand, FontSize = 13 };
+        okBtn.Style = MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x5A, 0x5A, 0x5A),
+            Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x77, 0x77, 0x77));
+        okBtn.Click += (_, _) =>
+        {
+            var name = input.Text.Trim();
+            if (!string.IsNullOrEmpty(name))
+            {
+                store.Notebooks.Add(new Notebook { Name = name });
+                store.Save();
+                UpdateCounters();
+                ShowStatus($"Libreta '{name}' creada", false);
+            }
+            dialog.Close();
+        };
+        btnPanel.Children.Add(okBtn);
+
+        input.KeyDown += (_, e2) => { if (e2.Key == Key.Enter) okBtn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); };
+
+        border.Child = grid;
+        dialog.Content = border;
+        dialog.ShowDialog();
+    }
+
+    private void AddTag_Click(object sender, MouseButtonEventArgs e)
+    {
+        var dialog = new Window
+        {
+            Title = "Nuevo tag",
+            Width = 340,
+            Height = 180,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)),
+            Owner = this,
+            ShowInTaskbar = false,
+        };
+
+        var border = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0x26, 0x26, 0x26)),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(20),
+        };
+
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var titleBlock = new TextBlock
+        {
+            Text = "Nuevo tag",
+            FontSize = 16,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+        };
+        Grid.SetRow(titleBlock, 0);
+        grid.Children.Add(titleBlock);
+
+        var input = new System.Windows.Controls.TextBox
+        {
+            FontSize = 14,
+            Margin = new Thickness(0, 12, 0, 12),
+            Padding = new Thickness(8, 6, 8, 6),
+            Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E)),
+            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1),
+            CaretBrush = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+        };
+        Grid.SetRow(input, 1);
+        grid.Children.Add(input);
+
+        var btnPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        Grid.SetRow(btnPanel, 2);
+        grid.Children.Add(btnPanel);
+
+        var cancelBtn = new Button { Content = "Cancelar", Width = 80, Height = 30, Cursor = Cursors.Hand, FontSize = 13, Margin = new Thickness(0, 0, 8, 0) };
+        cancelBtn.Style = MakeBtnStyle(Color.FromRgb(0xBB, 0xBB, 0xBB), Color.FromRgb(0x3A, 0x3A, 0x3A),
+            Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
+        cancelBtn.Click += (_, _) => dialog.Close();
+        btnPanel.Children.Add(cancelBtn);
+
+        var okBtn = new Button { Content = "Crear", Width = 80, Height = 30, Cursor = Cursors.Hand, FontSize = 13 };
+        okBtn.Style = MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x5A, 0x5A, 0x5A),
+            Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x77, 0x77, 0x77));
+        okBtn.Click += (_, _) =>
+        {
+            var name = input.Text.Trim();
+            if (!string.IsNullOrEmpty(name))
+            {
+                store.Tags.Add(new Tag { Name = name });
+                store.Save();
+                UpdateCounters();
+                ShowStatus($"Tag '{name}' creado", false);
+            }
+            dialog.Close();
+        };
+        btnPanel.Children.Add(okBtn);
+
+        input.KeyDown += (_, e2) => { if (e2.Key == Key.Enter) okBtn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); };
+
+        border.Child = grid;
+        dialog.Content = border;
+        dialog.ShowDialog();
+    }
+
+    private void ApplyFilters()
+    {
+        _view.Filter = obj =>
+        {
+            if (obj is not Note note) return false;
+
+            // Parse section filter: base section + optional notebook/tag
+            string baseSection = _activeSection;
+            Guid? filterNotebook = null;
+            Guid? filterTag = null;
+
+            if (_activeSection.StartsWith("notebook:"))
+            {
+                baseSection = "notebook";
+                if (Guid.TryParse(_activeSection.AsSpan(9), out var nbId))
+                    filterNotebook = nbId;
+            }
+            else if (_activeSection.StartsWith("tag:"))
+            {
+                baseSection = "tag";
+                if (Guid.TryParse(_activeSection.AsSpan(4), out var tId))
+                    filterTag = tId;
+            }
+
+            // Base visibility filter
+            bool baseMatch = baseSection switch
+            {
+                "all" => !note.IsArchived && !note.IsDeleted,
+                "archived" => note.IsArchived && !note.IsDeleted,
+                "trash" => note.IsDeleted,
+                "timeline" => !note.IsArchived && !note.IsDeleted,
+                "notebook" => !note.IsArchived && !note.IsDeleted,
+                "tag" => !note.IsArchived && !note.IsDeleted,
+                _ => !note.IsArchived && !note.IsDeleted
+            };
+            if (!baseMatch) return false;
+
+            // Notebook filter
+            if (filterNotebook.HasValue && note.NotebookId != filterNotebook.Value)
+                return false;
+
+            // Tag filter
+            if (filterTag.HasValue && !note.TagIds.Contains(filterTag.Value))
+                return false;
+
+            // Search filter (if active)
+            if (!string.IsNullOrEmpty(_searchFilter))
+            {
+                bool match = note.Title.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase)
+                    || note.PlainText.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase);
+                note.IsSearchMatch = match;
+                return match;
+            }
+
+            note.IsSearchMatch = true;
+            return true;
+        };
+
+        UpdateCounters();
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
@@ -892,9 +1522,7 @@ public partial class MainWindow : Window
         store.OpenNoteIds = string.Join(",", openIds);
 
         store.SaveSettings();
-
-        if (_deletedNote != null) FinalizeDelete();
-        _undoTimer.Stop();
+        store.SidebarSection = _activeSection;
         store.Save();
         // Close DockWindow if open
         _dockWindow?.Close();
@@ -1030,6 +1658,12 @@ public partial class MainWindow : Window
     internal static Style MakeComboStyle()
     {
         return (Style)System.Windows.Application.Current.FindResource("SettingsComboBoxStyle");
+    }
+
+    internal static Style MakeEditableComboStyle()
+    {
+        // Use the editable style which has PART_EditableTextBox
+        return (Style)System.Windows.Application.Current.FindResource("SettingsComboBoxEditableStyle");
     }
 
     private static T? FindChild<T>(DependencyObject parent) where T : DependencyObject

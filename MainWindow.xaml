@@ -13,7 +13,8 @@
         Left="100" Top="100"
         Background="#1E1E1E"
         FontFamily="Segoe UI"
-        KeyDown="Window_KeyDown">
+        KeyDown="Window_KeyDown"
+        PreviewMouseDown="Window_PreviewMouseDown">
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="0" ResizeBorderThickness="5"
@@ -303,23 +304,163 @@
                 </Grid>
             </Border>
 
-            <!-- Notes List -->
-            <ScrollViewer x:Name="scrollViewer" Grid.Row="1"
-                          Background="#1E1E1E"
-                          VerticalScrollBarVisibility="Visible"
-                          CanContentScroll="False"
-                          Padding="0,2,0,0">
-                <ItemsControl x:Name="notesList" Margin="0,0,0,0"
-                              PreviewMouseLeftButtonDown="Card_MouseDown"
-                              PreviewMouseMove="Card_MouseMove"
-                              PreviewMouseLeftButtonUp="Card_MouseUp">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <views:NoteCard/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+            <!-- Content area: sidebar + notes -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="sidebarCol" Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Sidebar -->
+                <Border x:Name="sidebarBorder" Grid.Column="0" Background="#232323" Padding="3,6,5,6"
+                        MinWidth="48" Width="48">
+                    <Grid>
+                        <ScrollViewer x:Name="sidebarScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <!-- Toggle button -->
+                            <Border x:Name="sidebarToggleBtn" Padding="4" Margin="2,0,2,6"
+                                    CornerRadius="6" Cursor="Hand"
+                                    Background="Transparent"
+                                    PreviewMouseDown="SidebarToggle_Click">
+                                <TextBlock x:Name="sidebarToggleIcon" Text="☰" FontSize="16" Foreground="#BBFFFFFF"
+                                           HorizontalAlignment="Center"/>
+                            </Border>
+
+                            <!-- Todas las notas -->
+                            <Border x:Name="sectAll" Padding="8,8" Margin="2,1"
+                                    CornerRadius="6" Cursor="Hand"
+                                    Background="Transparent"
+                                    PreviewMouseDown="SidebarSection_Click"
+                                    Tag="all">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="sectAllIcon" Text="📋" FontSize="14" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                    <TextBlock x:Name="sectAllLabel" Text=" Todas" FontSize="13"
+                                               Foreground="#BBFFFFFF" VerticalAlignment="Center"
+                                               Opacity="0"/>
+                                    <TextBlock x:Name="sectAllCount" FontSize="10"
+                                               Foreground="#88FFFFFF" VerticalAlignment="Center"
+                                               Margin="4,0,0,0" Opacity="0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Archivadas -->
+                            <Border x:Name="sectArchived" Padding="8,8" Margin="2,1"
+                                    CornerRadius="6" Cursor="Hand"
+                                    Background="Transparent"
+                                    PreviewMouseDown="SidebarSection_Click"
+                                    Tag="archived">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="sectArchivedIcon" Text="🗄" FontSize="14" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                    <TextBlock x:Name="sectArchivedLabel" Text=" Archivadas" FontSize="13"
+                                               Foreground="#BBFFFFFF" VerticalAlignment="Center"
+                                               Opacity="0"/>
+                                    <TextBlock x:Name="sectArchivedCount" FontSize="10"
+                                               Foreground="#88FFFFFF" VerticalAlignment="Center"
+                                               Margin="4,0,0,0" Opacity="0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Papelera -->
+                            <Border x:Name="sectTrash" Padding="8,8" Margin="2,1"
+                                    CornerRadius="6" Cursor="Hand"
+                                    Background="Transparent"
+                                    PreviewMouseDown="SidebarSection_Click"
+                                    Tag="trash">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="sectTrashIcon" Text="🗑" FontSize="14" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                    <TextBlock x:Name="sectTrashLabel" Text=" Papelera" FontSize="13"
+                                               Foreground="#BBFFFFFF" VerticalAlignment="Center"
+                                               Opacity="0"/>
+                                    <TextBlock x:Name="sectTrashCount" FontSize="10"
+                                               Foreground="#88FFFFFF" VerticalAlignment="Center"
+                                               Margin="4,0,0,0" Opacity="0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Separator -->
+                            <Rectangle Height="1" Fill="#30FFFFFF" Margin="4,6"/>
+
+                            <!-- 📚 Libretas -->
+                            <StackPanel>
+                                <Border x:Name="sectNotebooksHeader" Padding="8,8" Margin="2,1"
+                                        CornerRadius="6" Cursor="Hand"
+                                        Background="Transparent"
+                                        PreviewMouseDown="SidebarAccordion_Click"
+                                        Tag="notebooks">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="sectNotebooksIcon" Text="📚" FontSize="14" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                        <TextBlock x:Name="sectNotebooksLabel" Text=" Libretas" FontSize="13"
+                                                   Foreground="#BBFFFFFF" VerticalAlignment="Center"
+                                                   Opacity="0"/>
+                                        <TextBlock x:Name="sectNotebooksBtnAdd" Text="  +" FontSize="13"
+                                                   Foreground="#88FFFFFF" VerticalAlignment="Center"
+                                                   Opacity="0" Cursor="Hand"
+                                                   PreviewMouseDown="AddNotebook_Click"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- 🏷 Tags -->
+                            <StackPanel>
+                                <Border x:Name="sectTagsHeader" Padding="8,8" Margin="2,1"
+                                        CornerRadius="6" Cursor="Hand"
+                                        Background="Transparent"
+                                        PreviewMouseDown="SidebarAccordion_Click"
+                                        Tag="tags">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="sectTagsIcon" Text="🏷" FontSize="14" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                        <TextBlock x:Name="sectTagsLabel" Text=" Tags" FontSize="13"
+                                                   Foreground="#BBFFFFFF" VerticalAlignment="Center"
+                                                   Opacity="0"/>
+                                        <TextBlock x:Name="sectTagsBtnAdd" Text="  +" FontSize="13"
+                                                   Foreground="#88FFFFFF" VerticalAlignment="Center"
+                                                   Opacity="0" Cursor="Hand"
+                                                   PreviewMouseDown="AddTag_Click"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- Timeline -->
+                            <Border x:Name="sectTimeline" Padding="8,8" Margin="2,1"
+                                    CornerRadius="6" Cursor="Hand"
+                                    Background="Transparent"
+                                    PreviewMouseDown="SidebarSection_Click"
+                                    Tag="timeline">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="sectTimelineIcon" Text="📅" FontSize="14" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                    <TextBlock x:Name="sectTimelineLabel" Text=" Timeline" FontSize="13"
+                                               Foreground="#BBFFFFFF" VerticalAlignment="Center"
+                                               Opacity="0"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <Popup x:Name="sidebarFlyout" AllowsTransparency="True" StaysOpen="True"
+                           PopupAnimation="Fade"/>
+                    </Grid>
+                </Border>
+
+                <!-- Vertical separator -->
+                <Rectangle Grid.Column="0" HorizontalAlignment="Right" Width="1" Fill="#30FFFFFF" IsHitTestVisible="False"/>
+
+                <!-- Notes list (existing) -->
+                <ScrollViewer x:Name="scrollViewer" Grid.Column="1"
+                              Background="#1E1E1E"
+                              VerticalScrollBarVisibility="Visible"
+                              CanContentScroll="False"
+                              Padding="0,2,0,0">
+                    <ItemsControl x:Name="notesList" Margin="0,0,0,0"
+                                  PreviewMouseLeftButtonDown="Card_MouseDown"
+                                  PreviewMouseMove="Card_MouseMove"
+                                  PreviewMouseLeftButtonUp="Card_MouseUp">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <views:NoteCard/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
 
             <!-- Status Bar -->
             <Border x:Name="statusBar" Grid.Row="2" Background="#262626" Padding="10,0">
@@ -336,14 +477,7 @@
                     <TextBlock x:Name="statsText" Grid.Column="1"
                                Foreground="#44FFFFFF" FontSize="10"
                                VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    <TextBlock x:Name="undoLink" Grid.Column="2"
-                               Foreground="#88FFDD" FontSize="10"
-                               VerticalAlignment="Center" Margin="0,0,12,0"
-                               Visibility="Collapsed"
-                               TextDecorations="Underline"
-                               Cursor="Hand"
-                               MouseDown="Undo_Click">Deshacer</TextBlock>
-                    <TextBlock Grid.Column="3" Foreground="#44FFFFFF" FontSize="10"
+                    <TextBlock Grid.Column="2" Foreground="#44FFFFFF" FontSize="10"
                                VerticalAlignment="Center">
                         <Hyperlink x:Name="clearAllLink" NavigateUri=""
                                    Foreground="#55FFFFFF"

@@ -18,6 +18,30 @@ public class Note : INotifyPropertyChanged
         get => _isPinned;
         set { _isPinned = value; OnPropertyChanged(); }
     }
+    private bool _isArchived;
+    public bool IsArchived
+    {
+        get => _isArchived;
+        set { _isArchived = value; OnPropertyChanged(); }
+    }
+    private bool _isDeleted;
+    public bool IsDeleted
+    {
+        get => _isDeleted;
+        set { _isDeleted = value; OnPropertyChanged(); }
+    }
+    public DateTime? DeletedAt { get; set; }
+    public Guid? NotebookId { get; set; }
+    public List<Guid> TagIds { get; set; } = new();
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string TagsDisplay
+    {
+        get
+        {
+            if (TagIds.Count == 0) return "";
+            return string.Join(", ", TagIds);
+        }
+    }
     public double WinLeft { get; set; } = double.NaN;
     public double WinTop { get; set; } = double.NaN;
     public double WinWidth { get; set; } = double.NaN;
@@ -148,6 +172,27 @@ public class Note : INotifyPropertyChanged
     ];
 
     public static string RandomIcon() => EmojiPalette[_rng.Next(EmojiPalette.Length)];
+
+    public Note Clone() => new()
+    {
+        Id = Id,
+        Title = Title,
+        Text = Text,
+        Color = Color,
+        Icon = Icon,
+        IsPinned = IsPinned,
+        IsArchived = IsArchived,
+        IsDeleted = IsDeleted,
+        DeletedAt = DeletedAt,
+        NotebookId = NotebookId,
+        TagIds = new List<Guid>(TagIds),
+        Order = Order,
+        LastModified = LastModified,
+        WinLeft = WinLeft,
+        WinTop = WinTop,
+        WinWidth = WinWidth,
+        WinHeight = WinHeight,
+    };
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null)

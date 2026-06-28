@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -7,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using QuickNotes.Models;
+using QuickNotes;
 
 namespace QuickNotes.Views;
 
@@ -25,6 +27,22 @@ public partial class NoteCard : UserControl
             SearchFilterChanged?.Invoke(null, EventArgs.Empty);
         }
     }
+
+    /// <summary>
+    /// Global lookup: TagId -> Tag name. Populated by MainWindow on load.
+    /// </summary>
+    public static Dictionary<Guid, string> TagNameLookup { get; } = new();
+
+    /// <summary>
+    /// Global lookup: NotebookId -> Notebook name. Populated by MainWindow on load.
+    /// </summary>
+    public static Dictionary<Guid, string> NotebookNameLookup { get; } = new();
+
+    /// <summary>
+    /// Used by MainWindow's context menu handler to resolve the NoteCard.
+    /// Set when context menu opens.
+    /// </summary>
+    internal static NoteCard? CurrentContextCard { get; set; }
 
     public NoteCard()
     {
@@ -74,6 +92,33 @@ public partial class NoteCard : UserControl
             var pinBtn = FindVisualChild<Button>(this);
             if (pinBtn != null)
                 UpdatePinVisual(pinBtn, note, false);
+
+            // Render tag pills
+            tagsPanel.Children.Clear();
+            if (note.TagIds.Count > 0)
+            {
+                foreach (var tagId in note.TagIds)
+                {
+                    if (TagNameLookup.TryGetValue(tagId, out var tagName))
+                    {
+                        var pill = new Border
+                        {
+                            Background = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF)),
+                            CornerRadius = new CornerRadius(4),
+                            Padding = new Thickness(5, 1, 5, 1),
+                            Margin = new Thickness(0, 0, 3, 0),
+                            Child = new TextBlock
+                            {
+                                Text = "#" + tagName,
+                                FontSize = 10,
+                                Foreground = new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF)),
+                            }
+                        };
+                        tagsPanel.Children.Add(pill);
+                    }
+                }
+                tagsPanel.Visibility = Visibility.Visible;
+            }
         }
 
         RenderBodyWithHighlight();
@@ -102,7 +147,7 @@ public partial class NoteCard : UserControl
             var matchIdx = text.IndexOf(filter, idx, StringComparison.OrdinalIgnoreCase);
             if (matchIdx < 0)
             {
-                // No more matches — remaining text
+                // No more matches - remaining text
                 cardBodyBlock.Inlines.Add(new Run(text.Substring(idx)));
                 break;
             }
@@ -196,15 +241,23 @@ public partial class NoteCard : UserControl
 
     private void MainBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        // Update "Anclar" text based on current pin state
-        if (DataContext is Note note && mainBorder.ContextMenu != null)
+        if (DataContext is not Note note || mainBorder.ContextMenu == null) return;
+        CurrentContextCard = this;
+
+        foreach (var item in mainBorder.ContextMenu.Items)
         {
-            foreach (var item in mainBorder.ContextMenu.Items)
+            if (item is MenuItem mi)
             {
-                if (item is MenuItem mi && mi.Tag?.ToString() == "Pin")
+                switch (mi.Tag?.ToString())
                 {
-                    mi.Header = note.IsPinned ? "Desanclar" : "Anclar";
-                    break;
+                    case "Pin":
+                        mi.Header = note.IsPinned ? "Desanclar" : "Anclar";
+                        break;
+
+                    case "Restore":
+                        mi.Visibility = (note.IsArchived || note.IsDeleted)
+                            ? Visibility.Visible : Visibility.Collapsed;
+                        break;
                 }
             }
         }
@@ -214,9 +267,374 @@ public partial class NoteCard : UserControl
     {
         if (sender is MenuItem mi)
         {
+            var tag = mi.Tag?.ToString() ?? "(null)";
+
+            switch (tag)
+            {
+                case "NotebookSubmenu":
+                    ShowNotebookSelector();
+                    return;
+                case "TagsSubmenu":
+                    ShowTagSelector();
+                    return;
+            }
+
+            // Delegate notebook/tag commands to MainWindow
+            if (tag == "notebook:" || tag.StartsWith("notebook:") || tag.StartsWith("tagtoggle:"))
+            {
+                if (DataContext is Note note && Application.Current.MainWindow is MainWindow mw)
+                {
+                    if (tag.StartsWith("notebook:"))
+                    {
+                        var idStr = tag.AsSpan(9);
+                        note.NotebookId = idStr.Length == 0 ? null : Guid.Parse(idStr);
+                        note.IsDirty = true;
+                    }
+                    else if (tag.StartsWith("tagtoggle:"))
+                    {
+                        var tId = Guid.Parse(tag.AsSpan(10));
+                        if (note.TagIds.Contains(tId))
+                            note.TagIds.Remove(tId);
+                        else
+                            note.TagIds.Add(tId);
+                        note.IsDirty = true;
+                    }
+                    mw.HandleNoteAction(note, tag);
+                }
+                return;
+            }
+
+            // For standard items, bubble the event as before
             var args = new RoutedEventArgs(ContextMenuActionEvent, mi);
             RaiseEvent(args);
         }
+    }
+
+    private void ShowNotebookSelector()
+    {
+        if (DataContext is not Note note) return;
+        if (Application.Current.MainWindow is not MainWindow mw) return;
+
+        var dialog = new Window
+        {
+            Title = "Mover a libreta",
+            Width = 280,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)),
+            Owner = mw,
+            ShowInTaskbar = false,
+        };
+
+        var border = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0x26, 0x26, 0x26)),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(14),
+        };
+
+        var stack = new StackPanel();
+
+        var label = new TextBlock
+        {
+            Text = "Mover a libreta",
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xBB, 0xBB, 0xBB)),
+            Margin = new Thickness(0, 0, 0, 6),
+        };
+        stack.Children.Add(label);
+
+        var items = new List<NotebookItem> { new() { Id = null, Display = "Sin libreta" } };
+        foreach (var kvp in NotebookNameLookup)
+            items.Add(new NotebookItem { Id = kvp.Key, Display = kvp.Value });
+
+        var combo = new ComboBox
+        {
+            IsEditable = true,
+            ItemsSource = items,
+            DisplayMemberPath = "Display",
+            SelectedIndex = 0,
+            Style = MainWindow.MakeEditableComboStyle(),
+        };
+
+        combo.PreviewMouseDown += (_, _) =>
+        {
+            if (!combo.IsDropDownOpen)
+                combo.IsDropDownOpen = true;
+        };
+
+        combo.GotKeyboardFocus += (_, _) =>
+        {
+            combo.IsDropDownOpen = true;
+        };
+
+        // Filter while typing
+        combo.Loaded += (_, _) =>
+        {
+            if (combo.Template.FindName("PART_EditableTextBox", combo) is TextBox tb)
+            {
+                tb.TextChanged += (_, _) =>
+                {
+                    var filter = tb.Text.Trim();
+                    combo.ItemsSource = string.IsNullOrEmpty(filter)
+                        ? items
+                        : items.Where(i => i.Display != null && i.Display.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+                };
+            }
+        };
+
+        // Commit from text match on close or Enter
+        void CommitNotebookFromText()
+        {
+            var text = combo.Text?.Trim();
+            if (string.IsNullOrEmpty(text)) return;
+            var match = items.FirstOrDefault(i => i.Display != null && i.Display.Equals(text, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+            {
+                note.NotebookId = match.Id;
+                note.IsDirty = true;
+                mw.HandleNoteAction(note, "notebook:");
+            }
+        }
+
+        combo.DropDownClosed += (_, _) => CommitNotebookFromText();
+
+        combo.KeyDown += (_, e2) =>
+        {
+            if (e2.Key == Key.Enter)
+            {
+                CommitNotebookFromText();
+                dialog.Close();
+                e2.Handled = true;
+            }
+            else if (e2.Key == Key.Escape)
+            {
+                dialog.Close();
+                e2.Handled = true;
+            }
+        };
+
+        stack.Children.Add(combo);
+        border.Child = stack;
+        dialog.Content = border;
+        dialog.ShowDialog();
+    }
+
+    private void ShowTagSelector()
+    {
+        if (DataContext is not Note note) return;
+        if (Application.Current.MainWindow is not MainWindow mw) return;
+
+        var dialog = new Window
+        {
+            Title = "Asignar tags",
+            Width = 280,
+            SizeToContent = SizeToContent.Height,
+            MinHeight = 80,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)),
+            Owner = mw,
+            ShowInTaskbar = false,
+        };
+
+        var border = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0x26, 0x26, 0x26)),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(14),
+        };
+
+        var rootGrid = new Grid();
+        rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // pills
+        rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // combo
+        rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // listo btn
+
+        // Pills wrap panel
+        var pillsWrap = new WrapPanel { Margin = new Thickness(0, 0, 0, 6), MaxWidth = 252 };
+
+        void RebuildPills()
+        {
+            pillsWrap.Children.Clear();
+            foreach (var tagId in note.TagIds.ToList())
+            {
+                if (!TagNameLookup.TryGetValue(tagId, out var tagName)) continue;
+                var pill = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(0x40, 0x88, 0xFF, 0xFF)),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(5, 1, 5, 1),
+                    Margin = new Thickness(0, 0, 3, 3),
+                    Cursor = Cursors.Hand,
+                    Tag = tagId,
+                };
+                var pillGrid = new Grid();
+                pillGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                pillGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var txt = new TextBlock
+                {
+                    Text = $"#{tagName}",
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                Grid.SetColumn(txt, 0);
+                pillGrid.Children.Add(txt);
+
+                var xTxt = new TextBlock
+                {
+                    Text = " ✕",
+                    FontSize = 10,
+                    Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(3, 0, 0, 0),
+                };
+                Grid.SetColumn(xTxt, 1);
+                pillGrid.Children.Add(xTxt);
+
+                pill.Child = pillGrid;
+
+                var captured = tagId;
+                pill.MouseDown += (_, _) =>
+                {
+                    note.TagIds.Remove(captured);
+                    note.IsDirty = true;
+                    RebuildPills();
+                };
+                pillsWrap.Children.Add(pill);
+            }
+        }
+        RebuildPills();
+        Grid.SetRow(pillsWrap, 0);
+        rootGrid.Children.Add(pillsWrap);
+
+        // Tag combo with autocomplete
+        List<TagSuggestion> GetSuggestions(string filter)
+        {
+            return TagNameLookup
+                .Where(kvp => !note.TagIds.Contains(kvp.Key) &&
+                    (string.IsNullOrEmpty(filter) || kvp.Value.Contains(filter, StringComparison.OrdinalIgnoreCase)))
+                .Select(kvp => new TagSuggestion { Id = kvp.Key, Name = kvp.Value })
+                .ToList();
+        }
+
+        var combo = new ComboBox
+        {
+            IsEditable = true,
+            IsTextSearchEnabled = false,
+            StaysOpenOnEdit = true,
+            Style = MainWindow.MakeEditableComboStyle(),
+            ItemsSource = GetSuggestions(""),
+            DisplayMemberPath = "Name",
+        };
+
+        // Refresh items when dropdown opens (pills may have changed)
+        combo.DropDownOpened += (_, _) =>
+        {
+            combo.ItemsSource = TagNameLookup
+                .Where(kvp => !note.TagIds.Contains(kvp.Key))
+                .Select(kvp => new TagSuggestion { Id = kvp.Key, Name = kvp.Value })
+                .ToList();
+        };
+
+        combo.PreviewMouseDown += (_, _) =>
+        {
+            if (!combo.IsDropDownOpen)
+                combo.IsDropDownOpen = true;
+        };
+
+        combo.GotKeyboardFocus += (_, _) =>
+        {
+            combo.IsDropDownOpen = true;
+        };
+
+        // Commit tag from current text (matches by name against lookup)
+        void CommitTagFromText()
+        {
+            var text = combo.Text?.Trim();
+            if (string.IsNullOrEmpty(text)) return;
+            var match = TagNameLookup.FirstOrDefault(kvp =>
+                kvp.Value.Equals(text, StringComparison.OrdinalIgnoreCase));
+            if (match.Key != Guid.Empty && !note.TagIds.Contains(match.Key))
+            {
+                note.TagIds.Add(match.Key);
+                note.IsDirty = true;
+                RebuildPills();
+                // Clear text asynchronously to avoid re-entrant crash
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (combo.Template.FindName("PART_EditableTextBox", combo) is TextBox tb)
+                        tb.Text = "";
+                    combo.ItemsSource = GetSuggestions("");
+                }), System.Windows.Threading.DispatcherPriority.Background);
+            }
+        }
+
+        // When dropdown closes (user clicked an item), commit the text
+        combo.DropDownClosed += (_, _) => CommitTagFromText();
+
+        // Wire text filtering and Enter
+        combo.Loaded += (_, _) =>
+        {
+            if (combo.Template.FindName("PART_EditableTextBox", combo) is TextBox tb)
+            {
+                tb.TextChanged += (_, _) =>
+                {
+                    var filter = tb.Text.Trim();
+                    combo.ItemsSource = GetSuggestions(filter);
+                };
+
+                tb.KeyDown += (_, e2) =>
+                {
+                    if (e2.Key == Key.Enter)
+                    {
+                        CommitTagFromText();
+                        e2.Handled = true;
+                    }
+                };
+            }
+        };
+
+        Grid.SetRow(combo, 1);
+        rootGrid.Children.Add(combo);
+
+        // Listo button
+        var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 8, 0, 0) };
+        Grid.SetRow(btnPanel, 2);
+        rootGrid.Children.Add(btnPanel);
+
+        var okBtn = new Button { Content = "Listo", Width = 70, Height = 28, Cursor = Cursors.Hand, FontSize = 13 };
+        okBtn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x5A, 0x5A, 0x5A),
+            Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x77, 0x77, 0x77));
+        okBtn.Click += (_, _) =>
+        {
+            mw.HandleNoteAction(note, "tagtoggle:");
+            dialog.Close();
+        };
+        btnPanel.Children.Add(okBtn);
+
+        border.Child = rootGrid;
+        dialog.Content = border;
+        dialog.ShowDialog();
+    }
+
+    private class NotebookItem
+    {
+        public Guid? Id { get; set; }
+        public string? Display { get; set; }
+    }
+
+    private class TagSuggestion
+    {
+        public Guid Id { get; set; }
+        public string? Name { get; set; }
     }
 
     // === Helpers ===

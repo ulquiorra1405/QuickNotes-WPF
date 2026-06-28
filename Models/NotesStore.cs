@@ -14,6 +14,8 @@ public class NotesStore
     private static readonly string dbPath = Path.Combine(folder, "notes.db");
 
     public ObservableCollection<Note> Notes { get; } = new();
+    public ObservableCollection<Tag> Tags { get; } = new();
+    public ObservableCollection<Notebook> Notebooks { get; } = new();
 
     public double MainLeft { get; set; } = 100;
     public double MainTop { get; set; } = 100;
@@ -31,6 +33,7 @@ public class NotesStore
     public string NoteFontFamily { get; set; } = "Calibri";
     public bool AnimationsEnabled { get; set; } = true;
     public string OpenNoteIds { get; set; } = "";
+    public string SidebarSection { get; set; } = "all";
 
     public NotesStore()
     {
@@ -70,6 +73,21 @@ public class NotesStore
                 Key TEXT PRIMARY KEY,
                 Value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS tags (
+                Id TEXT PRIMARY KEY,
+                Name TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS note_tags (
+                NoteId TEXT NOT NULL,
+                TagId TEXT NOT NULL,
+                PRIMARY KEY (NoteId, TagId)
+            );
+            CREATE TABLE IF NOT EXISTS notebooks (
+                Id TEXT PRIMARY KEY,
+                Name TEXT NOT NULL,
+                Color TEXT NOT NULL DEFAULT '#3A3A3A',
+                Icon TEXT NOT NULL DEFAULT '📕'
+            );
             """;
         cmd.ExecuteNonQuery();
 
@@ -95,12 +113,122 @@ public class NotesStore
             addIcon.ExecuteNonQuery();
         }
 
+        // Migration: add IsArchived column if missing
+        using var checkArchived = conn.CreateCommand();
+        checkArchived.CommandText = "SELECT COUNT(*) FROM pragma_table_info('notes') WHERE name='IsArchived'";
+        var hasArchived = (long)(checkArchived.ExecuteScalar() ?? 0) > 0;
+        if (!hasArchived)
+        {
+            using var addArchived = conn.CreateCommand();
+            addArchived.CommandText = "ALTER TABLE notes ADD COLUMN IsArchived INTEGER NOT NULL DEFAULT 0";
+            addArchived.ExecuteNonQuery();
+        }
+
+        // Migration: add IsDeleted column if missing
+        using var checkDeleted = conn.CreateCommand();
+        checkDeleted.CommandText = "SELECT COUNT(*) FROM pragma_table_info('notes') WHERE name='IsDeleted'";
+        var hasDeleted = (long)(checkDeleted.ExecuteScalar() ?? 0) > 0;
+        if (!hasDeleted)
+        {
+            using var addDeleted = conn.CreateCommand();
+            addDeleted.CommandText = "ALTER TABLE notes ADD COLUMN IsDeleted INTEGER NOT NULL DEFAULT 0";
+            addDeleted.ExecuteNonQuery();
+        }
+
+        // Migration: add DeletedAt column if missing
+        using var checkDeletedAt = conn.CreateCommand();
+        checkDeletedAt.CommandText = "SELECT COUNT(*) FROM pragma_table_info('notes') WHERE name='DeletedAt'";
+        var hasDeletedAt = (long)(checkDeletedAt.ExecuteScalar() ?? 0) > 0;
+        if (!hasDeletedAt)
+        {
+            using var addDeletedAt = conn.CreateCommand();
+            addDeletedAt.CommandText = "ALTER TABLE notes ADD COLUMN DeletedAt TEXT";
+            addDeletedAt.ExecuteNonQuery();
+        }
+
+        // Migration: add NotebookId column if missing
+        using var checkNb = conn.CreateCommand();
+        checkNb.CommandText = "SELECT COUNT(*) FROM pragma_table_info('notes') WHERE name='NotebookId'";
+        var hasNb = (long)(checkNb.ExecuteScalar() ?? 0) > 0;
+        if (!hasNb)
+        {
+            using var addNb = conn.CreateCommand();
+            addNb.CommandText = "ALTER TABLE notes ADD COLUMN NotebookId TEXT";
+            addNb.ExecuteNonQuery();
+        }
+
         return conn;
+    }
+
+    public void PurgeTrash()
+    {
+        var cutoff = DateTime.Now.AddDays(-7);
+        using var conn = OpenDb();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM notes WHERE IsDeleted = 1 AND DeletedAt IS NOT NULL AND DeletedAt < $cutoff";
+        cmd.Parameters.AddWithValue("$cutoff", cutoff.ToString("O"));
+        cmd.ExecuteNonQuery();
+    }
+
+    public void LoadNotebooks(SqliteConnection conn)
+    {
+        Notebooks.Clear();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM notebooks ORDER BY Name ASC";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            Notebooks.Add(new Notebook
+            {
+                Id = Guid.Parse(reader.GetString(reader.GetOrdinal("Id"))),
+                Name = reader.GetString(reader.GetOrdinal("Name")),
+                Color = reader.GetString(reader.GetOrdinal("Color")),
+                Icon = reader.GetString(reader.GetOrdinal("Icon")),
+            });
+        }
+    }
+
+    public void LoadTags(SqliteConnection conn)
+    {
+        Tags.Clear();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM tags ORDER BY Name ASC";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            Tags.Add(new Tag
+            {
+                Id = Guid.Parse(reader.GetString(reader.GetOrdinal("Id"))),
+                Name = reader.GetString(reader.GetOrdinal("Name")),
+            });
+        }
+    }
+
+    public void LoadNoteTags(SqliteConnection conn)
+    {
+        // Load tag associations into each note
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT NoteId, TagId FROM note_tags";
+        using var reader = cmd.ExecuteReader();
+        var map = new Dictionary<Guid, List<Guid>>();
+        while (reader.Read())
+        {
+            var noteId = Guid.Parse(reader.GetString(0));
+            var tagId = Guid.Parse(reader.GetString(1));
+            if (!map.ContainsKey(noteId)) map[noteId] = new();
+            map[noteId].Add(tagId);
+        }
+        foreach (var n in Notes)
+        {
+            if (map.TryGetValue(n.Id, out var ids))
+                n.TagIds = ids;
+        }
     }
 
     public void Load()
     {
         TryMigrateJson();
+        PurgeTrash();
 
         using var conn = OpenDb();
         using var cmd = conn.CreateCommand();
@@ -112,10 +240,31 @@ public class NotesStore
             Notes.Add(ReadNote(reader));
         }
 
-        if (Notes.Count == 0)
+        if (Notes.Count == 0 || Notes.All(n => n.IsDeleted))
             Notes.Add(new Note());
 
+        LoadTags(conn);
+        LoadNotebooks(conn);
+        LoadNoteTags(conn);
+
         LoadSettingsFromDb(conn);
+    }
+
+    public void SaveNoteTags(SqliteConnection conn, Note note)
+    {
+        using var del = conn.CreateCommand();
+        del.CommandText = "DELETE FROM note_tags WHERE NoteId = $id";
+        del.Parameters.AddWithValue("$id", note.Id.ToString());
+        del.ExecuteNonQuery();
+
+        foreach (var tagId in note.TagIds)
+        {
+            using var ins = conn.CreateCommand();
+            ins.CommandText = "INSERT INTO note_tags (NoteId, TagId) VALUES ($nid, $tid)";
+            ins.Parameters.AddWithValue("$nid", note.Id.ToString());
+            ins.Parameters.AddWithValue("$tid", tagId.ToString());
+            ins.ExecuteNonQuery();
+        }
     }
 
     public void Save()
@@ -130,15 +279,14 @@ public class NotesStore
             del.ExecuteNonQuery();
         }
 
-        // Note: Order is managed externally (dock reorder, etc.) — do NOT overwrite it here
-        // because the ObservableCollection index may not reflect the intended Order.
-
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO notes
-                (Id, Title, Text, Color, Icon, IsPinned, OrderNum, LastModified,
+                (Id, Title, Text, Color, Icon, IsPinned, IsArchived, IsDeleted, DeletedAt,
+                 NotebookId, OrderNum, LastModified,
                  WinLeft, WinTop, WinWidth, WinHeight)
-            VALUES ($id, $title, $text, $color, $icon, $pin, $ord, $mod,
+            VALUES ($id, $title, $text, $color, $icon, $pin, $archived, $deleted, $deletedAt,
+                    $nbId, $ord, $mod,
                     $wl, $wt, $ww, $wh)
             """;
 
@@ -146,6 +294,39 @@ public class NotesStore
         {
             BindNote(cmd, note);
             cmd.ExecuteNonQuery();
+            SaveNoteTags(conn, note);
+        }
+
+        // Save tags table
+        using (var delTags = conn.CreateCommand())
+        {
+            delTags.CommandText = "DELETE FROM tags";
+            delTags.ExecuteNonQuery();
+        }
+        foreach (var tag in Tags)
+        {
+            using var insTag = conn.CreateCommand();
+            insTag.CommandText = "INSERT INTO tags (Id, Name) VALUES ($id, $name)";
+            insTag.Parameters.AddWithValue("$id", tag.Id.ToString());
+            insTag.Parameters.AddWithValue("$name", tag.Name);
+            insTag.ExecuteNonQuery();
+        }
+
+        // Save notebooks table
+        using (var delNbs = conn.CreateCommand())
+        {
+            delNbs.CommandText = "DELETE FROM notebooks";
+            delNbs.ExecuteNonQuery();
+        }
+        foreach (var nb in Notebooks)
+        {
+            using var insNb = conn.CreateCommand();
+            insNb.CommandText = "INSERT INTO notebooks (Id, Name, Color, Icon) VALUES ($id, $name, $color, $icon)";
+            insNb.Parameters.AddWithValue("$id", nb.Id.ToString());
+            insNb.Parameters.AddWithValue("$name", nb.Name);
+            insNb.Parameters.AddWithValue("$color", nb.Color);
+            insNb.Parameters.AddWithValue("$icon", nb.Icon);
+            insNb.ExecuteNonQuery();
         }
 
         SaveSettingsToDb(conn);
@@ -176,6 +357,7 @@ public class NotesStore
         SaveSetting(conn, "NoteFontFamily", NoteFontFamily ?? "Calibri");
         SaveSetting(conn, "AnimationsEnabled", AnimationsEnabled ? "1" : "0");
         SaveSetting(conn, "OpenNoteIds", OpenNoteIds ?? "");
+        SaveSetting(conn, "SidebarSection", SidebarSection ?? "all");
     }
 
     private static void SaveSetting(SqliteConnection conn, string key, string? value)
@@ -213,6 +395,7 @@ public class NotesStore
                 case "NoteFontFamily": NoteFontFamily = val; break;
                 case "AnimationsEnabled": AnimationsEnabled = val == "1"; break;
                 case "OpenNoteIds": OpenNoteIds = val; break;
+                case "SidebarSection": SidebarSection = val; break;
             }
         }
     }
@@ -225,8 +408,12 @@ public class NotesStore
         var idxColor = r.GetOrdinal("Color");
         var idxIcon = r.GetOrdinal("Icon");
         var idxPinned = r.GetOrdinal("IsPinned");
+        var idxArchived = r.GetOrdinal("IsArchived");
+        var idxDeleted = r.GetOrdinal("IsDeleted");
+        var idxDeletedAt = r.GetOrdinal("DeletedAt");
         var idxOrder = r.GetOrdinal("OrderNum");
         var idxMod = r.GetOrdinal("LastModified");
+        var idxNb = r.GetOrdinal("NotebookId");
         var idxWl = r.GetOrdinal("WinLeft");
         var idxWt = r.GetOrdinal("WinTop");
         var idxWw = r.GetOrdinal("WinWidth");
@@ -241,8 +428,12 @@ public class NotesStore
             Color = r.IsDBNull(idxColor) ? "#F8F9FA" : r.GetString(idxColor),
             Icon = r.IsDBNull(idxIcon) ? "" : r.GetString(idxIcon),
             IsPinned = r.GetInt32(idxPinned) != 0,
+            IsArchived = r.GetInt32(idxArchived) != 0,
+            IsDeleted = r.GetInt32(idxDeleted) != 0,
+            DeletedAt = r.IsDBNull(idxDeletedAt) ? null : DateTime.Parse(r.GetString(idxDeletedAt), CultureInfo.InvariantCulture),
             Order = r.GetInt32(idxOrder),
             LastModified = dt,
+            NotebookId = r.IsDBNull(idxNb) ? null : Guid.Parse(r.GetString(idxNb)),
             WinLeft = r.IsDBNull(idxWl) ? double.NaN : r.GetDouble(idxWl),
             WinTop = r.IsDBNull(idxWt) ? double.NaN : r.GetDouble(idxWt),
             WinWidth = r.IsDBNull(idxWw) ? double.NaN : r.GetDouble(idxWw),
@@ -259,6 +450,10 @@ public class NotesStore
         cmd.Parameters.AddWithValue("$color", note.Color ?? "#F8F9FA");
         cmd.Parameters.AddWithValue("$icon", note.Icon ?? "");
         cmd.Parameters.AddWithValue("$pin", note.IsPinned ? 1 : 0);
+        cmd.Parameters.AddWithValue("$archived", note.IsArchived ? 1 : 0);
+        cmd.Parameters.AddWithValue("$deleted", note.IsDeleted ? 1 : 0);
+        cmd.Parameters.AddWithValue("$deletedAt", note.DeletedAt?.ToString("O") ?? (object)DBNull.Value);
+        cmd.Parameters.AddWithValue("$nbId", note.NotebookId?.ToString() ?? (object)DBNull.Value);
         cmd.Parameters.AddWithValue("$ord", note.Order);
         cmd.Parameters.AddWithValue("$mod", note.LastModified.ToString("O"));
         cmd.Parameters.AddWithValue("$wl", double.IsNaN(note.WinLeft) ? DBNull.Value : note.WinLeft);

@@ -338,16 +338,20 @@ public partial class DockWindow : Window
             _dragItems = null;
             _dragSourceContainer = null;
             _dragStartPoint = null;
+            _reorderNoteId = Guid.Empty;
             return;
         }
 
-        // Was a click, not drag
-        if (FindNoteIcon(e.OriginalSource as DependencyObject) is Border border && border.Tag is Guid noteId)
+        // Was a click, not drag.
+        // NOTE: e.OriginalSource is the ScrollViewer (mouse capture target), NOT the note icon.
+        // Use _reorderNoteId captured at mouse-down instead.
+        Guid noteId = _reorderNoteId;
+        if (noteId != Guid.Empty)
         {
             if (e.ClickCount >= 2)
             {
                 var note = _store.Notes.FirstOrDefault(n => n.Id == noteId);
-                if (note == null) { _dragStartPoint = null; return; }
+                if (note == null) { _dragStartPoint = null; _reorderNoteId = Guid.Empty; return; }
 
                 var existing = Application.Current.Windows.OfType<NoteWindow>()
                     .FirstOrDefault(w => w.DataContext is Note n && n.Id == noteId);
@@ -366,6 +370,7 @@ public partial class DockWindow : Window
         }
 
         _dragStartPoint = null;
+        _reorderNoteId = Guid.Empty;
     }
 
     private void RestoreSourceOpacity()
