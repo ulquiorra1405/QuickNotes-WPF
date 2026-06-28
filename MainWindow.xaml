@@ -335,7 +335,7 @@
                                     PreviewMouseDown="SidebarSection_Click"
                                     Tag="all">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock x:Name="sectAllIcon" Text="📋" FontSize="14" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                    <TextBlock x:Name="sectAllIcon" Text="✏️" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
                                     <TextBlock x:Name="sectAllLabel" Text=" Todas" FontSize="13"
                                                Foreground="#BBFFFFFF" VerticalAlignment="Center"
                                                Opacity="0"/>
@@ -352,7 +352,7 @@
                                     PreviewMouseDown="SidebarSection_Click"
                                     Tag="archived">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock x:Name="sectArchivedIcon" Text="🗄" FontSize="14" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                    <TextBlock x:Name="sectArchivedIcon" Text="📁" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
                                     <TextBlock x:Name="sectArchivedLabel" Text=" Archivadas" FontSize="13"
                                                Foreground="#BBFFFFFF" VerticalAlignment="Center"
                                                Opacity="0"/>
@@ -369,7 +369,7 @@
                                     PreviewMouseDown="SidebarSection_Click"
                                     Tag="trash">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock x:Name="sectTrashIcon" Text="🗑" FontSize="14" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                    <TextBlock x:Name="sectTrashIcon" Text="♻️" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
                                     <TextBlock x:Name="sectTrashLabel" Text=" Papelera" FontSize="13"
                                                Foreground="#BBFFFFFF" VerticalAlignment="Center"
                                                Opacity="0"/>
@@ -390,7 +390,7 @@
                                         PreviewMouseDown="SidebarAccordion_Click"
                                         Tag="notebooks">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="sectNotebooksIcon" Text="📚" FontSize="14" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                        <TextBlock x:Name="sectNotebooksIcon" Text="📚" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
                                         <TextBlock x:Name="sectNotebooksLabel" Text=" Libretas" FontSize="13"
                                                    Foreground="#BBFFFFFF" VerticalAlignment="Center"
                                                    Opacity="0"/>
@@ -410,7 +410,7 @@
                                         PreviewMouseDown="SidebarAccordion_Click"
                                         Tag="tags">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="sectTagsIcon" Text="🏷" FontSize="14" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                        <TextBlock x:Name="sectTagsIcon" Text="🏷" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
                                         <TextBlock x:Name="sectTagsLabel" Text=" Tags" FontSize="13"
                                                    Foreground="#BBFFFFFF" VerticalAlignment="Center"
                                                    Opacity="0"/>
@@ -429,7 +429,7 @@
                                     PreviewMouseDown="SidebarSection_Click"
                                     Tag="timeline">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock x:Name="sectTimelineIcon" Text="📅" FontSize="14" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                    <TextBlock x:Name="sectTimelineIcon" Text="🕐" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
                                     <TextBlock x:Name="sectTimelineLabel" Text=" Timeline" FontSize="13"
                                                Foreground="#BBFFFFFF" VerticalAlignment="Center"
                                                Opacity="0"/>
