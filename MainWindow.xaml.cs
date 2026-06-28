@@ -415,6 +415,7 @@ public partial class MainWindow : Window
 
     private void Card_MouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (_activeSection == "timeline") return; // no drag reorder in timeline
         if (e.LeftButton != MouseButtonState.Pressed) return;
         if (e.OriginalSource is ButtonBase or TextBox or TextBlock) return;
 
@@ -1498,6 +1499,26 @@ public partial class MainWindow : Window
             return true;
         };
 
+        // Timeline: group by date, sort by date desc then time desc
+        bool isTimeline = _activeSection == "timeline";
+
+        _view.GroupDescriptions.Clear();
+        _view.SortDescriptions.Clear();
+
+        if (isTimeline)
+        {
+            _view.GroupDescriptions.Add(new PropertyGroupDescription("DateGroup"));
+            _view.SortDescriptions.Add(new SortDescription("DateGroup", ListSortDirection.Descending));
+            _view.SortDescriptions.Add(new SortDescription("LastModified", ListSortDirection.Descending));
+        }
+        else
+        {
+            // Normal sort: pinned first, then by last modified
+            _view.SortDescriptions.Add(new SortDescription("IsPinned", ListSortDirection.Descending));
+            _view.SortDescriptions.Add(new SortDescription("LastModified", ListSortDirection.Descending));
+        }
+
+        _view.Refresh();
         UpdateCounters();
     }
 
@@ -1687,4 +1708,25 @@ public partial class MainWindow : Window
         }
         return null;
     }
+}
+
+public class DateGroupConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    {
+        if (value is not DateTime dt) return "";
+
+        var today = DateTime.Today;
+        if (dt == today) return "─── Hoy ───";
+        if (dt == today.AddDays(-1)) return "─── Ayer ───";
+
+        var daysDiff = (today - dt).Days;
+        if (daysDiff > 0 && daysDiff <= 6)
+            return $"─── {dt:dddd} ───";
+
+        return $"─── {dt:dd MMM} ───";
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotImplementedException();
 }

@@ -95,9 +95,13 @@ public class Note : INotifyPropertyChanged
                 _lastModified = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(LastModifiedDisplay));
+                OnPropertyChanged(nameof(DateGroup));
             }
         }
     }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public DateTime DateGroup => _lastModified.Date;
 
     [System.Text.Json.Serialization.JsonIgnore]
     public string LastModifiedDisplay

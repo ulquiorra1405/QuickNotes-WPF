@@ -23,6 +23,8 @@
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
+        <local:DateGroupConverter x:Key="DateGroupConverter"/>
+
         <Style x:Key="ColorDot" TargetType="Border">
             <Setter Property="Width" Value="18"/>
             <Setter Property="Height" Value="18"/>
@@ -458,6 +460,19 @@
                                 <views:NoteCard/>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
+                        <ItemsControl.GroupStyle>
+                            <GroupStyle>
+                                <GroupStyle.HeaderTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="14,10,10,4" Margin="0,2,0,0">
+                                            <TextBlock Text="{Binding Name, Converter={StaticResource DateGroupConverter}}"
+                                                       FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="#88FFFFFF"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </GroupStyle.HeaderTemplate>
+                            </GroupStyle>
+                        </ItemsControl.GroupStyle>
                     </ItemsControl>
                 </ScrollViewer>
             </Grid>
