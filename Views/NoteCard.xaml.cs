@@ -244,19 +244,53 @@ public partial class NoteCard : UserControl
         if (DataContext is not Note note || mainBorder.ContextMenu == null) return;
         CurrentContextCard = this;
 
+        // Determine current view state
+        bool isDeleted = note.IsDeleted;
+        bool isArchived = note.IsArchived;
+
         foreach (var item in mainBorder.ContextMenu.Items)
         {
             if (item is MenuItem mi)
             {
                 switch (mi.Tag?.ToString())
                 {
-                    case "Pin":
-                        mi.Header = note.IsPinned ? "Desanclar" : "Anclar";
+                    case "Duplicate":
+                        mi.Visibility = isDeleted ? Visibility.Collapsed : Visibility.Visible;
+                        break;
+
+                    case "Delete":
+                        if (isDeleted)
+                        {
+                            mi.Header = "Eliminar permanentemente";
+                            mi.Tag = "PermanentDelete";
+                        }
+                        else
+                        {
+                            mi.Header = "Eliminar";
+                            mi.Tag = "Delete";
+                        }
+                        break;
+
+                    case "Archive":
+                        mi.Visibility = isDeleted ? Visibility.Collapsed : Visibility.Visible;
+                        mi.Header = isArchived ? "Desarchivar" : "Archivar";
                         break;
 
                     case "Restore":
-                        mi.Visibility = (note.IsArchived || note.IsDeleted)
+                        mi.Visibility = (isArchived || isDeleted)
                             ? Visibility.Visible : Visibility.Collapsed;
+                        break;
+
+                    case "Pin":
+                        mi.Visibility = isDeleted ? Visibility.Collapsed : Visibility.Visible;
+                        mi.Header = note.IsPinned ? "Desanclar" : "Anclar";
+                        break;
+
+                    case "NotebookSubmenu":
+                        mi.Visibility = isDeleted ? Visibility.Collapsed : Visibility.Visible;
+                        break;
+                    case "TagsSubmenu":
+                        mi.Visibility = isDeleted ? Visibility.Collapsed : Visibility.Visible;
                         break;
                 }
             }
