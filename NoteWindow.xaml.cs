@@ -1192,6 +1192,10 @@ public partial class NoteWindow : Window
 
     private void HideFormatPopup()
     {
+        // Reset inline picker state so it works when popup reopens
+        floatHighlightPicker.BeginAnimation(OpacityProperty, null);
+        floatHighlightPicker.Visibility = Visibility.Collapsed;
+        floatHighlightPicker.Opacity = 0;
         formatPopup.IsOpen = false;
     }
 
@@ -1302,9 +1306,16 @@ public partial class NoteWindow : Window
         if (e.LeftButton == MouseButtonState.Pressed)
         {
             if (floatHighlightPicker.Visibility == Visibility.Visible)
+            {
                 CloseHighlightPicker();
+            }
             else
+            {
+                // Reset animation state in case previous fade was interrupted
+                floatHighlightPicker.BeginAnimation(OpacityProperty, null);
+                floatHighlightPicker.Opacity = 0;
                 OpenHighlightPicker();
+            }
         }
     }
 
@@ -1314,15 +1325,21 @@ public partial class NoteWindow : Window
 
         floatHighlightPicker.Children.Clear();
 
-        // Add "no color" button first
+        // Add "no color" button — ✕ removes highlight
         var noColor = new Border
         {
             Width = 14, Height = 14,
             CornerRadius = new CornerRadius(2),
-            Margin = new Thickness(1, 0, 1, 0),
+            Margin = new Thickness(2, 0, 2, 0),
             Cursor = Cursors.Hand,
             Background = Brushes.Transparent,
-            Tag = "clear",
+            Child = new TextBlock
+            {
+                Text = "✕",
+                FontSize = 10,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
         };
         noColor.MouseDown += (_, args) =>
         {
@@ -1361,23 +1378,9 @@ public partial class NoteWindow : Window
             floatHighlightPicker.Children.Add(dot);
         }
 
-        // Add ✕ close button
-        var closeBtn = new Button
-        {
-            Content = "✕",
-            FontSize = 10,
-            Width = 18, Height = 18,
-            Cursor = Cursors.Hand,
-            Padding = new Thickness(0),
-            Style = (Style)FindResource("TitleBtn"),
-        };
-        closeBtn.Click += (_, _) => CloseHighlightPicker();
-        floatHighlightPicker.Children.Add(closeBtn);
-
         // Style the picker to match toolbar
         var dark = IsDarkColor(_note.Color);
         var floatFg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0xCC, 0x3A, 0x3A, 0x3A));
-        closeBtn.Foreground = floatFg;
 
         // Show with fade animation
         floatHighlightPicker.Visibility = Visibility.Visible;
