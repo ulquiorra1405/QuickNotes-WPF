@@ -2005,6 +2005,9 @@ public partial class NoteWindow : Window
 
         noteSearchBox.Focus();
 
+        // Keep selection visible even when search box has focus
+        noteText.IsInactiveSelectionHighlightEnabled = true;
+
         // Clear editor selection so user sees the search box is active
         try { noteText.Selection.Select(noteText.Document.ContentStart, noteText.Document.ContentStart); } catch { }
     }
@@ -2032,6 +2035,9 @@ public partial class NoteWindow : Window
         noteSearchBox.Clear();
         searchCounter.Text = "";
         _searchMatchRanges.Clear();
+
+        // Restore default selection behavior
+        noteText.IsInactiveSelectionHighlightEnabled = false;
 
         // Restore last match selection + focus for floating toolbar to work
         if (savedStart != null && savedEnd != null)
