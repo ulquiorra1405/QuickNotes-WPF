@@ -1739,6 +1739,97 @@ public partial class NoteWindow : Window
         catch (Exception ex) { ErrorLog.Write(ex, "InsertImageFromFile"); }
     }
 
+    // ── Export / Import ──
+
+    private void ExportMenu_Click(object sender, RoutedEventArgs e)
+    {
+        exportPopup.PlacementTarget = exportMenuBtn;
+        exportPopup.IsOpen = true;
+    }
+
+    private void ExportMarkdown_Click(object sender, MouseButtonEventArgs e)
+    {
+        SaveRichText();
+        var content = Helpers.ExportImport.ToMarkdown(_note.Text);
+        SaveFileWithDialog(content, "Markdown files (*.md)|*.md|All files (*.*)|*.*", "md");
+        exportPopup.IsOpen = false;
+    }
+
+    private void ExportText_Click(object sender, MouseButtonEventArgs e)
+    {
+        SaveRichText();
+        var content = Helpers.ExportImport.ToPlainText(_note.Text);
+        SaveFileWithDialog(content, "Text files (*.txt)|*.txt|All files (*.*)|*.*", "txt");
+        exportPopup.IsOpen = false;
+    }
+
+    private void ExportHtml_Click(object sender, MouseButtonEventArgs e)
+    {
+        SaveRichText();
+        var content = Helpers.ExportImport.ToHtml(_note.Text, _note.Title);
+        SaveFileWithDialog(content, "HTML files (*.html)|*.html|All files (*.*)|*.*", "html");
+        exportPopup.IsOpen = false;
+    }
+
+    private void SaveFileWithDialog(string content, string filter, string defaultExt)
+    {
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = SanitizeFileName(_note.Title) + "." + defaultExt,
+            Filter = filter,
+            DefaultExt = "." + defaultExt,
+        };
+        if (dlg.ShowDialog() == true)
+        {
+            File.WriteAllText(dlg.FileName, content, Encoding.UTF8);
+        }
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return "untitled";
+        var invalid = System.IO.Path.GetInvalidFileNameChars();
+        var sanitized = new string(name.Where(c => !invalid.Contains(c)).ToArray()).Trim();
+        return string.IsNullOrEmpty(sanitized) ? "untitled" : sanitized.Length > 100 ? sanitized[..100] : sanitized;
+    }
+
+    private void ImportFile_Click(object sender, MouseButtonEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Supported files (*.md;*.txt;*.html)|*.md;*.txt;*.html|Markdown (*.md)|*.md|Text files (*.txt)|*.txt|HTML files (*.html)|*.html|All files (*.*)|*.*",
+            DefaultExt = ".md",
+        };
+        if (dlg.ShowDialog() == true)
+        {
+            try
+            {
+                var ext = System.IO.Path.GetExtension(dlg.FileName).ToLowerInvariant();
+                var raw = File.ReadAllText(dlg.FileName, Encoding.UTF8);
+                SaveRichText();
+
+                string newXaml = ext switch
+                {
+                    ".md" or ".markdown" => Helpers.ExportImport.FromMarkdown(raw),
+                    ".html" or ".htm" => Helpers.ExportImport.FromHtml(raw),
+                    _ => Helpers.ExportImport.FromPlainText(raw),
+                };
+
+                _note.Text = newXaml;
+                _note.LastModified = DateTime.Now;
+                _store.Save();
+                LoadRichText();
+                MarkDirtyAndDebounce();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error importing file:\n{ex.Message}", "Import error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        exportPopup.IsOpen = false;
+    }
+
     private void InsertImageFromClipboard(BitmapSource img)
     {
         try
