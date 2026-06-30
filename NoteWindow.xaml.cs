@@ -41,6 +41,10 @@ public partial class NoteWindow : Window
     };
 
     private string _searchQuery = "";
+    private bool _isSearchActive;
+    private readonly List<(TextRange range, object? originalBg)> _searchHighlights = new();
+    private int _currentMatchIndex = -1;
+    private int _totalMatches;
 
     private Color _currentHighlightColor = Color.FromArgb(0x55, 0xFF, 0xD7, 0x00);
 
@@ -1178,6 +1182,8 @@ public partial class NoteWindow : Window
 
     private void NoteText_SelectionChanged(object sender, RoutedEventArgs e)
     {
+        if (_isSearchActive) return; // don't show format popup during search
+
         var sel = noteText.Selection;
         if (sel != null && !sel.IsEmpty && sel.Text.TrimEnd().Length > 0)
         {
@@ -1196,6 +1202,8 @@ public partial class NoteWindow : Window
     private void SelectionTimer_Tick(object? sender, EventArgs e)
     {
         _selectionTimer.Stop();
+        if (_isSearchActive) return; // don't show format popup during search
+
         if (noteText.Selection is { IsEmpty: false } sel && sel.Text.TrimEnd().Length > 0)
         {
             // Don't reposition if highlight picker is open
@@ -1978,7 +1986,11 @@ public partial class NoteWindow : Window
 
     private void ShowNoteSearch()
     {
+        ClearSearchHighlights();
         _searchQuery = "";
+        _isSearchActive = true;
+        _currentMatchIndex = -1;
+        _totalMatches = 0;
         noteSearchBox.Clear();
         searchCounter.Text = "";
 
@@ -1993,15 +2005,32 @@ public partial class NoteWindow : Window
 
     private void HideNoteSearch()
     {
+        _isSearchActive = false;
         noteSearchBorder.Visibility = Visibility.Collapsed;
         noteSearchBox.Clear();
-        searchCounter.Text = "";
 
         // Restore title
         titleDisplay.Visibility = Visibility.Visible;
         titleRightPanel.Visibility = Visibility.Visible;
 
+        // Save selection before clearing highlights, then restore for scroll view
+        if (_currentMatchIndex >= 0 && _currentMatchIndex < _searchHighlights.Count)
+        {
+            var range = _searchHighlights[_currentMatchIndex].range;
+            ClearSearchHighlights();
+            try
+            {
+                noteText.Selection.Select(range.Start, range.End);
+            }
+            catch { }
+        }
+        else
+        {
+            ClearSearchHighlights();
+        }
+
         _searchQuery = "";
+        searchCounter.Text = "";
         try { noteText.Focus(); } catch { }
     }
 
@@ -2013,13 +2042,17 @@ public partial class NoteWindow : Window
 
         if (string.IsNullOrEmpty(query))
         {
+            ClearSearchHighlights();
             _searchQuery = "";
+            _currentMatchIndex = -1;
+            _totalMatches = 0;
             searchCounter.Text = "";
             return;
         }
 
         _searchQuery = query;
-        var found = FindAndSelect(query, noteText.Document.ContentStart);
+        _currentMatchIndex = 0;
+        HighlightAllMatches();
         UpdateSearchCounter();
     }
 
@@ -2063,54 +2096,19 @@ public partial class NoteWindow : Window
 
     private void FindNext()
     {
-        if (string.IsNullOrEmpty(_searchQuery)) return;
-        var from = noteText.Selection.IsEmpty
-            ? noteText.Document.ContentStart
-            : noteText.Selection.End;
-        var found = FindAndSelect(_searchQuery, from);
-        if (!found)
-            FindAndSelect(_searchQuery, noteText.Document.ContentStart);
+        if (_totalMatches <= 0 || string.IsNullOrEmpty(_searchQuery)) return;
+        _currentMatchIndex = (_currentMatchIndex + 1) % _totalMatches;
+        UpdateActiveMatchHighlight();
         UpdateSearchCounter();
     }
 
     private void FindPrevious()
     {
-        if (string.IsNullOrEmpty(_searchQuery)) return;
-
-        // Walk from start to find all matches, pick the one just before selection end
-        var text = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd).Text;
-        var selEnd = noteText.Selection.Start;
-        string query = _searchQuery;
-
-        int lastIdx = -1;
-        int at = 0;
-        while ((at = text.IndexOf(query, at, StringComparison.OrdinalIgnoreCase)) >= 0)
-        {
-            var pos = FindTextPointer(noteText.Document.ContentStart, at);
-            if (pos != null && pos.CompareTo(selEnd) < 0)
-                lastIdx = at;
-            else if (pos != null && pos.CompareTo(selEnd) >= 0)
-                break;
-            at += query.Length;
-        }
-
-        if (lastIdx >= 0)
-        {
-            var start = FindTextPointer(noteText.Document.ContentStart, lastIdx);
-            if (start != null)
-            {
-                var end = FindTextPointer(start, query.Length);
-                if (end != null)
-                {
-                    noteText.Selection.Select(start, end);
-                    UpdateSearchCounter();
-                    return;
-                }
-            }
-        }
-
-        // Wrap: go to last occurrence
-        FindAndSelect(query, noteText.Document.ContentEnd);
+        if (_totalMatches <= 0 || string.IsNullOrEmpty(_searchQuery)) return;
+        _currentMatchIndex--;
+        if (_currentMatchIndex < 0)
+            _currentMatchIndex = _totalMatches - 1;
+        UpdateActiveMatchHighlight();
         UpdateSearchCounter();
     }
 
@@ -2122,60 +2120,119 @@ public partial class NoteWindow : Window
             return;
         }
 
-        // Count total matches
-        var fullText = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd).Text;
-        int total = 0, at = 0;
-        while ((at = fullText.IndexOf(_searchQuery, at, StringComparison.OrdinalIgnoreCase)) >= 0)
-        {
-            total++;
-            at += _searchQuery.Length;
-        }
-
-        if (total == 0)
+        if (_totalMatches == 0)
         {
             searchCounter.Text = "Sin resultados";
             searchCounter.Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0x66, 0x66));
             return;
         }
 
-        // Find current match position
-        var sel = noteText.Selection;
-        int current = 0;
-        if (!sel.IsEmpty)
-        {
-            int idx2 = 0;
-            int matchNum = 0;
-            while ((idx2 = fullText.IndexOf(_searchQuery, idx2, StringComparison.OrdinalIgnoreCase)) >= 0)
-            {
-                matchNum++;
-                var pos = FindTextPointer(noteText.Document.ContentStart, idx2);
-                if (pos != null && pos.CompareTo(sel.Start) == 0)
-                {
-                    current = matchNum;
-                    break;
-                }
-                idx2 += _searchQuery.Length;
-            }
-        }
-
         searchCounter.Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF));
-        searchCounter.Text = current > 0 ? $"{current}/{total}" : $"0/{total}";
+        searchCounter.Text = $"{_currentMatchIndex + 1}/{_totalMatches}";
     }
 
-    private bool FindAndSelect(string query, TextPointer from)
+    // ── Search highlights ──
+
+    private void ClearSearchHighlights()
     {
-        var text = new TextRange(from, noteText.Document.ContentEnd).Text;
-        int idx = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
-        if (idx < 0) return false;
+        foreach (var (range, originalBg) in _searchHighlights)
+        {
+            try
+            {
+                range.ApplyPropertyValue(TextElement.BackgroundProperty,
+                    originalBg ?? Brushes.Transparent);
+            }
+            catch { }
+        }
+        _searchHighlights.Clear();
+        _totalMatches = 0;
+        _currentMatchIndex = -1;
+    }
 
-        var start = FindTextPointer(from, idx);
-        if (start == null) return false;
-        var end = FindTextPointer(start, query.Length);
-        if (end == null) return false;
+    private void HighlightAllMatches()
+    {
+        ClearSearchHighlights();
+        if (string.IsNullOrEmpty(_searchQuery)) return;
 
-        noteText.Selection.Select(start, end);
-        // Do NOT steal focus from search box
-        return true;
+        var (normalColor, activeColor) = GetSearchHighlightColors();
+        var fullText = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd).Text;
+
+        int idx = 0;
+        int matchIdx = 0;
+        while ((idx = fullText.IndexOf(_searchQuery, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            var start = FindTextPointer(noteText.Document.ContentStart, idx);
+            if (start == null) { idx++; continue; }
+            var end = FindTextPointer(start, _searchQuery.Length);
+            if (end == null) { idx++; continue; }
+
+            var range = new TextRange(start, end);
+            object? origBg = null;
+            try
+            {
+                var val = range.GetPropertyValue(TextElement.BackgroundProperty);
+                if (val != DependencyProperty.UnsetValue)
+                    origBg = val;
+            }
+            catch { }
+
+            var color = (matchIdx == _currentMatchIndex) ? activeColor : normalColor;
+            range.ApplyPropertyValue(TextElement.BackgroundProperty, new SolidColorBrush(color));
+
+            _searchHighlights.Add((range, origBg));
+            matchIdx++;
+            idx += _searchQuery.Length;
+        }
+
+        _totalMatches = matchIdx;
+
+        // Select first match for scroll visibility
+        if (_totalMatches > 0 && _currentMatchIndex >= 0)
+            ScrollToMatch(_currentMatchIndex);
+    }
+
+    private void UpdateActiveMatchHighlight()
+    {
+        if (_searchHighlights.Count == 0) return;
+        if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchHighlights.Count)
+        {
+            _currentMatchIndex = 0;
+            return;
+        }
+
+        var (normalColor, activeColor) = GetSearchHighlightColors();
+
+        for (int i = 0; i < _searchHighlights.Count; i++)
+        {
+            try
+            {
+                var color = (i == _currentMatchIndex) ? activeColor : normalColor;
+                _searchHighlights[i].range.ApplyPropertyValue(
+                    TextElement.BackgroundProperty, new SolidColorBrush(color));
+            }
+            catch { }
+        }
+
+        ScrollToMatch(_currentMatchIndex);
+    }
+
+    private void ScrollToMatch(int index)
+    {
+        if (index < 0 || index >= _searchHighlights.Count) return;
+        try
+        {
+            var range = _searchHighlights[index].range;
+            noteText.Selection.Select(range.Start, range.End);
+        }
+        catch { }
+    }
+
+    private (Color normal, Color active) GetSearchHighlightColors()
+    {
+        var dark = IsDarkColor(_note.Color);
+        return dark
+            ? (Color.FromArgb(0x66, 0x90, 0xCA, 0xFF), Color.FromArgb(0xAA, 0x66, 0xBB, 0xFF))
+            : (Color.FromArgb(0x88, 0x22, 0x44, 0x88), Color.FromArgb(0xBB, 0x11, 0x33, 0xAA));
     }
 
     private static TextPointer? FindTextPointer(TextPointer from, int offset)
