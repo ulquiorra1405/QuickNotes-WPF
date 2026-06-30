@@ -261,8 +261,7 @@
             </local:NoteRichTextBox>
             <!-- Search highlight overlay (no document modification) -->
             <Canvas x:Name="searchCanvas" IsHitTestVisible="False"
-                    ClipToBounds="True" Visibility="Collapsed"
-                    Margin="10,0,15,0"/>
+                    ClipToBounds="True" Visibility="Collapsed"/>
         </Grid>
 
         <!-- Bottom bar: color picker (collapsed) + format buttons -->
