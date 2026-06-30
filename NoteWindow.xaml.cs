@@ -106,17 +106,37 @@ public partial class NoteWindow : Window
         PreviewKeyDown += NoteWindow_PreviewKeyDown;
         PreviewMouseDown += (_, e) =>
         {
-            if (!colorPopup.IsOpen && !emojiPopup.IsOpen && !highlightPopup.IsOpen) return;
+            bool anyOpen = colorPopup.IsOpen || emojiPopup.IsOpen || highlightPopup.IsOpen || formatPopup.IsOpen;
+            if (!anyOpen) return;
+
+            bool clickedTrigger = false;
+            bool insideEditor = false;
+
             if (e.OriginalSource is DependencyObject src)
             {
-                if (colorPopup.IsOpen && FindParent<Border>(src) == currentColorDot) return;
-                if (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn) return;
-                if (highlightPopup.IsOpen && FindParent<Border>(src) == highlightBtn) return;
-                if (highlightPopup.IsOpen && FindParent<Border>(src) == floatHighlightBtn) return;
+                clickedTrigger =
+                    (colorPopup.IsOpen && FindParent<Border>(src) == currentColorDot) ||
+                    (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn) ||
+                    (highlightPopup.IsOpen && FindParent<Border>(src) == highlightBtn) ||
+                    (highlightPopup.IsOpen && FindParent<Border>(src) == floatHighlightBtn);
+                insideEditor = FindParent<RichTextBox>(src) == noteText;
+
+                // Check if click is inside formatPopup's border (its toolbar buttons)
+                if (formatPopup.IsOpen && formatPopup.Child is Border fmtBorder)
+                {
+                    if (FindParent<Border>(src) == fmtBorder)
+                        return; // Don't close anything when clicking format toolbar buttons
+                }
             }
+
+            if (clickedTrigger) return;
+
             colorPopup.IsOpen = false;
             emojiPopup.IsOpen = false;
             highlightPopup.IsOpen = false;
+
+            if (formatPopup.IsOpen && !insideEditor)
+                HideFormatPopup();
         };
 
         // Image paste via NoteWindow_PreviewKeyDown
@@ -1373,32 +1393,7 @@ public partial class NoteWindow : Window
     {
         if (e.LeftButton == MouseButtonState.Pressed)
         {
-            // Calculate where the highlight button is relative to noteText
-            // formatPopup is at (fmtOffX, fmtOffY) relative to noteText
-            var fmtOffX = formatPopup.HorizontalOffset;
-            var fmtOffY = formatPopup.VerticalOffset;
-
-            // Walk toolbar children to find floatHighlightBtn's X within the toolbar
-            double btnX = 0, btnH = 0;
-            bool found = false;
-            foreach (var child in formatToolbar.Children)
-            {
-                if (child == floatHighlightBtn)
-                {
-                    btnX += floatHighlightBtn.ActualWidth / 2; // center
-                    btnH = floatHighlightBtn.ActualHeight;
-                    found = true;
-                    break;
-                }
-                if (child is FrameworkElement fe)
-                    btnX += fe.ActualWidth + fe.Margin.Left + fe.Margin.Right;
-            }
-
-            // Close formatPopup so the highlight picker doesn't compete for events
-            formatPopup.IsOpen = false;
-
-            if (!found) return;
-
+            // Center above the highlight button (14px wide)
             double pw = 144;
             if (highlightPopup.Child is FrameworkElement hlChild)
             {
@@ -1406,10 +1401,10 @@ public partial class NoteWindow : Window
                 pw = hlChild.DesiredSize.Width;
             }
 
-            highlightPopup.Placement = PlacementMode.Relative;
-            highlightPopup.PlacementTarget = noteText;
-            highlightPopup.HorizontalOffset = fmtOffX + btnX - (pw / 2);
-            highlightPopup.VerticalOffset = fmtOffY - 6;
+            highlightPopup.Placement = PlacementMode.Top;
+            highlightPopup.PlacementTarget = floatHighlightBtn;
+            highlightPopup.HorizontalOffset = -(pw / 2) + 7;
+            highlightPopup.VerticalOffset = -4;
             highlightPopup.IsOpen = !highlightPopup.IsOpen;
         }
     }

@@ -308,7 +308,7 @@
 
         <!-- Floating format toolbar -->
         <Popup x:Name="formatPopup" AllowsTransparency="True" PopupAnimation="Fade"
-               StaysOpen="False" Placement="Absolute" Focusable="False">
+               StaysOpen="True" Placement="Absolute" Focusable="False">
             <Border BorderBrush="#40000000" BorderThickness="1"
                     CornerRadius="8" Padding="6,3">
                 <StackPanel Orientation="Horizontal" x:Name="formatToolbar">
