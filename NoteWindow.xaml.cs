@@ -133,7 +133,7 @@ public partial class NoteWindow : Window
                 if (e.OriginalSource is DependencyObject s)
                 {
                     var sp = FindParent<StackPanel>(s);
-                    clickedOnToolbar = sp == formatToolbar || sp == floatHighlightPicker;
+                    clickedOnToolbar = sp == formatToolbar || sp == floatHighlightPicker || sp == floatHeadingPicker;
                 }
                 if (!clickedOnToolbar)
                     HideFormatPopup();
@@ -1450,11 +1450,14 @@ public partial class NoteWindow : Window
 
     private void SetHeading(int level)
     {
-        var sel = noteText.Selection;
-        if (sel.IsEmpty) return;
+        // Use caret position paragraph if nothing selected, else selection start
+        TextPointer pos;
+        if (noteText.Selection.IsEmpty)
+            pos = noteText.CaretPosition;
+        else
+            pos = noteText.Selection.Start;
 
-        // Get the paragraph of the selection start
-        var para = sel.Start.Paragraph;
+        var para = pos.Paragraph;
         if (para == null) return;
 
         switch (level)
@@ -1476,6 +1479,8 @@ public partial class NoteWindow : Window
                 para.FontWeight = FontWeights.Normal;
                 break;
         }
+
+        MarkDirtyAndDebounce();
     }
 
     private void FloatHeading_Click(object sender, RoutedEventArgs e)
@@ -1500,7 +1505,7 @@ public partial class NoteWindow : Window
         var dark = IsDarkColor(_note.Color);
         var fg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0xCC, 0x3A, 0x3A, 0x3A));
 
-        var items = new[] { ("N", 0, "Normal"), ("H1", 1, "Encabezado 1"),
+        var items = new[] { ("✕", 0, "Normal"), ("H1", 1, "Encabezado 1"),
                             ("H2", 2, "Encabezado 2"), ("H3", 3, "Encabezado 3") };
 
         foreach (var (label, level, tooltip) in items)
