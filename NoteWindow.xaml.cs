@@ -13,6 +13,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using QuickNotes.Models;
 
 namespace QuickNotes;
@@ -33,6 +34,11 @@ public partial class NoteWindow : Window
 
     private readonly Note _note;
     private readonly NotesStore _store;
+
+    private readonly DispatcherTimer _selectionTimer = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(350),
+    };
 
     private string _searchQuery = "";
 
@@ -106,6 +112,7 @@ public partial class NoteWindow : Window
                 if (colorPopup.IsOpen && FindParent<Border>(src) == currentColorDot) return;
                 if (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn) return;
                 if (highlightPopup.IsOpen && FindParent<Border>(src) == highlightBtn) return;
+                if (highlightPopup.IsOpen && FindParent<Border>(src) == floatHighlightBtn) return;
             }
             colorPopup.IsOpen = false;
             emojiPopup.IsOpen = false;
@@ -123,6 +130,12 @@ public partial class NoteWindow : Window
         // Highlight popup
         BuildHighlightPicker();
         highlightBtn.Background = new SolidColorBrush(_currentHighlightColor);
+
+        // Floating toolbar timer
+        _selectionTimer.Tick += SelectionTimer_Tick;
+
+        // Right-click context menu
+        noteText.ContextMenuOpening += NoteText_ContextMenuOpening;
     }
 
     private void NoteText_Drop(object sender, DragEventArgs e)
@@ -525,6 +538,21 @@ public partial class NoteWindow : Window
         var fg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0x88, 0x3A, 0x3A, 0x3A));
         SetPanelForeground(titleRightPanel, fg);
         SetPanelForeground(bottomRightPanel, fg);
+
+        // Update floating toolbar too
+        var floatFg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0xCC, 0x3A, 0x3A, 0x3A));
+        foreach (var child in formatToolbar.Children)
+        {
+            if (child is Control ctrl)
+                ctrl.Foreground = floatFg;
+        }
+        if (formatPopup.Child is Border floatBorder)
+        {
+            var darkBg = Color.FromArgb(0xF2, 0x2D, 0x2D, 0x2D);
+            var lightBg = Color.FromArgb(0xF2, 0xE8, 0xE8, 0xE8);
+            floatBorder.Background = new SolidColorBrush(dark ? darkBg : lightBg);
+        }
+
         ApplyScrollbarReversal(noteText, _note.Color);
     }
 
@@ -1167,6 +1195,308 @@ public partial class NoteWindow : Window
                 doc.Blocks.Add(newList);
         }
         MarkDirtyAndDebounce();
+    }
+
+    // ── Floating format toolbar ──
+
+    private void NoteText_SelectionChanged(object sender, RoutedEventArgs e)
+    {
+        var sel = noteText.Selection;
+        if (sel != null && !sel.IsEmpty && sel.Text.TrimEnd().Length > 0)
+        {
+            _selectionTimer.Stop();
+            _selectionTimer.Start();
+        }
+        else
+        {
+            _selectionTimer.Stop();
+            HideFormatPopup();
+        }
+    }
+
+    private void SelectionTimer_Tick(object? sender, EventArgs e)
+    {
+        _selectionTimer.Stop();
+        if (noteText.Selection is { IsEmpty: false } sel && sel.Text.TrimEnd().Length > 0)
+            ShowFormatPopup();
+    }
+
+    private void ShowFormatPopup()
+    {
+        if (formatPopup.IsOpen) return;
+        UpdateFloatingToolbarStyle();
+        PositionFormatPopup();
+        formatPopup.IsOpen = true;
+    }
+
+    private void HideFormatPopup()
+    {
+        if (!formatPopup.IsOpen) return;
+        highlightPopup.IsOpen = false;
+        formatPopup.IsOpen = false;
+    }
+
+    private void PositionFormatPopup()
+    {
+        var sel = noteText.Selection;
+        if (sel == null || sel.IsEmpty) return;
+
+        try
+        {
+            var startPt = sel.Start.GetCharacterRect(LogicalDirection.Forward);
+            var endPt = sel.End.GetCharacterRect(LogicalDirection.Backward);
+
+            // Convert to screen coordinates directly from noteText
+            var startScreen = noteText.PointToScreen(new Point(startPt.X, startPt.Y));
+            var endScreen = noteText.PointToScreen(new Point(endPt.X + endPt.Width, endPt.Y + endPt.Height));
+
+            // Calculate selection center and top edge in screen coords
+            double selCenterX = (startScreen.X + endScreen.X) / 2;
+            double selTopY = Math.Min(startScreen.Y, endScreen.Y);
+            double selBottomY = Math.Max(startScreen.Y + startPt.Height, endScreen.Y + endPt.Height);
+
+            // Force layout to get actual toolbar size
+            formatToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            var tw = formatToolbar.DesiredSize.Width;
+            var th = formatToolbar.DesiredSize.Height;
+
+            // Center above selection
+            double popupX = Math.Max(10, selCenterX - tw / 2);
+            double popupY = selTopY - th - 8;
+
+            // If off-screen top, show below instead
+            if (popupY < 40)
+                popupY = selBottomY + 6;
+
+            // Clamp within screen bounds
+            popupX = Math.Max(4, Math.Min(popupX, SystemParameters.PrimaryScreenWidth - tw - 4));
+
+            formatPopup.Placement = PlacementMode.Absolute;
+            formatPopup.HorizontalOffset = popupX;
+            formatPopup.VerticalOffset = popupY;
+        }
+        catch
+        {
+            // Fallback: center popup roughly
+            formatPopup.Placement = PlacementMode.Absolute;
+            formatPopup.HorizontalOffset = Math.Max(10, Left + Width / 2 - 100);
+            formatPopup.VerticalOffset = Top + 60;
+        }
+    }
+
+    private void UpdateFloatingToolbarStyle()
+    {
+        var dark = IsDarkColor(_note.Color);
+        var darkBg = Color.FromArgb(0xF2, 0x2D, 0x2D, 0x2D);
+        var lightBg = Color.FromArgb(0xF2, 0xE8, 0xE8, 0xE8);
+
+        // Set popup background
+        if (formatPopup.Child is Border popupBorder)
+            popupBorder.Background = new SolidColorBrush(dark ? darkBg : lightBg);
+
+        // Set button foregrounds
+        var fg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0xCC, 0x3A, 0x3A, 0x3A));
+        foreach (var child in formatToolbar.Children)
+        {
+            if (child is Control ctrl)
+                ctrl.Foreground = fg;
+        }
+
+        // Sync highlight button with current color
+        floatHighlightBtn.Background = new SolidColorBrush(_currentHighlightColor);
+    }
+
+    // ── Floating toolbar button handlers ──
+
+    private void FloatBold_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleBold();
+        try { noteText.Focus(); } catch { }
+    }
+    private void FloatItalic_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleItalic();
+        try { noteText.Focus(); } catch { }
+    }
+    private void FloatUnderline_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleUnderline();
+        try { noteText.Focus(); } catch { }
+    }
+    private void FloatStrike_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleStrikethrough();
+        try { noteText.Focus(); } catch { }
+    }
+    private void FloatCheckbox_Click(object sender, RoutedEventArgs e)
+    {
+        InsertCheckbox();
+        try { noteText.Focus(); } catch { }
+    }
+
+    private void FloatHighlight_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed)
+        {
+            // Position highlight popup near the floating toolbar highlight button
+            try
+            {
+                var btnPt = floatHighlightBtn.PointToScreen(new Point(0, 0));
+                highlightPopup.Placement = PlacementMode.Absolute;
+                highlightPopup.HorizontalOffset = btnPt.X;
+                highlightPopup.VerticalOffset = btnPt.Y - 8;
+            }
+            catch { }
+
+            highlightPopup.IsOpen = !highlightPopup.IsOpen;
+        }
+    }
+
+    // ── Right-click context menu ──
+
+    private void NoteText_ContextMenuOpening(object? sender, ContextMenuEventArgs e)
+    {
+        var menu = new ContextMenu();
+
+        // Standard edit items
+        menu.Items.Add(new MenuItem
+        {
+            Header = "Cortar",
+            Command = ApplicationCommands.Cut,
+            CommandTarget = noteText,
+        });
+        menu.Items.Add(new MenuItem
+        {
+            Header = "Copiar",
+            Command = ApplicationCommands.Copy,
+            CommandTarget = noteText,
+        });
+        menu.Items.Add(new MenuItem
+        {
+            Header = "Pegar",
+            Command = ApplicationCommands.Paste,
+            CommandTarget = noteText,
+        });
+        menu.Items.Add(new Separator());
+
+        // Move to notebook submenu
+        var notebookMenu = new MenuItem { Header = "Mover a libreta" };
+        foreach (var nb in _store.Notebooks)
+        {
+            var item = new MenuItem
+            {
+                Header = $"{nb.Icon} {nb.Name}",
+                Tag = nb.Id,
+            };
+            item.Click += ContextMenu_MoveToNotebook;
+            notebookMenu.Items.Add(item);
+        }
+        notebookMenu.Items.Add(new Separator());
+        var noNotebook = new MenuItem { Header = "Sin libreta" };
+        noNotebook.Click += ContextMenu_ClearNotebook;
+        notebookMenu.Items.Add(noNotebook);
+        menu.Items.Add(notebookMenu);
+
+        // Tag submenu
+        var tagMenu = new MenuItem { Header = "Asignar tag" };
+        foreach (var t in _store.Tags)
+        {
+            var item = new MenuItem
+            {
+                Header = $"#{t.Name}",
+                IsChecked = _note.TagIds?.Contains(t.Id) == true,
+                Tag = t.Id,
+            };
+            item.Click += ContextMenu_ToggleTag;
+            tagMenu.Items.Add(item);
+        }
+        menu.Items.Add(tagMenu);
+        menu.Items.Add(new Separator());
+
+        // Note actions
+        var duplicateItem = new MenuItem { Header = "Duplicar nota" };
+        duplicateItem.Click += ContextMenu_DuplicateNote;
+        menu.Items.Add(duplicateItem);
+
+        var archiveItem = new MenuItem { Header = "Archivar nota" };
+        archiveItem.Click += ContextMenu_ArchiveNote;
+        menu.Items.Add(archiveItem);
+
+        var deleteItem = new MenuItem { Header = "Eliminar nota" };
+        deleteItem.Click += ContextMenu_DeleteNote;
+        menu.Items.Add(deleteItem);
+
+        noteText.ContextMenu = menu;
+    }
+
+    private void ContextMenu_MoveToNotebook(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem item && item.Tag is Guid nbId)
+        {
+            _note.NotebookId = nbId;
+            _note.LastModified = DateTime.Now;
+            _store.Save();
+        }
+    }
+
+    private void ContextMenu_ClearNotebook(object sender, RoutedEventArgs e)
+    {
+        _note.NotebookId = null;
+        _note.LastModified = DateTime.Now;
+        _store.Save();
+    }
+
+    private void ContextMenu_ToggleTag(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem item && item.Tag is Guid tagId)
+        {
+            if (_note.TagIds.Contains(tagId))
+                _note.TagIds.Remove(tagId);
+            else
+                _note.TagIds.Add(tagId);
+            _note.LastModified = DateTime.Now;
+            _store.Save();
+        }
+    }
+
+    private void ContextMenu_DuplicateNote(object sender, RoutedEventArgs e)
+    {
+        // Save current note first
+        SaveRichText();
+
+        var copy = new Note
+        {
+            Title = _note.Title + " (copia)",
+            Text = _note.Text,
+            Color = _note.Color,
+            Icon = _note.Icon,
+            LastModified = DateTime.Now,
+        };
+        _store.Notes.Add(copy);
+        _store.Save();
+
+        // Open the duplicated note
+        var win = new NoteWindow(copy, _store);
+        win.Left = Left + 25;
+        win.Top = Top + 25;
+        win.Show();
+    }
+
+    private void ContextMenu_ArchiveNote(object sender, RoutedEventArgs e)
+    {
+        _note.IsArchived = true;
+        _note.LastModified = DateTime.Now;
+        _store.Save();
+        Close();
+    }
+
+    private void ContextMenu_DeleteNote(object sender, RoutedEventArgs e)
+    {
+        _note.IsDeleted = true;
+        _note.DeletedAt = DateTime.Now;
+        _note.LastModified = DateTime.Now;
+        _store.Save();
+        Close();
     }
 
     // ── Image support ──

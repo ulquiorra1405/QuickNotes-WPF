@@ -226,6 +226,7 @@
                          TextChanged="NoteText_TextChanged"
                          PreviewMouseLeftButtonDown="NoteText_PreviewMouseDown"
                          PreviewMouseMove="NoteText_PreviewMouseMove"
+                         SelectionChanged="NoteText_SelectionChanged"
                          IsDocumentEnabled="True">
                 <local:NoteRichTextBox.Resources>
                     <Style TargetType="Paragraph">
@@ -301,66 +302,67 @@
                             Width="24" Height="22" Cursor="Hand" ToolTip="Rehacer (Ctrl+Y)"
                             Style="{StaticResource TitleBtn}"
                             Click="RedoBtn_Click"/>
-                    <Rectangle Width="1" Fill="#30000000" Margin="4,4"/>
-                    <Button x:Name="boldBtn" Content="B" FontWeight="Bold" FontSize="11"
-                            Width="24" Height="22" Cursor="Hand" ToolTip="Negrita"
-                            Style="{StaticResource TitleBtn}"
-                            Click="BoldBtn_Click"/>
-                    <Button x:Name="italicBtn" Content="I" FontStyle="Italic" FontSize="11"
-                            Width="24" Height="22" Cursor="Hand" ToolTip="Cursiva"
-                            Style="{StaticResource TitleBtn}"
-                            Click="ItalicBtn_Click"/>
-                    <Button x:Name="underlineBtn" Content="U" FontSize="11"
-                            Width="24" Height="22" Cursor="Hand" ToolTip="Subrayado"
-                            Style="{StaticResource TitleBtn}"
-                            Click="UnderlineBtn_Click">
-                        <Button.ContentTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="U" TextDecorations="Underline"/>
-                            </DataTemplate>
-                        </Button.ContentTemplate>
-                    </Button>
-                    <Button x:Name="strikeBtn" FontSize="12"
-                            Width="24" Height="22" Cursor="Hand" ToolTip="Tachado"
-                            Style="{StaticResource TitleBtn}"
-                            Click="StrikeBtn_Click">
-                        <Button.ContentTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="S" TextDecorations="Strikethrough"/>
-                            </DataTemplate>
-                        </Button.ContentTemplate>
-                    </Button>
-                    <Border x:Name="highlightBtn" Width="14" Height="14"
-                            CornerRadius="2" Cursor="Hand"
-                            BorderBrush="#80000000" BorderThickness="1"
-                            ToolTip="Resaltar (Ctrl+H)"
-                            MouseDown="HighlightBtn_MouseDown"/>
-                    <Popup x:Name="highlightPopup" Placement="Top"
-                           PlacementTarget="{Binding ElementName=highlightBtn}"
-                           StaysOpen="True" AllowsTransparency="True"
-                           PopupAnimation="Fade">
-                        <Border Background="{Binding Color}" CornerRadius="6" Padding="2"
-                                BorderBrush="#40000000" BorderThickness="1">
-                            <StackPanel x:Name="highlightPanel" Orientation="Horizontal"/>
-                        </Border>
-                    </Popup>
-                    <Rectangle Width="1" Fill="#30000000" Margin="4,4"/>
-                    <Button x:Name="bulletBtn" Content="•" FontSize="16"
-                            Width="24" Height="22" Cursor="Hand" ToolTip="Lista con viñetas"
-                            Style="{StaticResource TitleBtn}"
-                            Click="BulletBtn_Click"/>
-                    <Button x:Name="numberBtn" Content="1." FontSize="12"
-                            Width="24" Height="22" Cursor="Hand" ToolTip="Lista numerada"
-                            Style="{StaticResource TitleBtn}"
-                            Click="NumberBtn_Click"/>
-                    <Rectangle Width="1" Fill="#30000000" Margin="4,4"/>
-                    <Button Content="◻" FontSize="14"
-                            Width="24" Height="22" Cursor="Hand" ToolTip="Checklist"
-                            Style="{StaticResource TitleBtn}"
-                            Click="CheckboxBtn_Click"/>
-                    <Rectangle Width="1" Fill="#30000000" Margin="4,4"/>
                 </StackPanel>
             </Grid>
         </Border>
+
+        <!-- Floating format toolbar -->
+        <Popup x:Name="formatPopup" AllowsTransparency="True" PopupAnimation="Fade"
+               StaysOpen="False" Placement="Absolute">
+            <Border BorderBrush="#40000000" BorderThickness="1"
+                    CornerRadius="8" Padding="6,3">
+                <StackPanel Orientation="Horizontal" x:Name="formatToolbar">
+                    <Button x:Name="floatBoldBtn" Content="B" FontWeight="Bold" FontSize="11"
+                            Width="26" Height="24" Cursor="Hand" ToolTip="Negrita"
+                            Style="{StaticResource TitleBtn}" Foreground="#DDD"
+                            Click="FloatBold_Click"/>
+                    <Button x:Name="floatItalicBtn" Content="I" FontStyle="Italic" FontSize="11"
+                            Width="26" Height="24" Cursor="Hand" ToolTip="Cursiva"
+                            Style="{StaticResource TitleBtn}" Foreground="#DDD"
+                            Click="FloatItalic_Click"/>
+                    <Button x:Name="floatUnderlineBtn" Content="U" FontSize="11"
+                            Width="26" Height="24" Cursor="Hand" ToolTip="Subrayado"
+                            Style="{StaticResource TitleBtn}" Foreground="#DDD"
+                            Click="FloatUnderline_Click">
+                        <Button.ContentTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="U" TextDecorations="Underline" Foreground="#DDD"/>
+                            </DataTemplate>
+                        </Button.ContentTemplate>
+                    </Button>
+                    <Button x:Name="floatStrikeBtn" Content="S" FontSize="12"
+                            Width="26" Height="24" Cursor="Hand" ToolTip="Tachado"
+                            Style="{StaticResource TitleBtn}" Foreground="#DDD"
+                            Click="FloatStrike_Click">
+                        <Button.ContentTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="S" TextDecorations="Strikethrough" Foreground="#DDD"/>
+                            </DataTemplate>
+                        </Button.ContentTemplate>
+                    </Button>
+                    <Rectangle Width="1" Fill="#40FFFFFF" Margin="3,2"/>
+                    <Border x:Name="floatHighlightBtn" Width="14" Height="14"
+                            CornerRadius="2" Cursor="Hand" Margin="3,0"
+                            BorderBrush="#40FFFFFF" BorderThickness="1"
+                            ToolTip="Resaltar"
+                            MouseDown="FloatHighlight_MouseDown"/>
+                    <Rectangle Width="1" Fill="#40FFFFFF" Margin="3,2"/>
+                    <Button x:Name="floatCheckboxBtn" Content="◻" FontSize="14"
+                            Width="26" Height="24" Cursor="Hand" ToolTip="Checklist"
+                            Style="{StaticResource TitleBtn}" Foreground="#DDD"
+                            Click="FloatCheckbox_Click"/>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- Hidden highlight popup (kept for code compatibility) -->
+        <Border x:Name="highlightBtn" Width="0" Height="0" Visibility="Collapsed"/>
+        <Popup x:Name="highlightPopup" Placement="Top"
+               StaysOpen="True" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="#2D2D2D" CornerRadius="6" Padding="2"
+                    BorderBrush="#3A3A3A" BorderThickness="1">
+                <StackPanel x:Name="highlightPanel" Orientation="Horizontal"/>
+            </Border>
+        </Popup>
     </Grid>
 </Window>
