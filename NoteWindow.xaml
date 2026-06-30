@@ -189,24 +189,47 @@
                 <Border x:Name="noteSearchBorder" Visibility="Collapsed"
                         WindowChrome.IsHitTestVisibleInChrome="True"
                         Background="#1E1E1E" BorderBrush="#3A3A3A"
-                        BorderThickness="1" CornerRadius="4"
-                        HorizontalAlignment="Right" Width="140"
-                        VerticalAlignment="Center" Height="22" Margin="0,0,6,0">
+                        BorderThickness="0" CornerRadius="0"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch" Margin="0" Padding="8,0,0,0">
                     <Grid>
-                        <TextBox x:Name="noteSearchBox"
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="🔍" FontSize="11"
+                                   VerticalAlignment="Center" Margin="0,0,4,0"
+                                   Foreground="#88DDDDDD"/>
+                        <TextBox x:Name="noteSearchBox" Grid.Column="1"
                                  WindowChrome.IsHitTestVisibleInChrome="True"
                                  Background="Transparent" BorderThickness="0"
-                                 Foreground="#DDDDDD" FontSize="11"
+                                 Foreground="#DDDDDD" FontSize="12"
                                  VerticalAlignment="Center"
-                                 Padding="6,0,4,0"
+                                 Padding="2,0,4,0"
                                  TextChanged="NoteSearch_TextChanged"
-                                 LostFocus="NoteSearch_LostFocus"/>
-                        <TextBlock x:Name="noteSearchHint"
-                                   Text="Buscar..."
-                                   Foreground="#66DDDDDD" FontSize="11"
+                                 LostFocus="NoteSearch_LostFocus"
+                                 PreviewKeyDown="NoteSearch_PreviewKeyDown"/>
+                        <TextBlock x:Name="noteSearchHint" Grid.Column="1"
+                                   Text="Buscar en la nota..."
+                                   Foreground="#66DDDDDD" FontSize="12"
                                    IsHitTestVisible="False"
                                    VerticalAlignment="Center"
-                                   Padding="6,0,4,0"/>
+                                   Padding="2,0,4,0"/>
+                        <TextBlock x:Name="searchCounter" Grid.Column="2"
+                                   Text="" FontSize="10"
+                                   VerticalAlignment="Center"
+                                   Foreground="#66DDDDDD"
+                                   Margin="4,0,4,0"
+                                   IsHitTestVisible="False"/>
+                        <Button x:Name="searchCloseBtn" Grid.Column="3"
+                                Content="✕" Width="24" Height="24"
+                                Style="{StaticResource TitleBtn}"
+                                Foreground="#88DDDDDD" FontSize="10"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
+                                ToolTip="Cerrar (Escape)"
+                                Click="SearchClose_Click"/>
                     </Grid>
                 </Border>
             </Grid>
@@ -350,7 +373,16 @@
                                 Visibility="Collapsed" Opacity="0">
                         <!-- Color dots built in code -->
                     </StackPanel>
-                    <Rectangle x:Name="floatSep2" Width="1" Fill="#40FFFFFF" Margin="3,2"/>
+                    <Rectangle Width="1" Fill="#40FFFFFF" Margin="3,2"/>
+                    <Button x:Name="floatHeadingBtn" Content="H▼" FontSize="10"
+                            Width="26" Height="24" Cursor="Hand" ToolTip="Encabezado"
+                            Style="{StaticResource TitleBtn}"
+                            Click="FloatHeading_Click"/>
+                    <StackPanel x:Name="floatHeadingPicker" Orientation="Horizontal"
+                                Visibility="Collapsed" Opacity="0">
+                        <!-- Heading options built in code -->
+                    </StackPanel>
+                    <Rectangle Width="1" Fill="#40FFFFFF" Margin="3,2"/>
                     <Button x:Name="floatCheckboxBtn" Content="◻" FontSize="14"
                             Width="26" Height="24" Cursor="Hand" ToolTip="Checklist"
                             Style="{StaticResource TitleBtn}"

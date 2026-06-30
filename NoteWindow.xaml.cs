@@ -585,6 +585,27 @@ public partial class NoteWindow : Window
         if (formatPopup.Child is Border floatBorder)
             floatBorder.Background = new SolidColorBrush(bgColor);
 
+        // Style heading picker buttons if visible
+        foreach (var child in floatHeadingPicker.Children)
+        {
+            if (child is Control ctrl)
+                ctrl.Foreground = floatFg;
+        }
+
+        // Style search bar dynamically
+        var searchFg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0xBB, 0x3A, 0x3A, 0x3A));
+        noteSearchBox.Foreground = searchFg;
+        noteSearchHint.Foreground = new SolidColorBrush(Color.FromArgb(0x66,
+            dark ? (byte)0xFF : (byte)0x3A,
+            dark ? (byte)0xFF : (byte)0x3A,
+            dark ? (byte)0xFF : (byte)0x3A));
+        var searchBg = dark ? Color.FromArgb(0xE0, 0x2D, 0x2D, 0x2D) : Color.FromArgb(0xE0, 0xF0, 0xF0, 0xF0);
+        noteSearchBorder.Background = new SolidColorBrush(searchBg);
+        noteSearchBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0x40,
+            dark ? (byte)0xFF : (byte)0x00,
+            dark ? (byte)0xFF : (byte)0x00,
+            dark ? (byte)0xFF : (byte)0x00));
+
         ApplyScrollbarReversal(noteText, _note.Color);
     }
 
@@ -942,6 +963,10 @@ public partial class NoteWindow : Window
                 case Key.Y: Redo(); e.Handled = true; return;
                 case Key.L: ToggleHighlight(); e.Handled = true; return;
                 case Key.H: ToggleHighlight(); e.Handled = true; return;
+                case Key.D1: SetHeading(1); e.Handled = true; return;
+                case Key.D2: SetHeading(2); e.Handled = true; return;
+                case Key.D3: SetHeading(3); e.Handled = true; return;
+                case Key.D0: SetHeading(0); e.Handled = true; return;
             }
         }
         if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.C)
@@ -983,6 +1008,18 @@ public partial class NoteWindow : Window
                     e.Handled = true;
                     return;
                 }
+                // After RTF processes Enter, reset new paragraph after heading
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    var curPara = noteText.CaretPosition.Paragraph;
+                    var prevPara = curPara?.PreviousBlock as Paragraph;
+                    if (prevPara != null &&
+                        (prevPara is { FontSize: >= 15 }))
+                    {
+                        curPara.FontSize = 13;
+                        curPara.FontWeight = FontWeights.Normal;
+                    }
+                }));
             }
 
             // Always format URLs in current paragraph on Space or Enter
@@ -1196,6 +1233,9 @@ public partial class NoteWindow : Window
         floatHighlightPicker.BeginAnimation(OpacityProperty, null);
         floatHighlightPicker.Visibility = Visibility.Collapsed;
         floatHighlightPicker.Opacity = 0;
+        floatHeadingPicker.BeginAnimation(OpacityProperty, null);
+        floatHeadingPicker.Visibility = Visibility.Collapsed;
+        floatHeadingPicker.Opacity = 0;
         formatPopup.IsOpen = false;
     }
 
@@ -1269,6 +1309,13 @@ public partial class NoteWindow : Window
                 ctrl.Foreground = fg;
         }
 
+        // Sync heading picker buttons
+        foreach (var child in floatHeadingPicker.Children)
+        {
+            if (child is Control ctrl)
+                ctrl.Foreground = fg;
+        }
+
         // Sync highlight button with current color
         floatHighlightBtn.Background = new SolidColorBrush(_currentHighlightColor);
     }
@@ -1311,6 +1358,7 @@ public partial class NoteWindow : Window
             }
             else
             {
+                CloseHeadingPicker(); // close heading if open
                 // Reset animation state in case previous fade was interrupted
                 floatHighlightPicker.BeginAnimation(OpacityProperty, null);
                 floatHighlightPicker.Opacity = 0;
@@ -1403,6 +1451,114 @@ public partial class NoteWindow : Window
         floatHighlightPicker.BeginAnimation(OpacityProperty, null);
         // Ensure focus returns to editor
         try { noteText.Focus(); } catch { }
+    }
+
+    // ── Headings ──
+
+    private void SetHeading(int level)
+    {
+        var sel = noteText.Selection;
+        if (sel.IsEmpty) return;
+
+        // Get the paragraph of the selection start
+        var para = sel.Start.Paragraph;
+        if (para == null) return;
+
+        switch (level)
+        {
+            case 1:
+                para.FontSize = 22;
+                para.FontWeight = FontWeights.Bold;
+                break;
+            case 2:
+                para.FontSize = 18;
+                para.FontWeight = FontWeights.Bold;
+                break;
+            case 3:
+                para.FontSize = 15;
+                para.FontWeight = FontWeights.SemiBold;
+                break;
+            default:
+                para.FontSize = 13;
+                para.FontWeight = FontWeights.Normal;
+                break;
+        }
+    }
+
+    private void FloatHeading_Click(object sender, RoutedEventArgs e)
+    {
+        if (floatHeadingPicker.Visibility == Visibility.Visible)
+        {
+            CloseHeadingPicker();
+        }
+        else
+        {
+            CloseHighlightPicker(); // close highlight if open
+            OpenHeadingPicker();
+        }
+    }
+
+    private void OpenHeadingPicker()
+    {
+        if (floatHeadingPicker.Visibility == Visibility.Visible) return;
+
+        floatHeadingPicker.Children.Clear();
+
+        var dark = IsDarkColor(_note.Color);
+        var fg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0xCC, 0x3A, 0x3A, 0x3A));
+
+        var items = new[] { ("N", 0, "Normal"), ("H1", 1, "Encabezado 1"),
+                            ("H2", 2, "Encabezado 2"), ("H3", 3, "Encabezado 3") };
+
+        foreach (var (label, level, tooltip) in items)
+        {
+            var btn = new Button
+            {
+                Content = label,
+                FontSize = level switch { 1 => 15, 2 => 13, 3 => 11, _ => 10 },
+                FontWeight = level > 0 ? FontWeights.Bold : FontWeights.Normal,
+                Width = level > 0 ? 32 : 36,
+                Height = 22,
+                Cursor = Cursors.Hand,
+                ToolTip = tooltip,
+                Foreground = fg,
+                Style = (Style)FindResource("TitleBtn"),
+            };
+            int lvl = level;
+            btn.Click += (_, _) =>
+            {
+                SetHeading(lvl);
+                CloseHeadingPicker();
+            };
+            floatHeadingPicker.Children.Add(btn);
+
+            if (level == 0)
+            {
+                floatHeadingPicker.Children.Add(new Rectangle
+                {
+                    Width = 1,
+                    Fill = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+                    Margin = new Thickness(3, 2, 3, 2),
+                });
+            }
+        }
+
+        // Toggle heading state for color sync
+        floatHeadingPicker.Visibility = Visibility.Visible;
+        var fadeIn = AnimationHelper.MakeAnimation(0, 1, 150);
+        floatHeadingPicker.BeginAnimation(OpacityProperty, fadeIn);
+    }
+
+    private void CloseHeadingPicker()
+    {
+        if (floatHeadingPicker.Visibility != Visibility.Visible) return;
+        var fadeOut = AnimationHelper.MakeAnimation(1, 0, 100);
+        fadeOut.Completed += (_, _) =>
+        {
+            floatHeadingPicker.Visibility = Visibility.Collapsed;
+            floatHeadingPicker.BeginAnimation(OpacityProperty, null);
+        };
+        floatHeadingPicker.BeginAnimation(OpacityProperty, fadeOut);
     }
 
     // ── Right-click context menu ──
@@ -1824,16 +1980,31 @@ public partial class NoteWindow : Window
 
     private void ShowNoteSearch()
     {
+        _searchQuery = "";
+        noteSearchBox.Clear();
+        searchCounter.Text = "";
+
+        // Replace title with search bar
+        titleDisplay.Visibility = Visibility.Collapsed;
+        titleInput.Visibility = Visibility.Collapsed;
+        titleRightPanel.Visibility = Visibility.Collapsed;
         noteSearchBorder.Visibility = Visibility.Visible;
+
         noteSearchBox.Focus();
-        noteSearchBox.SelectAll();
     }
 
     private void HideNoteSearch()
     {
         noteSearchBorder.Visibility = Visibility.Collapsed;
         noteSearchBox.Clear();
-        noteText.Focus();
+        searchCounter.Text = "";
+
+        // Restore title
+        titleDisplay.Visibility = Visibility.Visible;
+        titleRightPanel.Visibility = Visibility.Visible;
+
+        _searchQuery = "";
+        try { noteText.Focus(); } catch { }
     }
 
     private void NoteSearch_TextChanged(object sender, TextChangedEventArgs e)
@@ -1844,19 +2015,52 @@ public partial class NoteWindow : Window
 
         if (string.IsNullOrEmpty(query))
         {
-            noteSearchBorder.Visibility = Visibility.Collapsed;
-            noteText.Focus();
+            _searchQuery = "";
+            searchCounter.Text = "";
             return;
         }
 
         _searchQuery = query;
-        FindAndSelect(query, noteText.Document.ContentStart);
+        var found = FindAndSelect(query, noteText.Document.ContentStart);
+        UpdateSearchCounter();
     }
 
     private void NoteSearch_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrEmpty(noteSearchBox.Text))
+        if (string.IsNullOrEmpty(noteSearchBox.Text) && noteSearchBorder.Visibility == Visibility.Visible)
             HideNoteSearch();
+    }
+
+    private void NoteSearch_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            if ((Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
+                FindPrevious();
+            else
+                FindNext();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Down)
+        {
+            FindNext();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Up)
+        {
+            FindPrevious();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            HideNoteSearch();
+            e.Handled = true;
+        }
+    }
+
+    private void SearchClose_Click(object sender, RoutedEventArgs e)
+    {
+        HideNoteSearch();
     }
 
     private void FindNext()
@@ -1868,6 +2072,96 @@ public partial class NoteWindow : Window
         var found = FindAndSelect(_searchQuery, from);
         if (!found)
             FindAndSelect(_searchQuery, noteText.Document.ContentStart);
+        UpdateSearchCounter();
+    }
+
+    private void FindPrevious()
+    {
+        if (string.IsNullOrEmpty(_searchQuery)) return;
+
+        // Walk from start to find all matches, pick the one just before selection end
+        var text = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd).Text;
+        var selEnd = noteText.Selection.Start;
+        string query = _searchQuery;
+
+        int lastIdx = -1;
+        int at = 0;
+        while ((at = text.IndexOf(query, at, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            var pos = FindTextPointer(noteText.Document.ContentStart, at);
+            if (pos != null && pos.CompareTo(selEnd) < 0)
+                lastIdx = at;
+            else if (pos != null && pos.CompareTo(selEnd) >= 0)
+                break;
+            at += query.Length;
+        }
+
+        if (lastIdx >= 0)
+        {
+            var start = FindTextPointer(noteText.Document.ContentStart, lastIdx);
+            if (start != null)
+            {
+                var end = FindTextPointer(start, query.Length);
+                if (end != null)
+                {
+                    noteText.Selection.Select(start, end);
+                    UpdateSearchCounter();
+                    return;
+                }
+            }
+        }
+
+        // Wrap: go to last occurrence
+        FindAndSelect(query, noteText.Document.ContentEnd);
+        UpdateSearchCounter();
+    }
+
+    private void UpdateSearchCounter()
+    {
+        if (string.IsNullOrEmpty(_searchQuery))
+        {
+            searchCounter.Text = "";
+            return;
+        }
+
+        // Count total matches
+        var fullText = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd).Text;
+        int total = 0, at = 0;
+        while ((at = fullText.IndexOf(_searchQuery, at, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            total++;
+            at += _searchQuery.Length;
+        }
+
+        if (total == 0)
+        {
+            searchCounter.Text = "Sin resultados";
+            searchCounter.Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0x66, 0x66));
+            return;
+        }
+
+        // Find current match position
+        var sel = noteText.Selection;
+        int current = 0;
+        if (!sel.IsEmpty)
+        {
+            int idx2 = 0;
+            int matchNum = 0;
+            while ((idx2 = fullText.IndexOf(_searchQuery, idx2, StringComparison.OrdinalIgnoreCase)) >= 0)
+            {
+                matchNum++;
+                var pos = FindTextPointer(noteText.Document.ContentStart, idx2);
+                if (pos != null && pos.CompareTo(sel.Start) == 0)
+                {
+                    current = matchNum;
+                    break;
+                }
+                idx2 += _searchQuery.Length;
+            }
+        }
+
+        searchCounter.Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF));
+        searchCounter.Text = current > 0 ? $"{current}/{total}" : $"0/{total}";
     }
 
     private bool FindAndSelect(string query, TextPointer from)
@@ -1882,7 +2176,7 @@ public partial class NoteWindow : Window
         if (end == null) return false;
 
         noteText.Selection.Select(start, end);
-        noteText.Focus();
+        // Do NOT steal focus from search box
         return true;
     }
 
