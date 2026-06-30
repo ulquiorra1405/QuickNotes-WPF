@@ -588,14 +588,6 @@ public partial class NoteWindow : Window
         if (formatPopup.Child is Border floatBorder)
             floatBorder.Background = new SolidColorBrush(bgColor);
 
-        // Style highlight popup border to match
-        if (highlightPopupBorder != null)
-        {
-            var hlBorderColor = dark ? Color.FromArgb(0x50, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x40, 0x00, 0x00, 0x00);
-            highlightPopupBorder.Background = new SolidColorBrush(bgColor);
-            highlightPopupBorder.BorderBrush = new SolidColorBrush(hlBorderColor);
-        }
-
         ApplyScrollbarReversal(noteText, _note.Color);
     }
 
@@ -945,9 +937,16 @@ public partial class NoteWindow : Window
         _currentHighlightColor = color;
 
         if (color == _noHighlightColor)
+        {
             highlightBtn.Background = Brushes.Transparent;
+            floatHighlightBtn.Background = Brushes.Transparent;
+        }
         else
-            highlightBtn.Background = new SolidColorBrush(color);
+        {
+            var brush = new SolidColorBrush(color);
+            highlightBtn.Background = brush;
+            floatHighlightBtn.Background = brush;
+        }
 
         highlightPopup.IsOpen = false;
         ApplyHighlight(color);
@@ -1247,14 +1246,14 @@ public partial class NoteWindow : Window
         var sel = noteText.Selection;
         if (sel != null && !sel.IsEmpty && sel.Text.TrimEnd().Length > 0)
         {
-            if (highlightPopup.IsOpen) return; // don't restart timer while picker is open
+            if (floatHighlightPicker.Visibility == Visibility.Visible) return; // don't restart timer while picker is open
             _selectionTimer.Stop();
             _selectionTimer.Start();
         }
         else
         {
             _selectionTimer.Stop();
-            if (!highlightPopup.IsOpen)
+            if (floatHighlightPicker.Visibility != Visibility.Visible)
                 HideFormatPopup();
         }
     }
@@ -1265,7 +1264,7 @@ public partial class NoteWindow : Window
         if (noteText.Selection is { IsEmpty: false } sel && sel.Text.TrimEnd().Length > 0)
         {
             // Don't reposition if highlight picker is open
-            if (!highlightPopup.IsOpen)
+            if (floatHighlightPicker.Visibility != Visibility.Visible)
                 ShowFormatPopup();
         }
     }
@@ -1353,14 +1352,6 @@ public partial class NoteWindow : Window
         if (formatPopup.Child is Border popupBorder)
             popupBorder.Background = new SolidColorBrush(bgColor);
 
-        // Style highlight popup border to match
-        if (highlightPopupBorder != null)
-        {
-            var hlBorderColor = dark ? Color.FromArgb(0x50, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x40, 0x00, 0x00, 0x00);
-            highlightPopupBorder.Background = new SolidColorBrush(bgColor);
-            highlightPopupBorder.BorderBrush = new SolidColorBrush(hlBorderColor);
-        }
-
         // Set button foregrounds
         var fg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0xCC, 0x3A, 0x3A, 0x3A));
         foreach (var child in formatToolbar.Children)
@@ -1405,40 +1396,105 @@ public partial class NoteWindow : Window
     {
         if (e.LeftButton == MouseButtonState.Pressed)
         {
-            // Calculate position based on formatPopup's offset + button position within toolbar
-            // Both relative to noteText (stable anchor)
-            var fmtOffX = formatPopup.HorizontalOffset;
-            var fmtOffY = formatPopup.VerticalOffset;
-
-            // Find floatHighlightBtn's center X within the toolbar
-            double btnCenterX = 0;
-            foreach (var child in formatToolbar.Children)
-            {
-                if (child == floatHighlightBtn)
-                {
-                    btnCenterX += floatHighlightBtn.ActualWidth / 2;
-                    break;
-                }
-                if (child is UIElement fe)
-                {
-                    btnCenterX += fe.DesiredSize.Width +
-                        (fe is FrameworkElement fw ? fw.Margin.Left + fw.Margin.Right : 0);
-                }
-            }
-
-            double pw = 144;
-            if (highlightPopup.Child is FrameworkElement hlChild)
-            {
-                hlChild.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                pw = hlChild.DesiredSize.Width;
-            }
-
-            highlightPopup.Placement = PlacementMode.Relative;
-            highlightPopup.PlacementTarget = noteText;
-            highlightPopup.HorizontalOffset = fmtOffX + btnCenterX - (pw / 2);
-            highlightPopup.VerticalOffset = fmtOffY - 6;
-            highlightPopup.IsOpen = !highlightPopup.IsOpen;
+            if (floatHighlightPicker.Visibility == Visibility.Visible)
+                CloseHighlightPicker();
+            else
+                OpenHighlightPicker();
         }
+    }
+
+    private void OpenHighlightPicker()
+    {
+        if (floatHighlightPicker.Visibility == Visibility.Visible) return;
+
+        floatHighlightPicker.Children.Clear();
+
+        // Add "no color" button first
+        var noColor = new Border
+        {
+            Width = 14, Height = 14,
+            CornerRadius = new CornerRadius(2),
+            Margin = new Thickness(1, 0, 1, 0),
+            Cursor = Cursors.Hand,
+            Background = Brushes.Transparent,
+            Tag = "clear",
+        };
+        noColor.MouseDown += (_, args) =>
+        {
+            if (args.LeftButton == MouseButtonState.Pressed)
+            {
+                _currentHighlightColor = _noHighlightColor;
+                ApplyHighlight(_noHighlightColor);
+                floatHighlightBtn.Background = Brushes.Transparent;
+                CloseHighlightPicker();
+            }
+        };
+        floatHighlightPicker.Children.Add(noColor);
+
+        // Add color dots
+        foreach (var color in HighlightColors)
+        {
+            var dot = new Border
+            {
+                Width = 14, Height = 14,
+                CornerRadius = new CornerRadius(2),
+                Margin = new Thickness(1, 0, 1, 0),
+                Cursor = Cursors.Hand,
+                Background = new SolidColorBrush(color),
+            };
+            var c = color;
+            dot.MouseDown += (_, args) =>
+            {
+                if (args.LeftButton == MouseButtonState.Pressed)
+                {
+                    _currentHighlightColor = c;
+                    ApplyHighlight(c);
+                    floatHighlightBtn.Background = new SolidColorBrush(c);
+                    CloseHighlightPicker();
+                }
+            };
+            floatHighlightPicker.Children.Add(dot);
+        }
+
+        // Add ✕ close button
+        var closeBtn = new Button
+        {
+            Content = "✕",
+            FontSize = 10,
+            Width = 18, Height = 18,
+            Cursor = Cursors.Hand,
+            Padding = new Thickness(0),
+            Style = (Style)FindResource("TitleBtn"),
+        };
+        closeBtn.Click += (_, _) => CloseHighlightPicker();
+        floatHighlightPicker.Children.Add(closeBtn);
+
+        // Style the picker to match toolbar
+        var dark = IsDarkColor(_note.Color);
+        var floatFg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0xCC, 0x3A, 0x3A, 0x3A));
+        closeBtn.Foreground = floatFg;
+
+        // Show with fade animation
+        floatHighlightPicker.Visibility = Visibility.Visible;
+        var fadeIn = AnimationHelper.MakeAnimation(0, 1, 150);
+        floatHighlightPicker.BeginAnimation(OpacityProperty, fadeIn);
+    }
+
+    private void CloseHighlightPicker()
+    {
+        if (floatHighlightPicker.Visibility != Visibility.Visible) return;
+
+        var fadeOut = AnimationHelper.MakeAnimation(1, 0, 100);
+        fadeOut.Completed += OnCloseFadeCompleted;
+        floatHighlightPicker.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnCloseFadeCompleted(object? sender, EventArgs e)
+    {
+        floatHighlightPicker.Visibility = Visibility.Collapsed;
+        floatHighlightPicker.BeginAnimation(OpacityProperty, null);
+        // Ensure focus returns to editor
+        try { noteText.Focus(); } catch { }
     }
 
     // ── Right-click context menu ──

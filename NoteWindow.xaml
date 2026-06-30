@@ -340,13 +340,17 @@
                             </DataTemplate>
                         </Button.ContentTemplate>
                     </Button>
-                    <Rectangle Width="1" Fill="#40FFFFFF" Margin="3,2"/>
+                    <Rectangle x:Name="floatSep1" Width="1" Fill="#40FFFFFF" Margin="3,2"/>
                     <Border x:Name="floatHighlightBtn" Width="14" Height="14"
                             CornerRadius="2" Cursor="Hand" Margin="3,0"
                             BorderBrush="#40FFFFFF" BorderThickness="1"
                             ToolTip="Resaltar"
                             MouseDown="FloatHighlight_MouseDown"/>
-                    <Rectangle Width="1" Fill="#40FFFFFF" Margin="3,2"/>
+                    <StackPanel x:Name="floatHighlightPicker" Orientation="Horizontal"
+                                Visibility="Collapsed" Opacity="0">
+                        <!-- Color dots built in code -->
+                    </StackPanel>
+                    <Rectangle x:Name="floatSep2" Width="1" Fill="#40FFFFFF" Margin="3,2"/>
                     <Button x:Name="floatCheckboxBtn" Content="◻" FontSize="14"
                             Width="26" Height="24" Cursor="Hand" ToolTip="Checklist"
                             Style="{StaticResource TitleBtn}"
