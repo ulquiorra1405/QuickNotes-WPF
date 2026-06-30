@@ -2185,7 +2185,28 @@ public partial class NoteWindow : Window
         try
         {
             var (start, _) = _searchMatchRanges[_currentMatchIndex];
-            noteText.BringPointerIntoView(start);
+            noteText.CaretPosition = start;
+
+            // Defer scroll so layout settles after UpdateSearchOverlay
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    var sv = _searchScrollViewer ?? FindChild<ScrollViewer>(noteText);
+                    if (sv == null) return;
+
+                    // GetCharacterRect returns coordinates relative to the RichTextBox viewport.
+                    // To scroll correctly, convert to document-space by adding the current scroll offset.
+                    var charRect = start.GetCharacterRect(LogicalDirection.Forward);
+                    if (charRect.IsEmpty) return;
+
+                    double documentY = sv.VerticalOffset + charRect.Top;
+                    double centered = documentY - (sv.ViewportHeight / 2d);
+
+                    sv.ScrollToVerticalOffset(Math.Max(0, centered));
+                }
+                catch { }
+            }), DispatcherPriority.Normal);
         }
         catch { }
     }
