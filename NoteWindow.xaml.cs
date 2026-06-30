@@ -535,6 +535,9 @@ public partial class NoteWindow : Window
     private void UpdateButtonForegrounds()
     {
         var dark = IsDarkColor(_note.Color);
+        var darkBg = Color.FromArgb(0xF2, 0x2D, 0x2D, 0x2D);
+        var lightBg = Color.FromArgb(0xF2, 0xE8, 0xE8, 0xE8);
+
         var fg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0x88, 0x3A, 0x3A, 0x3A));
         SetPanelForeground(titleRightPanel, fg);
         SetPanelForeground(bottomRightPanel, fg);
@@ -547,10 +550,14 @@ public partial class NoteWindow : Window
                 ctrl.Foreground = floatFg;
         }
         if (formatPopup.Child is Border floatBorder)
-        {
-            var darkBg = Color.FromArgb(0xF2, 0x2D, 0x2D, 0x2D);
-            var lightBg = Color.FromArgb(0xF2, 0xE8, 0xE8, 0xE8);
             floatBorder.Background = new SolidColorBrush(dark ? darkBg : lightBg);
+
+        // Style highlight popup border to match
+        if (highlightPopupBorder != null)
+        {
+            var hlBorderColor = dark ? Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x30, 0x00, 0x00, 0x00);
+            highlightPopupBorder.Background = new SolidColorBrush(dark ? darkBg : lightBg);
+            highlightPopupBorder.BorderBrush = new SolidColorBrush(hlBorderColor);
         }
 
         ApplyScrollbarReversal(noteText, _note.Color);
@@ -1298,6 +1305,14 @@ public partial class NoteWindow : Window
         if (formatPopup.Child is Border popupBorder)
             popupBorder.Background = new SolidColorBrush(dark ? darkBg : lightBg);
 
+        // Style highlight popup border to match
+        if (highlightPopupBorder != null)
+        {
+            var hlBorderColor = dark ? Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x30, 0x00, 0x00, 0x00);
+            highlightPopupBorder.Background = new SolidColorBrush(dark ? darkBg : lightBg);
+            highlightPopupBorder.BorderBrush = new SolidColorBrush(hlBorderColor);
+        }
+
         // Set button foregrounds
         var fg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0xCC, 0x3A, 0x3A, 0x3A));
         foreach (var child in formatToolbar.Children)
@@ -1342,16 +1357,9 @@ public partial class NoteWindow : Window
     {
         if (e.LeftButton == MouseButtonState.Pressed)
         {
-            // Position highlight popup near the floating toolbar highlight button
-            try
-            {
-                var btnPt = floatHighlightBtn.PointToScreen(new Point(0, 0));
-                highlightPopup.Placement = PlacementMode.Absolute;
-                highlightPopup.HorizontalOffset = btnPt.X;
-                highlightPopup.VerticalOffset = btnPt.Y - 8;
-            }
-            catch { }
-
+            highlightPopup.Placement = PlacementMode.Top;
+            highlightPopup.PlacementTarget = floatHighlightBtn;
+            highlightPopup.VerticalOffset = -4;
             highlightPopup.IsOpen = !highlightPopup.IsOpen;
         }
     }
