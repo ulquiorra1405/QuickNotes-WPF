@@ -221,8 +221,6 @@ public partial class NoteWindow : Window
             noteText.Document.Blocks.Add(para);
         }
 
-        // Clean up any stale background highlights from old search sessions
-        RemoveDocumentBackgrounds();
     }
 
     private void SaveRichText()
@@ -2006,48 +2004,21 @@ public partial class NoteWindow : Window
         titleRightPanel.Visibility = Visibility.Collapsed;
         noteSearchBorder.Visibility = Visibility.Visible;
 
+        // Show canvas overlay and subscribe to scroll
+        searchCanvas.Visibility = Visibility.Visible;
+        SubscribeSearchScroll();
+
         noteSearchBox.Focus();
 
-        // Clean up any stale background highlights from old sessions
-        RemoveDocumentBackgrounds();
-
-        // Clear editor selection so user sees the search box is active
+        // Clear editor selection
         try { noteText.Selection.Select(noteText.Document.ContentStart, noteText.Document.ContentStart); } catch { }
-    }
-
-    /// <summary>
-    /// Walk the entire document and remove all local Background values on text runs.
-    /// Cleans up leftover highlights from previous search implementations.
-    /// Since we apply within each run individually, no fragmentation occurs.
-    /// </summary>
-    private void RemoveDocumentBackgrounds()
-    {
-        var pos = noteText.Document.ContentStart;
-        while (pos != null)
-        {
-            if (pos.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
-            {
-                var text = pos.GetTextInRun(LogicalDirection.Forward);
-                var runEnd = pos.GetPositionAtOffset(text.Length);
-                if (runEnd != null)
-                {
-                    try
-                    {
-                        new TextRange(pos, runEnd).ApplyPropertyValue(
-                            TextElement.BackgroundProperty, DependencyProperty.UnsetValue);
-                    }
-                    catch { }
-                }
-            }
-            pos = pos.GetNextContextPosition(LogicalDirection.Forward);
-        }
     }
 
     private void HideNoteSearch()
     {
         _isSearchActive = false;
 
-        // Save match BEFORE clearing anything (TextChanged will wipe ranges)
+        // Save match BEFORE clearing anything
         TextPointer? savedStart = null, savedEnd = null;
         if (_currentMatchIndex >= 0 && _currentMatchIndex < _searchMatchRanges.Count)
         {
@@ -2061,13 +2032,18 @@ public partial class NoteWindow : Window
         titleDisplay.Visibility = Visibility.Visible;
         titleRightPanel.Visibility = Visibility.Visible;
 
-        // Clear the search box (this fires TextChanged which clears ranges)
+        // Hide canvas overlay and unsubscribe scroll
+        searchCanvas.Visibility = Visibility.Collapsed;
+        searchCanvas.Children.Clear();
+        UnsubscribeSearchScroll();
+
+        // Clear state
         _searchQuery = "";
         noteSearchBox.Clear();
         searchCounter.Text = "";
         _searchMatchRanges.Clear();
 
-        // Restore last match selection + focus for floating toolbar to work
+        // Restore last match selection + focus for floating toolbar
         if (savedStart != null && savedEnd != null)
         {
             try { noteText.Selection.Select(savedStart, savedEnd); } catch { }
@@ -2088,13 +2064,16 @@ public partial class NoteWindow : Window
             _currentMatchIndex = -1;
             _totalMatches = 0;
             searchCounter.Text = "";
+            searchCanvas.Children.Clear();
             return;
         }
 
         _searchQuery = query;
         _currentMatchIndex = 0;
-        FindAndSelectAll();
+        FindAll();
+        UpdateSearchOverlay();
         UpdateSearchCounter();
+        if (_totalMatches > 0) ScrollToCurrentMatch();
     }
 
     private void NoteSearch_LostFocus(object sender, RoutedEventArgs e)
@@ -2174,18 +2153,12 @@ public partial class NoteWindow : Window
         _totalMatches = _searchMatchRanges.Count;
     }
 
-    private void FindAndSelectAll()
-    {
-        FindAll();
-        if (_totalMatches > 0)
-            SelectCurrent();
-    }
-
     private void FindNext()
     {
         if (_totalMatches <= 0) return;
         _currentMatchIndex = (_currentMatchIndex + 1) % _totalMatches;
-        SelectCurrent();
+        UpdateSearchOverlay();
+        ScrollToCurrentMatch();
         UpdateSearchCounter();
     }
 
@@ -2195,23 +2168,18 @@ public partial class NoteWindow : Window
         _currentMatchIndex--;
         if (_currentMatchIndex < 0)
             _currentMatchIndex = _totalMatches - 1;
-        SelectCurrent();
+        UpdateSearchOverlay();
+        ScrollToCurrentMatch();
         UpdateSearchCounter();
     }
 
-    private void SelectCurrent()
+    private void ScrollToCurrentMatch()
     {
         if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchMatchRanges.Count) return;
         try
         {
-            var (start, end) = _searchMatchRanges[_currentMatchIndex];
-
-            // Scroll without stealing focus from search box
+            var (start, _) = _searchMatchRanges[_currentMatchIndex];
             noteText.BringPointerIntoView(start);
-
-            // Set caret and select (selection visible in gray when inactive)
-            noteText.CaretPosition = start;
-            noteText.Selection.Select(start, end);
         }
         catch { }
     }
@@ -2233,6 +2201,110 @@ public partial class NoteWindow : Window
 
         searchCounter.Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF));
         searchCounter.Text = $"{_currentMatchIndex + 1}/{_totalMatches}";
+    }
+
+    // ── Canvas overlay ──
+
+    private ScrollViewer? _searchScrollViewer;
+
+    /// <summary>
+    /// Find and subscribe to the RichTextBox internal ScrollViewer.
+    /// </summary>
+    private void SubscribeSearchScroll()
+    {
+        if (_searchScrollViewer == null)
+            _searchScrollViewer = FindChild<ScrollViewer>(noteText);
+        if (_searchScrollViewer != null)
+        {
+            _searchScrollViewer.ScrollChanged -= OnSearchScrollChanged;
+            _searchScrollViewer.ScrollChanged += OnSearchScrollChanged;
+        }
+    }
+
+    private void UnsubscribeSearchScroll()
+    {
+        if (_searchScrollViewer != null)
+        {
+            _searchScrollViewer.ScrollChanged -= OnSearchScrollChanged;
+            _searchScrollViewer = null;
+        }
+    }
+
+    private void OnSearchScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        UpdateSearchOverlay();
+    }
+
+    /// <summary>
+    /// Rebuild canvas rectangles for all matches, offset by scroll position.
+    /// </summary>
+    private void UpdateSearchOverlay()
+    {
+        searchCanvas.Children.Clear();
+        if (_searchMatchRanges.Count == 0) return;
+
+        double scrollX = _searchScrollViewer?.HorizontalOffset ?? 0;
+        double scrollY = _searchScrollViewer?.VerticalOffset ?? 0;
+
+        // Canvas must be same width/height as the document content
+        searchCanvas.Width = Math.Max(noteText.ActualWidth, _searchScrollViewer?.ExtentWidth ?? noteText.ActualWidth);
+        searchCanvas.Height = _searchScrollViewer?.ExtentHeight ?? noteText.ActualHeight;
+
+        var (normalColor, activeColor) = GetSearchHighlightColors();
+
+        for (int i = 0; i < _searchMatchRanges.Count; i++)
+        {
+            try
+            {
+                var (start, end) = _searchMatchRanges[i];
+                var startRect = start.GetCharacterRect(LogicalDirection.Forward);
+                var endRect = end.GetCharacterRect(LogicalDirection.Backward);
+                if (startRect.IsEmpty && endRect.IsEmpty) continue;
+
+                var r = Rect.Union(startRect, endRect);
+
+                // Offset by scroll position
+                r.X -= scrollX;
+                r.Y -= scrollY;
+
+                if (r.Right < 0 || r.Bottom < 0 || r.Left > searchCanvas.Width) continue;
+
+                var color = (i == _currentMatchIndex) ? activeColor : normalColor;
+                var rect = new System.Windows.Shapes.Rectangle
+                {
+                    Width = r.Width,
+                    Height = r.Height,
+                    Fill = new SolidColorBrush(color),
+                    IsHitTestVisible = false,
+                };
+                Canvas.SetLeft(rect, r.X);
+                Canvas.SetTop(rect, r.Y);
+                searchCanvas.Children.Add(rect);
+            }
+            catch { }
+        }
+    }
+
+    private (Color normal, Color active) GetSearchHighlightColors()
+    {
+        var dark = IsDarkColor(_note.Color);
+        return dark
+            ? (Color.FromArgb(0x66, 0x90, 0xCA, 0xFF), Color.FromArgb(0xAA, 0x66, 0xBB, 0xFF))
+            : (Color.FromArgb(0x88, 0x22, 0x44, 0x88), Color.FromArgb(0xBB, 0x11, 0x33, 0xAA));
+    }
+
+    private static T? FindChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        if (parent == null) return null;
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T t) return t;
+            var found = FindChild<T>(child);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private List<(TextPointer runStart, int charOffset)> BuildCharMap()
