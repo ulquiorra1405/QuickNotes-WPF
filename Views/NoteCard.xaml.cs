@@ -97,13 +97,21 @@ public partial class NoteCard : UserControl
             tagsPanel.Children.Clear();
             if (note.TagIds.Count > 0)
             {
+                var isDark = IsDarkBg(note.Color);
+                var pillBg = isDark
+                    ? new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF))  // light bg on dark note
+                    : new SolidColorBrush(Color.FromArgb(0x30, 0x00, 0x00, 0x00));  // dark bg on light note
+                var pillFg = isDark
+                    ? new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF))  // white text
+                    : new SolidColorBrush(Color.FromArgb(0xBB, 0x3A, 0x3A, 0x3A));  // dark text
+
                 foreach (var tagId in note.TagIds)
                 {
                     if (TagNameLookup.TryGetValue(tagId, out var tagName))
                     {
                         var pill = new Border
                         {
-                            Background = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF)),
+                            Background = pillBg,
                             CornerRadius = new CornerRadius(4),
                             Padding = new Thickness(5, 1, 5, 1),
                             Margin = new Thickness(0, 0, 3, 0),
@@ -111,23 +119,13 @@ public partial class NoteCard : UserControl
                             {
                                 Text = "#" + tagName,
                                 FontSize = 10,
-                                Foreground = new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF)),
+                                Foreground = pillFg,
                             }
                         };
                         tagsPanel.Children.Add(pill);
                     }
                 }
                 tagsPanel.Visibility = Visibility.Visible;
-            }
-
-            // Tag pills foreground should adapt to note color
-            var pillFg = IsDarkBg(note.Color)
-                ? new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF))
-                : new SolidColorBrush(Color.FromArgb(0xBB, 0x3A, 0x3A, 0x3A));
-            foreach (var child in tagsPanel.Children)
-            {
-                if (child is Border b && b.Child is TextBlock tb)
-                    tb.Foreground = pillFg;
             }
         }
 
