@@ -44,6 +44,7 @@ public partial class NoteWindow : Window
     private bool _isSearchActive;
     private readonly List<(TextRange range, object? originalBg)> _searchHighlights = new();
     private int _currentMatchIndex = -1;
+    private int _lastActiveMatchIndex = -1;
     private int _totalMatches;
 
     private Color _currentHighlightColor = Color.FromArgb(0x55, 0xFF, 0xD7, 0x00);
@@ -2139,14 +2140,17 @@ public partial class NoteWindow : Window
         {
             try
             {
+                // Use UnsetValue to remove local background (let inheritance work)
+                // Use actual originalBg when available
                 range.ApplyPropertyValue(TextElement.BackgroundProperty,
-                    originalBg ?? Brushes.Transparent);
+                    originalBg ?? DependencyProperty.UnsetValue);
             }
             catch { }
         }
         _searchHighlights.Clear();
         _totalMatches = 0;
         _currentMatchIndex = -1;
+        _lastActiveMatchIndex = -1;
     }
 
     /// <summary>
@@ -2250,17 +2254,27 @@ public partial class NoteWindow : Window
 
         var (normalColor, activeColor) = GetSearchHighlightColors();
 
-        for (int i = 0; i < _searchHighlights.Count; i++)
+        // Only update old active (→ normal) and new active (→ active)
+        // This avoids reapplying to ALL matches, preventing run fragmentation
+        if (_lastActiveMatchIndex >= 0 && _lastActiveMatchIndex < _searchHighlights.Count
+            && _lastActiveMatchIndex != _currentMatchIndex)
         {
             try
             {
-                var color = (i == _currentMatchIndex) ? activeColor : normalColor;
-                _searchHighlights[i].range.ApplyPropertyValue(
-                    TextElement.BackgroundProperty, new SolidColorBrush(color));
+                _searchHighlights[_lastActiveMatchIndex].range.ApplyPropertyValue(
+                    TextElement.BackgroundProperty, new SolidColorBrush(normalColor));
             }
             catch { }
         }
 
+        try
+        {
+            _searchHighlights[_currentMatchIndex].range.ApplyPropertyValue(
+                TextElement.BackgroundProperty, new SolidColorBrush(activeColor));
+        }
+        catch { }
+
+        _lastActiveMatchIndex = _currentMatchIndex;
         ScrollToMatch(_currentMatchIndex);
     }
 
