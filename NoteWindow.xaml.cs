@@ -1031,19 +1031,12 @@ public partial class NoteWindow : Window
             }
         }
 
+        // Search key handling is done by noteSearchBox.PreviewKeyDown
         if (e.Key == Key.Escape && noteSearchBorder.Visibility == Visibility.Visible)
         {
             HideNoteSearch();
             e.Handled = true;
             return;
-        }
-        if (noteSearchBorder.Visibility == Visibility.Visible)
-        {
-            if (e.Key == Key.Enter || e.Key == Key.F3)
-            {
-                FindNext();
-                e.Handled = true;
-            }
         }
     }
 
