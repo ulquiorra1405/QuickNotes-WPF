@@ -2149,24 +2149,72 @@ public partial class NoteWindow : Window
         _currentMatchIndex = -1;
     }
 
+    /// <summary>
+    /// Builds a char-by-char mapping from flat text index to TextPointer base + run offset.
+    /// </summary>
+    private List<(TextPointer runStart, int charOffset)> BuildCharMap()
+    {
+        var map = new List<(TextPointer runStart, int charOffset)>();
+        var pos = noteText.Document.ContentStart;
+        while (pos != null)
+        {
+            if (pos.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+            {
+                var text = pos.GetTextInRun(LogicalDirection.Forward);
+                for (int i = 0; i < text.Length; i++)
+                    map.Add((pos, i));
+            }
+            pos = pos.GetNextContextPosition(LogicalDirection.Forward);
+        }
+        return map;
+    }
+
+    /// <summary>
+    /// Converts a flat-text character index to a TextPointer using the char map.
+    /// </summary>
+    private TextPointer? CharIndexToPointer(int charIndex, List<(TextPointer runStart, int charOffset)> map)
+    {
+        if (charIndex < 0 || charIndex >= map.Count) return null;
+        var (basePtr, subOffset) = map[charIndex];
+        return basePtr.GetPositionAtOffset(subOffset);
+    }
+
     private void HighlightAllMatches()
     {
         ClearSearchHighlights();
         if (string.IsNullOrEmpty(_searchQuery)) return;
 
         var (normalColor, activeColor) = GetSearchHighlightColors();
-        var fullText = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd).Text;
+        var query = _searchQuery;
+        int matchIdx = 0;
+
+        // Build flat text from runs (no CRLF desync)
+        var map = BuildCharMap();
+        var sb = new StringBuilder(map.Count);
+        var pos = noteText.Document.ContentStart;
+        while (pos != null)
+        {
+            if (pos.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+                sb.Append(pos.GetTextInRun(LogicalDirection.Forward));
+            pos = pos.GetNextContextPosition(LogicalDirection.Forward);
+        }
+        var fullText = sb.ToString();
 
         int idx = 0;
-        int matchIdx = 0;
-        while ((idx = fullText.IndexOf(_searchQuery, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
+        while ((idx = fullText.IndexOf(query, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
         {
-            var start = FindTextPointer(noteText.Document.ContentStart, idx);
-            if (start == null) { idx++; continue; }
-            var end = FindTextPointer(start, _searchQuery.Length);
-            if (end == null) { idx++; continue; }
+            int endIdx = idx + query.Length - 1;
+            if (endIdx >= map.Count) break;
 
-            var range = new TextRange(start, end);
+            var start = CharIndexToPointer(idx, map);
+            var end = CharIndexToPointer(endIdx, map);
+            if (start == null || end == null) { idx += query.Length; continue; }
+
+            // end needs to be one past last char
+            var endPlus = end.GetPositionAtOffset(1);
+            if (endPlus == null) { idx += query.Length; continue; }
+
+            var range = new TextRange(start, endPlus);
             object? origBg = null;
             try
             {
@@ -2181,7 +2229,7 @@ public partial class NoteWindow : Window
 
             _searchHighlights.Add((range, origBg));
             matchIdx++;
-            idx += _searchQuery.Length;
+            idx += query.Length;
         }
 
         _totalMatches = matchIdx;
