@@ -1988,22 +1988,14 @@ public partial class NoteWindow : Window
 
     private void ShowNoteSearch()
     {
-        _searchMatchRanges.Clear();
         _searchQuery = "";
         _isSearchActive = true;
         _currentMatchIndex = -1;
         _totalMatches = 0;
+        _searchMatchRanges.Clear();
         noteSearchBox.Clear();
-        noteSearchBox.Text = "";
         noteSearchHint.Visibility = Visibility.Visible;
         searchCounter.Text = "";
-
-        // Adaptive selection brush so highlight is always visible
-        var dark = IsDarkColor(_note.Color);
-        noteText.SelectionBrush = new SolidColorBrush(
-            dark ? Color.FromArgb(0xAA, 0x66, 0xBB, 0xFF)
-                 : Color.FromArgb(0xBB, 0x11, 0x33, 0xAA));
-        noteText.SelectionOpacity = 0.8;
 
         // Replace title with search bar
         titleDisplay.Visibility = Visibility.Collapsed;
@@ -2012,35 +2004,40 @@ public partial class NoteWindow : Window
         noteSearchBorder.Visibility = Visibility.Visible;
 
         noteSearchBox.Focus();
+
+        // Clear editor selection so user sees the search box is active
+        try { noteText.Selection.Select(noteText.Document.ContentStart, noteText.Document.ContentStart); } catch { }
     }
 
     private void HideNoteSearch()
     {
         _isSearchActive = false;
+
+        // Save match BEFORE clearing anything (TextChanged will wipe ranges)
+        TextPointer? savedStart = null, savedEnd = null;
+        if (_currentMatchIndex >= 0 && _currentMatchIndex < _searchMatchRanges.Count)
+        {
+            savedStart = _searchMatchRanges[_currentMatchIndex].start;
+            savedEnd = _searchMatchRanges[_currentMatchIndex].end;
+        }
+
         noteSearchBorder.Visibility = Visibility.Collapsed;
 
         // Restore title
         titleDisplay.Visibility = Visibility.Visible;
         titleRightPanel.Visibility = Visibility.Visible;
 
-        // Restore default selection
-        noteText.SelectionBrush = null;
-        noteText.SelectionOpacity = 0.4;
-
-        // Keep the last match selected so floating toolbar can appear
-        if (_currentMatchIndex >= 0 && _currentMatchIndex < _searchMatchRanges.Count)
-        {
-            var (lastStart, lastEnd) = _searchMatchRanges[_currentMatchIndex];
-            _searchMatchRanges.Clear();
-            try { noteText.Selection.Select(lastStart, lastEnd); } catch { }
-        }
-        else
-        {
-            _searchMatchRanges.Clear();
-        }
-
+        // Clear the search box (this fires TextChanged which clears ranges)
         _searchQuery = "";
+        noteSearchBox.Clear();
         searchCounter.Text = "";
+        _searchMatchRanges.Clear();
+
+        // Restore last match selection + focus for floating toolbar to work
+        if (savedStart != null && savedEnd != null)
+        {
+            try { noteText.Selection.Select(savedStart, savedEnd); } catch { }
+        }
         try { noteText.Focus(); } catch { }
     }
 
@@ -2057,8 +2054,6 @@ public partial class NoteWindow : Window
             _currentMatchIndex = -1;
             _totalMatches = 0;
             searchCounter.Text = "";
-            noteText.Selection.Select(
-                noteText.Document.ContentStart, noteText.Document.ContentStart);
             return;
         }
 
