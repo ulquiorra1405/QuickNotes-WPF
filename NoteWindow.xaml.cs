@@ -1373,32 +1373,43 @@ public partial class NoteWindow : Window
     {
         if (e.LeftButton == MouseButtonState.Pressed)
         {
-            // Capture screen position BEFORE closing formatPopup
-            double x = 0, y = 0;
-            try
+            // Calculate where the highlight button is relative to noteText
+            // formatPopup is at (fmtOffX, fmtOffY) relative to noteText
+            var fmtOffX = formatPopup.HorizontalOffset;
+            var fmtOffY = formatPopup.VerticalOffset;
+
+            // Walk toolbar children to find floatHighlightBtn's X within the toolbar
+            double btnX = 0, btnH = 0;
+            bool found = false;
+            foreach (var child in formatToolbar.Children)
             {
-                var btnScreen = floatHighlightBtn.PointToScreen(new Point(0, 0));
-                x = btnScreen.X;
-                y = btnScreen.Y;
+                if (child == floatHighlightBtn)
+                {
+                    btnX += floatHighlightBtn.ActualWidth / 2; // center
+                    btnH = floatHighlightBtn.ActualHeight;
+                    found = true;
+                    break;
+                }
+                if (child is FrameworkElement fe)
+                    btnX += fe.ActualWidth + fe.Margin.Left + fe.Margin.Right;
             }
-            catch { }
 
             // Close formatPopup so the highlight picker doesn't compete for events
             formatPopup.IsOpen = false;
 
-            if (highlightPopup.Child is FrameworkElement child)
+            if (!found) return;
+
+            double pw = 144;
+            if (highlightPopup.Child is FrameworkElement hlChild)
             {
-                child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                var pw = child.DesiredSize.Width;
-                highlightPopup.HorizontalOffset = x - (pw / 2) + 7;
+                hlChild.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                pw = hlChild.DesiredSize.Width;
             }
-            else
-            {
-                highlightPopup.HorizontalOffset = x - 75;
-            }
-            highlightPopup.VerticalOffset = y - 5;
-            highlightPopup.Placement = PlacementMode.Absolute;
-            highlightPopup.PlacementTarget = null;
+
+            highlightPopup.Placement = PlacementMode.Relative;
+            highlightPopup.PlacementTarget = noteText;
+            highlightPopup.HorizontalOffset = fmtOffX + btnX - (pw / 2);
+            highlightPopup.VerticalOffset = fmtOffY - 6;
             highlightPopup.IsOpen = !highlightPopup.IsOpen;
         }
     }
