@@ -42,7 +42,7 @@ public partial class NoteWindow : Window
 
     private string _searchQuery = "";
     private bool _isSearchActive;
-    private readonly List<(TextPointer start, TextPointer end, object? originalBg)> _searchMatchRanges = new();
+    private readonly List<(TextPointer start, TextPointer end)> _searchMatchRanges = new();
     private int _currentMatchIndex = -1;
     private int _totalMatches;
 
@@ -1988,13 +1988,22 @@ public partial class NoteWindow : Window
 
     private void ShowNoteSearch()
     {
-        ClearSearchHighlights();
+        _searchMatchRanges.Clear();
         _searchQuery = "";
         _isSearchActive = true;
         _currentMatchIndex = -1;
         _totalMatches = 0;
         noteSearchBox.Clear();
+        noteSearchBox.Text = "";
+        noteSearchHint.Visibility = Visibility.Visible;
         searchCounter.Text = "";
+
+        // Adaptive selection brush so highlight is always visible
+        var dark = IsDarkColor(_note.Color);
+        noteText.SelectionBrush = new SolidColorBrush(
+            dark ? Color.FromArgb(0xAA, 0x66, 0xBB, 0xFF)
+                 : Color.FromArgb(0xBB, 0x11, 0x33, 0xAA));
+        noteText.SelectionOpacity = 0.8;
 
         // Replace title with search bar
         titleDisplay.Visibility = Visibility.Collapsed;
@@ -2009,26 +2018,25 @@ public partial class NoteWindow : Window
     {
         _isSearchActive = false;
         noteSearchBorder.Visibility = Visibility.Collapsed;
-        noteSearchBox.Clear();
 
         // Restore title
         titleDisplay.Visibility = Visibility.Visible;
         titleRightPanel.Visibility = Visibility.Visible;
 
-        // Save last match selection before clearing, then restore for scroll view
+        // Restore default selection
+        noteText.SelectionBrush = null;
+        noteText.SelectionOpacity = 0.4;
+
+        // Keep the last match selected so floating toolbar can appear
         if (_currentMatchIndex >= 0 && _currentMatchIndex < _searchMatchRanges.Count)
         {
-            var (lastStart, lastEnd, _) = _searchMatchRanges[_currentMatchIndex];
-            ClearSearchHighlights();
-            try
-            {
-                noteText.Selection.Select(lastStart, lastEnd);
-            }
-            catch { }
+            var (lastStart, lastEnd) = _searchMatchRanges[_currentMatchIndex];
+            _searchMatchRanges.Clear();
+            try { noteText.Selection.Select(lastStart, lastEnd); } catch { }
         }
         else
         {
-            ClearSearchHighlights();
+            _searchMatchRanges.Clear();
         }
 
         _searchQuery = "";
@@ -2044,17 +2052,19 @@ public partial class NoteWindow : Window
 
         if (string.IsNullOrEmpty(query))
         {
-            ClearSearchHighlights();
+            _searchMatchRanges.Clear();
             _searchQuery = "";
             _currentMatchIndex = -1;
             _totalMatches = 0;
             searchCounter.Text = "";
+            noteText.Selection.Select(
+                noteText.Document.ContentStart, noteText.Document.ContentStart);
             return;
         }
 
         _searchQuery = query;
         _currentMatchIndex = 0;
-        HighlightAllMatches();
+        FindAndSelectAll();
         UpdateSearchCounter();
     }
 
@@ -2096,22 +2106,79 @@ public partial class NoteWindow : Window
         HideNoteSearch();
     }
 
+    private void FindAll()
+    {
+        _searchMatchRanges.Clear();
+        if (string.IsNullOrEmpty(_searchQuery)) return;
+
+        var query = _searchQuery;
+
+        // Build flat text from run contexts (no CRLF desync)
+        var map = BuildCharMap();
+        var sb = new StringBuilder(map.Count);
+        var p = noteText.Document.ContentStart;
+        while (p != null)
+        {
+            if (p.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+                sb.Append(p.GetTextInRun(LogicalDirection.Forward));
+            p = p.GetNextContextPosition(LogicalDirection.Forward);
+        }
+        var fullText = sb.ToString();
+
+        int idx = 0;
+        while ((idx = fullText.IndexOf(query, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            int endIdx = idx + query.Length - 1;
+            if (endIdx >= map.Count) break;
+
+            var start = CharIndexToPointer(idx, map);
+            var end = CharIndexToPointer(endIdx, map);
+            if (start == null || end == null) { idx += query.Length; continue; }
+
+            var endPlus = end.GetPositionAtOffset(1);
+            if (endPlus == null) { idx += query.Length; continue; }
+
+            _searchMatchRanges.Add((start, endPlus));
+            idx += query.Length;
+        }
+
+        _totalMatches = _searchMatchRanges.Count;
+    }
+
+    private void FindAndSelectAll()
+    {
+        FindAll();
+        if (_totalMatches > 0)
+            SelectCurrent();
+    }
+
     private void FindNext()
     {
-        if (_totalMatches <= 0 || string.IsNullOrEmpty(_searchQuery)) return;
+        if (_totalMatches <= 0) return;
         _currentMatchIndex = (_currentMatchIndex + 1) % _totalMatches;
-        ScrollToMatch(_currentMatchIndex);
+        SelectCurrent();
         UpdateSearchCounter();
     }
 
     private void FindPrevious()
     {
-        if (_totalMatches <= 0 || string.IsNullOrEmpty(_searchQuery)) return;
+        if (_totalMatches <= 0) return;
         _currentMatchIndex--;
         if (_currentMatchIndex < 0)
             _currentMatchIndex = _totalMatches - 1;
-        ScrollToMatch(_currentMatchIndex);
+        SelectCurrent();
         UpdateSearchCounter();
+    }
+
+    private void SelectCurrent()
+    {
+        if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchMatchRanges.Count) return;
+        try
+        {
+            var (start, end) = _searchMatchRanges[_currentMatchIndex];
+            noteText.Selection.Select(start, end);
+        }
+        catch { }
     }
 
     private void UpdateSearchCounter()
@@ -2133,122 +2200,6 @@ public partial class NoteWindow : Window
         searchCounter.Text = $"{_currentMatchIndex + 1}/{_totalMatches}";
     }
 
-    // ── Search highlights (ApplyPropertyValue una vez por query) ──
-
-    private void ClearSearchHighlights()
-    {
-        foreach (var (_, _, originalBg) in _searchMatchRanges)
-        {
-            // no-op; we store originalBg for reference but clearing is done via
-            // reapplying all as transparent on the next HighlightAllMatches call
-        }
-        _searchMatchRanges.Clear();
-        _totalMatches = 0;
-        _currentMatchIndex = -1;
-
-        // Remove all local BackgroundProperty values that the search set
-        // by walking the document and unsetting any local background
-        // that looks like our search highlight colors
-        // We do a full pass to be safe
-        var pos = noteText.Document.ContentStart;
-        while (pos != null)
-        {
-            if (pos.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
-            {
-                var text = pos.GetTextInRun(LogicalDirection.Forward);
-                var runStart = pos;
-                var runEnd = runStart.GetPositionAtOffset(text.Length);
-                if (runEnd != null)
-                {
-                    var range = new TextRange(runStart, runEnd);
-                    try
-                    {
-                        range.ApplyPropertyValue(TextElement.BackgroundProperty,
-                            DependencyProperty.UnsetValue);
-                    }
-                    catch { }
-                }
-            }
-            pos = pos.GetNextContextPosition(LogicalDirection.Forward);
-        }
-    }
-
-    private void HighlightAllMatches()
-    {
-        ClearSearchHighlights();
-        if (string.IsNullOrEmpty(_searchQuery)) return;
-
-        var (normalColor, activeColor) = GetSearchHighlightColors();
-        var query = _searchQuery;
-
-        // Build flat text from run contexts (no CRLF desync)
-        var map = BuildCharMap();
-        var sb = new StringBuilder(map.Count);
-        var docPos = noteText.Document.ContentStart;
-        while (docPos != null)
-        {
-            if (docPos.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
-                sb.Append(docPos.GetTextInRun(LogicalDirection.Forward));
-            docPos = docPos.GetNextContextPosition(LogicalDirection.Forward);
-        }
-        var fullText = sb.ToString();
-
-        int idx = 0;
-        int matchIdx = 0;
-        while ((idx = fullText.IndexOf(query, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
-        {
-            int endIdx = idx + query.Length - 1;
-            if (endIdx >= map.Count) break;
-
-            var start = CharIndexToPointer(idx, map);
-            var end = CharIndexToPointer(endIdx, map);
-            if (start == null || end == null) { idx += query.Length; continue; }
-
-            var endPlus = end.GetPositionAtOffset(1);
-            if (endPlus == null) { idx += query.Length; continue; }
-
-            // Apply highlight background ONCE per match
-            var range = new TextRange(start, endPlus);
-            var color = (matchIdx == _currentMatchIndex) ? activeColor : normalColor;
-            range.ApplyPropertyValue(TextElement.BackgroundProperty,
-                new SolidColorBrush(color));
-
-            _searchMatchRanges.Add((start, endPlus, null));
-            matchIdx++;
-            idx += query.Length;
-        }
-
-        _totalMatches = matchIdx;
-
-        if (_totalMatches > 0 && _currentMatchIndex >= 0)
-            ScrollToMatch(_currentMatchIndex);
-
-        // Flush layout so RichTextBox processes new runs
-        noteText.UpdateLayout();
-    }
-
-    private void ScrollToMatch(int index)
-    {
-        if (index < 0 || index >= _searchMatchRanges.Count) return;
-        try
-        {
-            var (start, end, _) = _searchMatchRanges[index];
-            noteText.Selection.Select(start, end);
-        }
-        catch { }
-    }
-
-    private (Color normal, Color active) GetSearchHighlightColors()
-    {
-        var dark = IsDarkColor(_note.Color);
-        return dark
-            ? (Color.FromArgb(0x66, 0x90, 0xCA, 0xFF), Color.FromArgb(0xAA, 0x66, 0xBB, 0xFF))
-            : (Color.FromArgb(0x88, 0x22, 0x44, 0x88), Color.FromArgb(0xBB, 0x11, 0x33, 0xAA));
-    }
-
-    /// <summary>
-    /// Builds a char-by-char mapping from flat text index to TextPointer base + run offset.
-    /// </summary>
     private List<(TextPointer runStart, int charOffset)> BuildCharMap()
     {
         var map = new List<(TextPointer runStart, int charOffset)>();
