@@ -389,6 +389,22 @@ public partial class NoteWindow : Window
         return (0.299 * r + 0.587 * g + 0.114 * b) < 140;
     }
 
+    private static Color ParseColor(string? hex)
+    {
+        if (!string.IsNullOrEmpty(hex) && hex.Length >= 7)
+        {
+            try
+            {
+                var r = Convert.ToByte(hex.Substring(1, 2), 16);
+                var g = Convert.ToByte(hex.Substring(3, 2), 16);
+                var b = Convert.ToByte(hex.Substring(5, 2), 16);
+                return Color.FromArgb(0xFF, r, g, b);
+            }
+            catch { }
+        }
+        return Color.FromArgb(0xFF, 0x3A, 0x3A, 0x3A);
+    }
+
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         SaveRichText();
@@ -535,8 +551,8 @@ public partial class NoteWindow : Window
     private void UpdateButtonForegrounds()
     {
         var dark = IsDarkColor(_note.Color);
-        var darkBg = Color.FromArgb(0xF2, 0x2D, 0x2D, 0x2D);
-        var lightBg = Color.FromArgb(0xF2, 0xE8, 0xE8, 0xE8);
+        var noteColor = ParseColor(_note.Color);
+        var bgColor = Color.FromArgb(0xF2, noteColor.R, noteColor.G, noteColor.B);
 
         var fg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0x88, 0x3A, 0x3A, 0x3A));
         SetPanelForeground(titleRightPanel, fg);
@@ -550,13 +566,13 @@ public partial class NoteWindow : Window
                 ctrl.Foreground = floatFg;
         }
         if (formatPopup.Child is Border floatBorder)
-            floatBorder.Background = new SolidColorBrush(dark ? darkBg : lightBg);
+            floatBorder.Background = new SolidColorBrush(bgColor);
 
         // Style highlight popup border to match
         if (highlightPopupBorder != null)
         {
-            var hlBorderColor = dark ? Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x30, 0x00, 0x00, 0x00);
-            highlightPopupBorder.Background = new SolidColorBrush(dark ? darkBg : lightBg);
+            var hlBorderColor = dark ? Color.FromArgb(0x50, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x40, 0x00, 0x00, 0x00);
+            highlightPopupBorder.Background = new SolidColorBrush(bgColor);
             highlightPopupBorder.BorderBrush = new SolidColorBrush(hlBorderColor);
         }
 
@@ -1298,18 +1314,18 @@ public partial class NoteWindow : Window
     private void UpdateFloatingToolbarStyle()
     {
         var dark = IsDarkColor(_note.Color);
-        var darkBg = Color.FromArgb(0xF2, 0x2D, 0x2D, 0x2D);
-        var lightBg = Color.FromArgb(0xF2, 0xE8, 0xE8, 0xE8);
+        var noteColor = ParseColor(_note.Color);
+        var bgColor = Color.FromArgb(0xF2, noteColor.R, noteColor.G, noteColor.B);
 
-        // Set popup background
+        // Set popup background to note color
         if (formatPopup.Child is Border popupBorder)
-            popupBorder.Background = new SolidColorBrush(dark ? darkBg : lightBg);
+            popupBorder.Background = new SolidColorBrush(bgColor);
 
         // Style highlight popup border to match
         if (highlightPopupBorder != null)
         {
-            var hlBorderColor = dark ? Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x30, 0x00, 0x00, 0x00);
-            highlightPopupBorder.Background = new SolidColorBrush(dark ? darkBg : lightBg);
+            var hlBorderColor = dark ? Color.FromArgb(0x50, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x40, 0x00, 0x00, 0x00);
+            highlightPopupBorder.Background = new SolidColorBrush(bgColor);
             highlightPopupBorder.BorderBrush = new SolidColorBrush(hlBorderColor);
         }
 
@@ -1357,6 +1373,17 @@ public partial class NoteWindow : Window
     {
         if (e.LeftButton == MouseButtonState.Pressed)
         {
+            // Measure the popup content to center it above the 14px button
+            if (highlightPopup.Child is FrameworkElement child)
+            {
+                child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                var pw = child.DesiredSize.Width;
+                highlightPopup.HorizontalOffset = -(pw / 2) + 7;
+            }
+            else
+            {
+                highlightPopup.HorizontalOffset = -75;
+            }
             highlightPopup.Placement = PlacementMode.Top;
             highlightPopup.PlacementTarget = floatHighlightBtn;
             highlightPopup.VerticalOffset = -4;
