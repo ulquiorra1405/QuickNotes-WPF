@@ -1373,20 +1373,32 @@ public partial class NoteWindow : Window
     {
         if (e.LeftButton == MouseButtonState.Pressed)
         {
-            // Measure the popup content to center it above the 14px button
+            // Capture screen position BEFORE closing formatPopup
+            double x = 0, y = 0;
+            try
+            {
+                var btnScreen = floatHighlightBtn.PointToScreen(new Point(0, 0));
+                x = btnScreen.X;
+                y = btnScreen.Y;
+            }
+            catch { }
+
+            // Close formatPopup so the highlight picker doesn't compete for events
+            formatPopup.IsOpen = false;
+
             if (highlightPopup.Child is FrameworkElement child)
             {
                 child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                 var pw = child.DesiredSize.Width;
-                highlightPopup.HorizontalOffset = -(pw / 2) + 7;
+                highlightPopup.HorizontalOffset = x - (pw / 2) + 7;
             }
             else
             {
-                highlightPopup.HorizontalOffset = -75;
+                highlightPopup.HorizontalOffset = x - 75;
             }
-            highlightPopup.Placement = PlacementMode.Top;
-            highlightPopup.PlacementTarget = floatHighlightBtn;
-            highlightPopup.VerticalOffset = -4;
+            highlightPopup.VerticalOffset = y - 5;
+            highlightPopup.Placement = PlacementMode.Absolute;
+            highlightPopup.PlacementTarget = null;
             highlightPopup.IsOpen = !highlightPopup.IsOpen;
         }
     }
