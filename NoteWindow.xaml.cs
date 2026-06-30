@@ -119,12 +119,6 @@ public partial class NoteWindow : Window
                     (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn);
                 insideEditor = FindParent<RichTextBox>(src) == noteText;
 
-                // Check if click is inside formatPopup's border (its toolbar buttons)
-                if (formatPopup.IsOpen && formatPopup.Child is Border fmtBorder)
-                {
-                    if (FindParent<Border>(src) == fmtBorder)
-                        return; // Don't close anything when clicking format toolbar buttons
-                }
             }
 
             if (clickedTrigger) return;
@@ -132,8 +126,18 @@ public partial class NoteWindow : Window
             colorPopup.IsOpen = false;
             emojiPopup.IsOpen = false;
 
+            // Close formatPopup only if click is outside it AND outside editor
             if (formatPopup.IsOpen && !insideEditor)
-                HideFormatPopup();
+            {
+                bool clickedOnToolbar = false;
+                if (e.OriginalSource is DependencyObject s)
+                {
+                    var sp = FindParent<StackPanel>(s);
+                    clickedOnToolbar = sp == formatToolbar || sp == floatHighlightPicker;
+                }
+                if (!clickedOnToolbar)
+                    HideFormatPopup();
+            }
         };
 
         // Image paste via NoteWindow_PreviewKeyDown
