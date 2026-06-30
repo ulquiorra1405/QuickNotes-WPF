@@ -1247,13 +1247,15 @@ public partial class NoteWindow : Window
         var sel = noteText.Selection;
         if (sel != null && !sel.IsEmpty && sel.Text.TrimEnd().Length > 0)
         {
+            if (highlightPopup.IsOpen) return; // don't restart timer while picker is open
             _selectionTimer.Stop();
             _selectionTimer.Start();
         }
         else
         {
             _selectionTimer.Stop();
-            HideFormatPopup();
+            if (!highlightPopup.IsOpen)
+                HideFormatPopup();
         }
     }
 
@@ -1261,21 +1263,31 @@ public partial class NoteWindow : Window
     {
         _selectionTimer.Stop();
         if (noteText.Selection is { IsEmpty: false } sel && sel.Text.TrimEnd().Length > 0)
-            ShowFormatPopup();
+        {
+            // Don't reposition if highlight picker is open
+            if (!highlightPopup.IsOpen)
+                ShowFormatPopup();
+        }
     }
 
     private void ShowFormatPopup()
     {
-        formatPopup.IsOpen = false;
-        UpdateFloatingToolbarStyle();
-        PositionFormatPopup();
-        formatPopup.IsOpen = true;
+        if (formatPopup.IsOpen)
+        {
+            // Just update styles, don't flicker
+            UpdateFloatingToolbarStyle();
+        }
+        else
+        {
+            formatPopup.IsOpen = false;
+            UpdateFloatingToolbarStyle();
+            PositionFormatPopup();
+            formatPopup.IsOpen = true;
+        }
     }
 
     private void HideFormatPopup()
     {
-        if (!formatPopup.IsOpen) return;
-        highlightPopup.IsOpen = false;
         formatPopup.IsOpen = false;
     }
 
@@ -1393,7 +1405,27 @@ public partial class NoteWindow : Window
     {
         if (e.LeftButton == MouseButtonState.Pressed)
         {
-            // Center above the highlight button (14px wide)
+            // Calculate position based on formatPopup's offset + button position within toolbar
+            // Both relative to noteText (stable anchor)
+            var fmtOffX = formatPopup.HorizontalOffset;
+            var fmtOffY = formatPopup.VerticalOffset;
+
+            // Find floatHighlightBtn's center X within the toolbar
+            double btnCenterX = 0;
+            foreach (var child in formatToolbar.Children)
+            {
+                if (child == floatHighlightBtn)
+                {
+                    btnCenterX += floatHighlightBtn.ActualWidth / 2;
+                    break;
+                }
+                if (child is UIElement fe)
+                {
+                    btnCenterX += fe.DesiredSize.Width +
+                        (fe is FrameworkElement fw ? fw.Margin.Left + fw.Margin.Right : 0);
+                }
+            }
+
             double pw = 144;
             if (highlightPopup.Child is FrameworkElement hlChild)
             {
@@ -1401,10 +1433,10 @@ public partial class NoteWindow : Window
                 pw = hlChild.DesiredSize.Width;
             }
 
-            highlightPopup.Placement = PlacementMode.Top;
-            highlightPopup.PlacementTarget = floatHighlightBtn;
-            highlightPopup.HorizontalOffset = -(pw / 2) + 7;
-            highlightPopup.VerticalOffset = -4;
+            highlightPopup.Placement = PlacementMode.Relative;
+            highlightPopup.PlacementTarget = noteText;
+            highlightPopup.HorizontalOffset = fmtOffX + btnCenterX - (pw / 2);
+            highlightPopup.VerticalOffset = fmtOffY - 6;
             highlightPopup.IsOpen = !highlightPopup.IsOpen;
         }
     }
