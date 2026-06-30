@@ -220,6 +220,9 @@ public partial class NoteWindow : Window
             noteText.Document.Blocks.Clear();
             noteText.Document.Blocks.Add(para);
         }
+
+        // Clean up any stale background highlights from old search sessions
+        RemoveDocumentBackgrounds();
     }
 
     private void SaveRichText()
@@ -2005,11 +2008,39 @@ public partial class NoteWindow : Window
 
         noteSearchBox.Focus();
 
-        // Keep selection visible even when search box has focus
-        noteText.IsInactiveSelectionHighlightEnabled = true;
+        // Clean up any stale background highlights from old sessions
+        RemoveDocumentBackgrounds();
 
         // Clear editor selection so user sees the search box is active
         try { noteText.Selection.Select(noteText.Document.ContentStart, noteText.Document.ContentStart); } catch { }
+    }
+
+    /// <summary>
+    /// Walk the entire document and remove all local Background values on text runs.
+    /// Cleans up leftover highlights from previous search implementations.
+    /// Since we apply within each run individually, no fragmentation occurs.
+    /// </summary>
+    private void RemoveDocumentBackgrounds()
+    {
+        var pos = noteText.Document.ContentStart;
+        while (pos != null)
+        {
+            if (pos.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+            {
+                var text = pos.GetTextInRun(LogicalDirection.Forward);
+                var runEnd = pos.GetPositionAtOffset(text.Length);
+                if (runEnd != null)
+                {
+                    try
+                    {
+                        new TextRange(pos, runEnd).ApplyPropertyValue(
+                            TextElement.BackgroundProperty, DependencyProperty.UnsetValue);
+                    }
+                    catch { }
+                }
+            }
+            pos = pos.GetNextContextPosition(LogicalDirection.Forward);
+        }
     }
 
     private void HideNoteSearch()
@@ -2035,9 +2066,6 @@ public partial class NoteWindow : Window
         noteSearchBox.Clear();
         searchCounter.Text = "";
         _searchMatchRanges.Clear();
-
-        // Restore default selection behavior
-        noteText.IsInactiveSelectionHighlightEnabled = false;
 
         // Restore last match selection + focus for floating toolbar to work
         if (savedStart != null && savedEnd != null)
@@ -2177,21 +2205,13 @@ public partial class NoteWindow : Window
         try
         {
             var (start, end) = _searchMatchRanges[_currentMatchIndex];
-            // Must focus the editor for Selection.Select to auto-scroll
-            // and render the selection in active (blue) color
-            if (!noteText.IsFocused)
-            {
-                noteText.Focus();
-            }
+
+            // Scroll without stealing focus from search box
+            noteText.BringPointerIntoView(start);
+
+            // Set caret and select (selection visible in gray when inactive)
+            noteText.CaretPosition = start;
             noteText.Selection.Select(start, end);
-            // Return focus to search box
-            if (_isSearchActive && !noteSearchBox.IsFocused)
-            {
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try { noteSearchBox.Focus(); } catch { }
-                }), DispatcherPriority.Input);
-            }
         }
         catch { }
     }
