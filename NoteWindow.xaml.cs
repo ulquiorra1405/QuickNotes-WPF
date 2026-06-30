@@ -2171,7 +2171,21 @@ public partial class NoteWindow : Window
         try
         {
             var (start, end) = _searchMatchRanges[_currentMatchIndex];
+            // Must focus the editor for Selection.Select to auto-scroll
+            // and render the selection in active (blue) color
+            if (!noteText.IsFocused)
+            {
+                noteText.Focus();
+            }
             noteText.Selection.Select(start, end);
+            // Return focus to search box
+            if (_isSearchActive && !noteSearchBox.IsFocused)
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try { noteSearchBox.Focus(); } catch { }
+                }), DispatcherPriority.Input);
+            }
         }
         catch { }
     }
