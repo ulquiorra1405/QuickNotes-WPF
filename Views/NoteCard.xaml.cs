@@ -48,7 +48,14 @@ public partial class NoteCard : UserControl
     {
         InitializeComponent();
         SearchFilterChanged += OnSearchFilterChanged;
-        DataContextChanged += (_, _) => RenderBodyWithHighlight();
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is Note oldNote)
+                oldNote.PropertyChanged -= Note_PropertyChanged;
+            if (DataContext is Note newNote)
+                newNote.PropertyChanged += Note_PropertyChanged;
+            RenderBodyWithHighlight();
+        };
         Unloaded += (_, _) => SearchFilterChanged -= OnSearchFilterChanged;
     }
 
@@ -79,6 +86,12 @@ public partial class NoteCard : UserControl
     public event RoutedEventHandler ContextMenuAction
     { add => AddHandler(ContextMenuActionEvent, value); remove => RemoveHandler(ContextMenuActionEvent, value); }
 
+    private void Note_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(Note.Color))
+            RebuildTagPills();
+    }
+
     // === Initialization ===
 
     private void Card_Loaded(object sender, RoutedEventArgs e)
@@ -92,44 +105,48 @@ public partial class NoteCard : UserControl
             var pinBtn = FindVisualChild<Button>(this);
             if (pinBtn != null)
                 UpdatePinVisual(pinBtn, note, false);
-
-            // Render tag pills
-            tagsPanel.Children.Clear();
-            if (note.TagIds.Count > 0)
-            {
-                var isDark = IsDarkBg(note.Color);
-                var pillBg = isDark
-                    ? new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF))  // light bg on dark note
-                    : new SolidColorBrush(Color.FromArgb(0x30, 0x00, 0x00, 0x00));  // dark bg on light note
-                var pillFg = isDark
-                    ? new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF))  // white text
-                    : new SolidColorBrush(Color.FromArgb(0xBB, 0x3A, 0x3A, 0x3A));  // dark text
-
-                foreach (var tagId in note.TagIds)
-                {
-                    if (TagNameLookup.TryGetValue(tagId, out var tagName))
-                    {
-                        var pill = new Border
-                        {
-                            Background = pillBg,
-                            CornerRadius = new CornerRadius(4),
-                            Padding = new Thickness(5, 1, 5, 1),
-                            Margin = new Thickness(0, 0, 3, 0),
-                            Child = new TextBlock
-                            {
-                                Text = "#" + tagName,
-                                FontSize = 10,
-                                Foreground = pillFg,
-                            }
-                        };
-                        tagsPanel.Children.Add(pill);
-                    }
-                }
-                tagsPanel.Visibility = Visibility.Visible;
-            }
         }
 
+        RebuildTagPills();
         RenderBodyWithHighlight();
+    }
+
+    private void RebuildTagPills()
+    {
+        tagsPanel.Children.Clear();
+        tagsPanel.Visibility = Visibility.Collapsed;
+
+        if (DataContext is not Note note || note.TagIds.Count == 0) return;
+
+        var isDark = IsDarkBg(note.Color);
+        var pillBg = isDark
+            ? new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF))
+            : new SolidColorBrush(Color.FromArgb(0x30, 0x00, 0x00, 0x00));
+        var pillFg = isDark
+            ? new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF))
+            : new SolidColorBrush(Color.FromArgb(0xBB, 0x3A, 0x3A, 0x3A));
+
+        foreach (var tagId in note.TagIds)
+        {
+            if (TagNameLookup.TryGetValue(tagId, out var tagName))
+            {
+                var pill = new Border
+                {
+                    Background = pillBg,
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(5, 1, 5, 1),
+                    Margin = new Thickness(0, 0, 3, 0),
+                    Child = new TextBlock
+                    {
+                        Text = "#" + tagName,
+                        FontSize = 10,
+                        Foreground = pillFg,
+                    }
+                };
+                tagsPanel.Children.Add(pill);
+            }
+        }
+        tagsPanel.Visibility = Visibility.Visible;
     }
 
     private static bool IsDarkBg(string? hex)
