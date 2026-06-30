@@ -42,10 +42,10 @@ public partial class NoteWindow : Window
 
     private string _searchQuery = "";
     private bool _isSearchActive;
-    private readonly List<(TextRange range, object? originalBg)> _searchHighlights = new();
+    private readonly List<(TextPointer start, TextPointer end)> _searchMatchRanges = new();
     private int _currentMatchIndex = -1;
-    private int _lastActiveMatchIndex = -1;
     private int _totalMatches;
+    private SearchHighlightAdorner? _searchAdorner;
 
     private Color _currentHighlightColor = Color.FromArgb(0x55, 0xFF, 0xD7, 0x00);
 
@@ -70,6 +70,16 @@ public partial class NoteWindow : Window
         InitializeComponent();
         _note = note;
         _store = store ?? new NotesStore();
+
+        // Search highlight adorner
+        var adornerLayer = AdornerLayer.GetAdornerLayer(noteText);
+        if (adornerLayer != null)
+        {
+            _searchAdorner = new SearchHighlightAdorner(noteText);
+            adornerLayer.Add(_searchAdorner);
+        }
+        noteText.SizeChanged += (_, _) => UpdateSearchAdornerRects();
+        noteText.TextChanged += (_, _) => { if (_isSearchActive) UpdateSearchAdornerRects(); };
 
         DataContext = note;
 
@@ -2014,14 +2024,14 @@ public partial class NoteWindow : Window
         titleDisplay.Visibility = Visibility.Visible;
         titleRightPanel.Visibility = Visibility.Visible;
 
-        // Save selection before clearing highlights, then restore for scroll view
-        if (_currentMatchIndex >= 0 && _currentMatchIndex < _searchHighlights.Count)
+        // Select last match for scroll visibility before clearing adorner
+        if (_currentMatchIndex >= 0 && _currentMatchIndex < _searchMatchRanges.Count)
         {
-            var range = _searchHighlights[_currentMatchIndex].range;
+            var (lastStart, lastEnd) = _searchMatchRanges[_currentMatchIndex];
             ClearSearchHighlights();
             try
             {
-                noteText.Selection.Select(range.Start, range.End);
+                noteText.Selection.Select(lastStart, lastEnd);
             }
             catch { }
         }
@@ -2053,7 +2063,7 @@ public partial class NoteWindow : Window
 
         _searchQuery = query;
         _currentMatchIndex = 0;
-        HighlightAllMatches();
+        FindAllMatches();
         UpdateSearchCounter();
     }
 
@@ -2099,8 +2109,9 @@ public partial class NoteWindow : Window
     {
         if (_totalMatches <= 0 || string.IsNullOrEmpty(_searchQuery)) return;
         _currentMatchIndex = (_currentMatchIndex + 1) % _totalMatches;
-        UpdateActiveMatchHighlight();
+        UpdateSearchAdornerRects();
         UpdateSearchCounter();
+        ScrollToMatch(_currentMatchIndex);
     }
 
     private void FindPrevious()
@@ -2109,8 +2120,9 @@ public partial class NoteWindow : Window
         _currentMatchIndex--;
         if (_currentMatchIndex < 0)
             _currentMatchIndex = _totalMatches - 1;
-        UpdateActiveMatchHighlight();
+        UpdateSearchAdornerRects();
         UpdateSearchCounter();
+        ScrollToMatch(_currentMatchIndex);
     }
 
     private void UpdateSearchCounter()
@@ -2132,67 +2144,24 @@ public partial class NoteWindow : Window
         searchCounter.Text = $"{_currentMatchIndex + 1}/{_totalMatches}";
     }
 
-    // ── Search highlights ──
+    // ── Search highlights (Adorner-based — no document modification) ──
 
     private void ClearSearchHighlights()
     {
-        foreach (var (range, originalBg) in _searchHighlights)
-        {
-            try
-            {
-                // Use UnsetValue to remove local background (let inheritance work)
-                // Use actual originalBg when available
-                range.ApplyPropertyValue(TextElement.BackgroundProperty,
-                    originalBg ?? DependencyProperty.UnsetValue);
-            }
-            catch { }
-        }
-        _searchHighlights.Clear();
+        _searchAdorner?.Clear();
+        _searchMatchRanges.Clear();
         _totalMatches = 0;
         _currentMatchIndex = -1;
-        _lastActiveMatchIndex = -1;
     }
 
-    /// <summary>
-    /// Builds a char-by-char mapping from flat text index to TextPointer base + run offset.
-    /// </summary>
-    private List<(TextPointer runStart, int charOffset)> BuildCharMap()
-    {
-        var map = new List<(TextPointer runStart, int charOffset)>();
-        var pos = noteText.Document.ContentStart;
-        while (pos != null)
-        {
-            if (pos.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
-            {
-                var text = pos.GetTextInRun(LogicalDirection.Forward);
-                for (int i = 0; i < text.Length; i++)
-                    map.Add((pos, i));
-            }
-            pos = pos.GetNextContextPosition(LogicalDirection.Forward);
-        }
-        return map;
-    }
-
-    /// <summary>
-    /// Converts a flat-text character index to a TextPointer using the char map.
-    /// </summary>
-    private TextPointer? CharIndexToPointer(int charIndex, List<(TextPointer runStart, int charOffset)> map)
-    {
-        if (charIndex < 0 || charIndex >= map.Count) return null;
-        var (basePtr, subOffset) = map[charIndex];
-        return basePtr.GetPositionAtOffset(subOffset);
-    }
-
-    private void HighlightAllMatches()
+    private void FindAllMatches()
     {
         ClearSearchHighlights();
         if (string.IsNullOrEmpty(_searchQuery)) return;
 
-        var (normalColor, activeColor) = GetSearchHighlightColors();
         var query = _searchQuery;
-        int matchIdx = 0;
 
-        // Build flat text from runs (no CRLF desync)
+        // Build flat text from run contexts (no CRLF desync)
         var map = BuildCharMap();
         var sb = new StringBuilder(map.Count);
         var pos = noteText.Document.ContentStart;
@@ -2214,79 +2183,64 @@ public partial class NoteWindow : Window
             var end = CharIndexToPointer(endIdx, map);
             if (start == null || end == null) { idx += query.Length; continue; }
 
-            // end needs to be one past last char
             var endPlus = end.GetPositionAtOffset(1);
             if (endPlus == null) { idx += query.Length; continue; }
 
-            var range = new TextRange(start, endPlus);
-            object? origBg = null;
-            try
-            {
-                var val = range.GetPropertyValue(TextElement.BackgroundProperty);
-                if (val != DependencyProperty.UnsetValue)
-                    origBg = val;
-            }
-            catch { }
-
-            var color = (matchIdx == _currentMatchIndex) ? activeColor : normalColor;
-            range.ApplyPropertyValue(TextElement.BackgroundProperty, new SolidColorBrush(color));
-
-            _searchHighlights.Add((range, origBg));
-            matchIdx++;
+            _searchMatchRanges.Add((start, endPlus));
             idx += query.Length;
         }
 
-        _totalMatches = matchIdx;
+        _totalMatches = _searchMatchRanges.Count;
 
-        // Select first match for scroll visibility
         if (_totalMatches > 0 && _currentMatchIndex >= 0)
+        {
+            UpdateSearchAdornerRects();
             ScrollToMatch(_currentMatchIndex);
-    }
-
-    private void UpdateActiveMatchHighlight()
-    {
-        if (_searchHighlights.Count == 0) return;
-        if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchHighlights.Count)
-        {
-            _currentMatchIndex = 0;
-            return;
         }
-
-        var (normalColor, activeColor) = GetSearchHighlightColors();
-
-        // Only update old active (→ normal) and new active (→ active)
-        // This avoids reapplying to ALL matches, preventing run fragmentation
-        if (_lastActiveMatchIndex >= 0 && _lastActiveMatchIndex < _searchHighlights.Count
-            && _lastActiveMatchIndex != _currentMatchIndex)
-        {
-            try
-            {
-                _searchHighlights[_lastActiveMatchIndex].range.ApplyPropertyValue(
-                    TextElement.BackgroundProperty, new SolidColorBrush(normalColor));
-            }
-            catch { }
-        }
-
-        try
-        {
-            _searchHighlights[_currentMatchIndex].range.ApplyPropertyValue(
-                TextElement.BackgroundProperty, new SolidColorBrush(activeColor));
-        }
-        catch { }
-
-        _lastActiveMatchIndex = _currentMatchIndex;
-        ScrollToMatch(_currentMatchIndex);
     }
 
     private void ScrollToMatch(int index)
     {
-        if (index < 0 || index >= _searchHighlights.Count) return;
+        if (index < 0 || index >= _searchMatchRanges.Count) return;
         try
         {
-            var range = _searchHighlights[index].range;
-            noteText.Selection.Select(range.Start, range.End);
+            var (start, end) = _searchMatchRanges[index];
+            noteText.Selection.Select(start, end);
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Recompute adorner rectangles from current match ranges and update the adorner.
+    /// </summary>
+    private void UpdateSearchAdornerRects()
+    {
+        if (_searchAdorner == null || _searchMatchRanges.Count == 0)
+        {
+            _searchAdorner?.Clear();
+            return;
+        }
+
+        var (normalColor, activeColor) = GetSearchHighlightColors();
+        var highlights = new List<(Rect rect, Color color)>();
+
+        for (int i = 0; i < _searchMatchRanges.Count; i++)
+        {
+            try
+            {
+                var (start, end) = _searchMatchRanges[i];
+                var startRect = start.GetCharacterRect(LogicalDirection.Forward);
+                var endRect = end.GetCharacterRect(LogicalDirection.Backward);
+                if (startRect.IsEmpty && endRect.IsEmpty) continue;
+
+                var rect = Rect.Union(startRect, endRect);
+                var color = (i == _currentMatchIndex) ? activeColor : normalColor;
+                highlights.Add((rect, color));
+            }
+            catch { }
+        }
+
+        _searchAdorner.Update(highlights, _currentMatchIndex);
     }
 
     private (Color normal, Color active) GetSearchHighlightColors()
@@ -2295,6 +2249,33 @@ public partial class NoteWindow : Window
         return dark
             ? (Color.FromArgb(0x66, 0x90, 0xCA, 0xFF), Color.FromArgb(0xAA, 0x66, 0xBB, 0xFF))
             : (Color.FromArgb(0x88, 0x22, 0x44, 0x88), Color.FromArgb(0xBB, 0x11, 0x33, 0xAA));
+    }
+
+    /// <summary>
+    /// Builds a char-by-char mapping from flat text index to TextPointer base + run offset.
+    /// </summary>
+    private List<(TextPointer runStart, int charOffset)> BuildCharMap()
+    {
+        var map = new List<(TextPointer runStart, int charOffset)>();
+        var docPos = noteText.Document.ContentStart;
+        while (docPos != null)
+        {
+            if (docPos.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+            {
+                var text = docPos.GetTextInRun(LogicalDirection.Forward);
+                for (int i = 0; i < text.Length; i++)
+                    map.Add((docPos, i));
+            }
+            docPos = docPos.GetNextContextPosition(LogicalDirection.Forward);
+        }
+        return map;
+    }
+
+    private static TextPointer? CharIndexToPointer(int charIndex, List<(TextPointer runStart, int charOffset)> map)
+    {
+        if (charIndex < 0 || charIndex >= map.Count) return null;
+        var (basePtr, subOffset) = map[charIndex];
+        return basePtr.GetPositionAtOffset(subOffset);
     }
 
     private static TextPointer? FindTextPointer(TextPointer from, int offset)
@@ -2321,4 +2302,34 @@ public partial class NoteWindow : Window
             noteText.FontFamily = new FontFamily(fontFamily);
     }
 
+    // ── Search highlight Adorner (overlay, no document modification) ──
+
+    private sealed class SearchHighlightAdorner : Adorner
+    {
+        private readonly List<(Rect rect, Color color)> _highlights = new();
+
+        public SearchHighlightAdorner(UIElement element) : base(element) { }
+
+        public void Update(List<(Rect rect, Color color)> highlights, int activeIndex)
+        {
+            _highlights.Clear();
+            _highlights.AddRange(highlights);
+            InvalidateVisual();
+        }
+
+        public void Clear()
+        {
+            _highlights.Clear();
+            InvalidateVisual();
+        }
+
+        protected override void OnRender(DrawingContext dc)
+        {
+            foreach (var (rect, color) in _highlights)
+            {
+                if (rect.IsEmpty) continue;
+                dc.DrawRectangle(new SolidColorBrush(color), null, rect);
+            }
+        }
+    }
 }
