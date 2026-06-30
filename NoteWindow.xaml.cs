@@ -600,9 +600,10 @@ public partial class NoteWindow : Window
         }
 
         // Style search bar dynamically
+        var searchIconFg = new SolidColorBrush(
+            dark ? Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0xBB, 0x3A, 0x3A, 0x3A));
         var searchFg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0xBB, 0x3A, 0x3A, 0x3A));
-        noteSearchBox.Foreground = searchFg;
-        noteSearchHint.Foreground = new SolidColorBrush(Color.FromArgb(0x66,
+        var searchHintFg = new SolidColorBrush(Color.FromArgb(0x66,
             dark ? (byte)0xFF : (byte)0x3A,
             dark ? (byte)0xFF : (byte)0x3A,
             dark ? (byte)0xFF : (byte)0x3A));
@@ -612,6 +613,11 @@ public partial class NoteWindow : Window
             dark ? (byte)0xFF : (byte)0x00,
             dark ? (byte)0xFF : (byte)0x00,
             dark ? (byte)0xFF : (byte)0x00));
+        noteSearchBox.Foreground = searchFg;
+        noteSearchHint.Foreground = searchHintFg;
+        if (searchIcon != null) searchIcon.Foreground = searchIconFg;
+        if (searchCloseBtn != null) searchCloseBtn.Foreground = searchIconFg;
+        // searchCounter foreground is updated in UpdateSearchCounter
 
         ApplyScrollbarReversal(noteText, _note.Color);
     }
@@ -2199,7 +2205,11 @@ public partial class NoteWindow : Window
             return;
         }
 
-        searchCounter.Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF));
+        var dark = IsDarkColor(_note.Color);
+        searchCounter.Foreground = new SolidColorBrush(Color.FromArgb(0x88,
+            dark ? (byte)0xFF : (byte)0x3A,
+            dark ? (byte)0xFF : (byte)0x3A,
+            dark ? (byte)0xFF : (byte)0x3A));
         searchCounter.Text = $"{_currentMatchIndex + 1}/{_totalMatches}";
     }
 
