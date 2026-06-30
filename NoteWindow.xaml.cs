@@ -2236,19 +2236,14 @@ public partial class NoteWindow : Window
     }
 
     /// <summary>
-    /// Rebuild canvas rectangles for all matches, offset by scroll position.
+    /// Rebuild canvas rectangles for all matches.
+    /// GetCharacterRect already returns coordinates relative to the RichTextBox
+    /// viewport (accounting for scroll), so no scroll offset is needed.
     /// </summary>
     private void UpdateSearchOverlay()
     {
         searchCanvas.Children.Clear();
         if (_searchMatchRanges.Count == 0) return;
-
-        double scrollX = _searchScrollViewer?.HorizontalOffset ?? 0;
-        double scrollY = _searchScrollViewer?.VerticalOffset ?? 0;
-
-        // Canvas must be same width/height as the document content
-        searchCanvas.Width = Math.Max(noteText.ActualWidth, _searchScrollViewer?.ExtentWidth ?? noteText.ActualWidth);
-        searchCanvas.Height = _searchScrollViewer?.ExtentHeight ?? noteText.ActualHeight;
 
         var (normalColor, activeColor) = GetSearchHighlightColors();
 
@@ -2263,11 +2258,9 @@ public partial class NoteWindow : Window
 
                 var r = Rect.Union(startRect, endRect);
 
-                // Offset by scroll position
-                r.X -= scrollX;
-                r.Y -= scrollY;
-
-                if (r.Right < 0 || r.Bottom < 0 || r.Left > searchCanvas.Width) continue;
+                // Skip rects outside the visible area
+                if (r.Bottom < 0 || r.Top > searchCanvas.ActualHeight) continue;
+                if (r.Right < 0 || r.Left > searchCanvas.ActualWidth) continue;
 
                 var color = (i == _currentMatchIndex) ? activeColor : normalColor;
                 var rect = new System.Windows.Shapes.Rectangle
