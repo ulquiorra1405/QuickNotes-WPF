@@ -119,9 +119,32 @@ public partial class NoteCard : UserControl
                 }
                 tagsPanel.Visibility = Visibility.Visible;
             }
+
+            // Tag pills foreground should adapt to note color
+            var pillFg = IsDarkBg(note.Color)
+                ? new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF))
+                : new SolidColorBrush(Color.FromArgb(0xBB, 0x3A, 0x3A, 0x3A));
+            foreach (var child in tagsPanel.Children)
+            {
+                if (child is Border b && b.Child is TextBlock tb)
+                    tb.Foreground = pillFg;
+            }
         }
 
         RenderBodyWithHighlight();
+    }
+
+    private static bool IsDarkBg(string? hex)
+    {
+        if (string.IsNullOrEmpty(hex) || hex.Length < 7) return false;
+        try
+        {
+            var r = Convert.ToByte(hex.Substring(1, 2), 16);
+            var g = Convert.ToByte(hex.Substring(3, 2), 16);
+            var b = Convert.ToByte(hex.Substring(5, 2), 16);
+            return (r * 0.299 + g * 0.587 + b * 0.114) < 128;
+        }
+        catch { return false; }
     }
 
     private void RenderBodyWithHighlight()

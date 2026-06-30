@@ -1223,7 +1223,7 @@ public partial class NoteWindow : Window
 
     private void ShowFormatPopup()
     {
-        if (formatPopup.IsOpen) return;
+        formatPopup.IsOpen = false;
         UpdateFloatingToolbarStyle();
         PositionFormatPopup();
         formatPopup.IsOpen = true;
@@ -1246,41 +1246,45 @@ public partial class NoteWindow : Window
             var startPt = sel.Start.GetCharacterRect(LogicalDirection.Forward);
             var endPt = sel.End.GetCharacterRect(LogicalDirection.Backward);
 
-            // Convert to screen coordinates directly from noteText
-            var startScreen = noteText.PointToScreen(new Point(startPt.X, startPt.Y));
-            var endScreen = noteText.PointToScreen(new Point(endPt.X + endPt.Width, endPt.Y + endPt.Height));
-
-            // Calculate selection center and top edge in screen coords
-            double selCenterX = (startScreen.X + endScreen.X) / 2;
-            double selTopY = Math.Min(startScreen.Y, endScreen.Y);
-            double selBottomY = Math.Max(startScreen.Y + startPt.Height, endScreen.Y + endPt.Height);
+            // Get selection dimensions relative to noteText
+            double selLeft = Math.Min(startPt.X, endPt.X);
+            double selRight = Math.Max(startPt.X + startPt.Width, endPt.X + endPt.Width);
+            double selTop = Math.Min(startPt.Y, endPt.Y);
+            double selBot = Math.Max(startPt.Y + startPt.Height, endPt.Y + endPt.Height);
+            double selCenterX = (selLeft + selRight) / 2;
 
             // Force layout to get actual toolbar size
             formatToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             var tw = formatToolbar.DesiredSize.Width;
             var th = formatToolbar.DesiredSize.Height;
 
+            // Close first to reset placement, then reopen with new offsets
+            formatPopup.IsOpen = false;
+            formatPopup.Placement = PlacementMode.Relative;
+            formatPopup.PlacementTarget = noteText;
+
             // Center above selection
-            double popupX = Math.Max(10, selCenterX - tw / 2);
-            double popupY = selTopY - th - 8;
+            double offsetX = Math.Max(2, selCenterX - tw / 2);
+            double offsetY = selTop - th - 8;
 
-            // If off-screen top, show below instead
-            if (popupY < 40)
-                popupY = selBottomY + 6;
+            // If off-screen top (relative to noteText), show below instead
+            if (offsetY < 0)
+                offsetY = selBot + 6;
 
-            // Clamp within screen bounds
-            popupX = Math.Max(4, Math.Min(popupX, SystemParameters.PrimaryScreenWidth - tw - 4));
+            // Clamp horizontal within noteText bounds
+            offsetX = Math.Max(2, Math.Min(offsetX, noteText.ActualWidth - tw - 2));
 
-            formatPopup.Placement = PlacementMode.Absolute;
-            formatPopup.HorizontalOffset = popupX;
-            formatPopup.VerticalOffset = popupY;
+            formatPopup.HorizontalOffset = offsetX;
+            formatPopup.VerticalOffset = offsetY;
         }
         catch
         {
-            // Fallback: center popup roughly
-            formatPopup.Placement = PlacementMode.Absolute;
-            formatPopup.HorizontalOffset = Math.Max(10, Left + Width / 2 - 100);
-            formatPopup.VerticalOffset = Top + 60;
+            // Fallback
+            formatPopup.IsOpen = false;
+            formatPopup.Placement = PlacementMode.Relative;
+            formatPopup.PlacementTarget = noteText;
+            formatPopup.HorizontalOffset = noteText.ActualWidth / 2 - 100;
+            formatPopup.VerticalOffset = 10;
         }
     }
 

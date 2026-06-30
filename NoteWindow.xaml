@@ -308,35 +308,35 @@
 
         <!-- Floating format toolbar -->
         <Popup x:Name="formatPopup" AllowsTransparency="True" PopupAnimation="Fade"
-               StaysOpen="False" Placement="Absolute">
+               StaysOpen="False" Placement="Absolute" Focusable="False">
             <Border BorderBrush="#40000000" BorderThickness="1"
                     CornerRadius="8" Padding="6,3">
                 <StackPanel Orientation="Horizontal" x:Name="formatToolbar">
                     <Button x:Name="floatBoldBtn" Content="B" FontWeight="Bold" FontSize="11"
                             Width="26" Height="24" Cursor="Hand" ToolTip="Negrita"
-                            Style="{StaticResource TitleBtn}" Foreground="#DDD"
+                            Style="{StaticResource TitleBtn}"
                             Click="FloatBold_Click"/>
                     <Button x:Name="floatItalicBtn" Content="I" FontStyle="Italic" FontSize="11"
                             Width="26" Height="24" Cursor="Hand" ToolTip="Cursiva"
-                            Style="{StaticResource TitleBtn}" Foreground="#DDD"
+                            Style="{StaticResource TitleBtn}"
                             Click="FloatItalic_Click"/>
                     <Button x:Name="floatUnderlineBtn" Content="U" FontSize="11"
                             Width="26" Height="24" Cursor="Hand" ToolTip="Subrayado"
-                            Style="{StaticResource TitleBtn}" Foreground="#DDD"
+                            Style="{StaticResource TitleBtn}"
                             Click="FloatUnderline_Click">
                         <Button.ContentTemplate>
                             <DataTemplate>
-                                <TextBlock Text="U" TextDecorations="Underline" Foreground="#DDD"/>
+                                <TextBlock Text="U" TextDecorations="Underline"/>
                             </DataTemplate>
                         </Button.ContentTemplate>
                     </Button>
                     <Button x:Name="floatStrikeBtn" Content="S" FontSize="12"
                             Width="26" Height="24" Cursor="Hand" ToolTip="Tachado"
-                            Style="{StaticResource TitleBtn}" Foreground="#DDD"
+                            Style="{StaticResource TitleBtn}"
                             Click="FloatStrike_Click">
                         <Button.ContentTemplate>
                             <DataTemplate>
-                                <TextBlock Text="S" TextDecorations="Strikethrough" Foreground="#DDD"/>
+                                <TextBlock Text="S" TextDecorations="Strikethrough"/>
                             </DataTemplate>
                         </Button.ContentTemplate>
                     </Button>
@@ -349,7 +349,7 @@
                     <Rectangle Width="1" Fill="#40FFFFFF" Margin="3,2"/>
                     <Button x:Name="floatCheckboxBtn" Content="◻" FontSize="14"
                             Width="26" Height="24" Cursor="Hand" ToolTip="Checklist"
-                            Style="{StaticResource TitleBtn}" Foreground="#DDD"
+                            Style="{StaticResource TitleBtn}"
                             Click="FloatCheckbox_Click"/>
                 </StackPanel>
             </Border>
