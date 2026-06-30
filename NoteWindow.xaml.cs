@@ -106,7 +106,7 @@ public partial class NoteWindow : Window
         PreviewKeyDown += NoteWindow_PreviewKeyDown;
         PreviewMouseDown += (_, e) =>
         {
-            bool anyOpen = colorPopup.IsOpen || emojiPopup.IsOpen || highlightPopup.IsOpen || formatPopup.IsOpen;
+            bool anyOpen = colorPopup.IsOpen || emojiPopup.IsOpen || formatPopup.IsOpen;
             if (!anyOpen) return;
 
             bool clickedTrigger = false;
@@ -116,9 +116,7 @@ public partial class NoteWindow : Window
             {
                 clickedTrigger =
                     (colorPopup.IsOpen && FindParent<Border>(src) == currentColorDot) ||
-                    (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn) ||
-                    (highlightPopup.IsOpen && FindParent<Border>(src) == highlightBtn) ||
-                    (highlightPopup.IsOpen && FindParent<Border>(src) == floatHighlightBtn);
+                    (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn);
                 insideEditor = FindParent<RichTextBox>(src) == noteText;
 
                 // Check if click is inside formatPopup's border (its toolbar buttons)
@@ -133,7 +131,6 @@ public partial class NoteWindow : Window
 
             colorPopup.IsOpen = false;
             emojiPopup.IsOpen = false;
-            highlightPopup.IsOpen = false;
 
             if (formatPopup.IsOpen && !insideEditor)
                 HideFormatPopup();
@@ -146,10 +143,6 @@ public partial class NoteWindow : Window
 
         // Auto-pairing
         PreviewTextInput += NoteWindow_PreviewTextInput;
-
-        // Highlight popup
-        BuildHighlightPicker();
-        highlightBtn.Background = new SolidColorBrush(_currentHighlightColor);
 
         // Floating toolbar timer
         _selectionTimer.Tick += SelectionTimer_Tick;
@@ -859,98 +852,6 @@ public partial class NoteWindow : Window
     }
 
     // ── Highlight ──
-
-    private void BuildHighlightPicker()
-    {
-        highlightPanel.Children.Clear();
-        foreach (var color in HighlightColors)
-        {
-            var border = new Border
-            {
-                Width = 14,
-                Height = 14,
-                CornerRadius = new CornerRadius(2),
-                Margin = new Thickness(2),
-                Cursor = Cursors.Hand,
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0x00, 0x00)),
-                BorderThickness = new Thickness(1),
-                Background = new SolidColorBrush(color),
-            };
-            var c = color; // capture
-            border.MouseDown += (_, e) =>
-            {
-                if (e.LeftButton == MouseButtonState.Pressed)
-                    SelectHighlightColor(c, border);
-            };
-            border.MouseEnter += (_, _) =>
-                border.BorderBrush = new SolidColorBrush(Color.FromArgb(0x80, 0x00, 0x00, 0x00));
-            border.MouseLeave += (_, _) =>
-                border.BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0x00, 0x00));
-            highlightPanel.Children.Add(border);
-        }
-
-        // "Sin color" button — removes highlight
-        var noColorBorder = new Border
-        {
-            Width = 14,
-            Height = 14,
-            CornerRadius = new CornerRadius(2),
-            Margin = new Thickness(2),
-            Cursor = Cursors.Hand,
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x60, 0xFF, 0x00, 0x00)),
-            BorderThickness = new Thickness(1.5),
-            Background = Brushes.Transparent,
-            ToolTip = "Quitar resaltado",
-        };
-        // Draw an X using a TextBlock
-        noColorBorder.Child = new System.Windows.Controls.TextBlock
-        {
-            Text = "✕",
-            FontSize = 10,
-            Foreground = new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0x44, 0x44)),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            VerticalAlignment = System.Windows.VerticalAlignment.Center,
-        };
-        noColorBorder.MouseDown += (_, e) =>
-        {
-            if (e.LeftButton == MouseButtonState.Pressed)
-                SelectHighlightColor(_noHighlightColor, noColorBorder);
-        };
-        noColorBorder.MouseEnter += (_, _) =>
-            noColorBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0x00, 0x00));
-        noColorBorder.MouseLeave += (_, _) =>
-            noColorBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0x60, 0xFF, 0x00, 0x00));
-        highlightPanel.Children.Add(noColorBorder);
-    }
-
-    private void HighlightBtn_MouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.LeftButton == MouseButtonState.Pressed)
-        {
-            highlightPopup.IsOpen = !highlightPopup.IsOpen;
-            try { noteText.Focus(); } catch { }
-        }
-    }
-
-    private void SelectHighlightColor(Color color, Border selected)
-    {
-        _currentHighlightColor = color;
-
-        if (color == _noHighlightColor)
-        {
-            highlightBtn.Background = Brushes.Transparent;
-            floatHighlightBtn.Background = Brushes.Transparent;
-        }
-        else
-        {
-            var brush = new SolidColorBrush(color);
-            highlightBtn.Background = brush;
-            floatHighlightBtn.Background = brush;
-        }
-
-        highlightPopup.IsOpen = false;
-        ApplyHighlight(color);
-    }
 
     private void ApplyHighlight(Color color)
     {

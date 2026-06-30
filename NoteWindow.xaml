@@ -359,14 +359,5 @@
             </Border>
         </Popup>
 
-        <!-- Hidden highlight popup (kept for code compatibility) -->
-        <Border x:Name="highlightBtn" Width="0" Height="0" Visibility="Collapsed"/>
-        <Popup x:Name="highlightPopup" Placement="Top"
-               StaysOpen="True" AllowsTransparency="True" PopupAnimation="Fade">
-            <Border x:Name="highlightPopupBorder" CornerRadius="6" Padding="2"
-                    BorderThickness="1">
-                <StackPanel x:Name="highlightPanel" Orientation="Horizontal"/>
-            </Border>
-        </Popup>
     </Grid>
 </Window>
