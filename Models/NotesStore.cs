@@ -569,6 +569,88 @@ public class NotesStore
         }
     }
 
+    /// <summary>
+    /// Preview info for a backup file.
+    /// </summary>
+    public record BackupPreview(
+        string FileName,
+        string FilePath,
+        long FileSizeBytes,
+        int NoteCount,
+        int CurrentNoteCount,
+        int CurrentNoteTotal,
+        string BackupDate
+    );
+
+    /// <summary>
+    /// Reads a backup .db file and returns preview info.
+    /// </summary>
+    public static BackupPreview? GetBackupPreview(string path, int currentNoteCount, int currentNoteTotal)
+    {
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var fi = new FileInfo(path);
+            var connStr = new SqliteConnectionStringBuilder
+            {
+                DataSource = path,
+                Mode = SqliteOpenMode.ReadOnly,
+            }.ToString();
+
+            int count = 0;
+            using (var conn = new SqliteConnection(connStr))
+            {
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT COUNT(*) FROM notes WHERE IsDeleted = 0";
+                var result = cmd.ExecuteScalar();
+                count = result != null ? Convert.ToInt32(result) : 0;
+            }
+
+            var dateMatch = System.Text.RegularExpressions.Regex.Match(
+                Path.GetFileNameWithoutExtension(path),
+                @"(\d{4}-\d{2}-\d{2})_(\d{6})"
+            );
+            string backupDate = dateMatch.Success
+                ? $"{dateMatch.Groups[1].Value} {dateMatch.Groups[2].Value[..2]}:{dateMatch.Groups[2].Value[2..4]}:{dateMatch.Groups[2].Value[4..]}"
+                : fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm");
+
+            return new BackupPreview(
+                fi.Name,
+                path,
+                fi.Length,
+                count,
+                currentNoteCount,
+                currentNoteTotal,
+                backupDate
+            );
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Restores a backup file by replacing the current database.
+    /// Returns true if successful.
+    /// </summary>
+    public static bool RestoreFromBackup(string backupPath)
+    {
+        try
+        {
+            if (!File.Exists(backupPath)) return false;
+            // Kill any open connections by closing the store
+            // The app needs to restart after this
+            File.Copy(backupPath, dbPath, overwrite: true);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private class SettingsData
     {
         public double MainLeft { get; set; } = 100;

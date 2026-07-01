@@ -188,6 +188,54 @@ public partial class SettingsWindow : Window
         pathGrid.Children.Add(pathBox);
         pathGrid.Children.Add(browseBtn);
         panel.Children.Add(pathGrid);
+
+        // Restore button
+        var restoreRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
+        var restoreBtn = new Button
+        {
+            Content = "Restaurar desde backup...",
+            Height = 28,
+            Cursor = Cursors.Hand,
+            FontSize = 12,
+        };
+        restoreBtn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xDD, 0xCC, 0x66), Color.FromRgb(0x3A, 0x3A, 0x3A), Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
+        restoreBtn.Click += (_, _) =>
+        {
+            // Open backup file picker, defaulting to backup folder
+            var defaultDir = string.IsNullOrWhiteSpace(_backupPathVal)
+                ? System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "QuickNotes", "backups")
+                : _backupPathVal;
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Seleccionar archivo de backup",
+                Filter = "Backup files (*.db)|*.db|All files (*.*)|*.*",
+                InitialDirectory = defaultDir,
+                DefaultExt = ".db",
+            };
+            if (dlg.ShowDialog() == true)
+            {
+                var preview = NotesStore.GetBackupPreview(
+                    dlg.FileName,
+                    _store.Notes.Count(n => !n.IsDeleted),
+                    _store.Notes.Count
+                );
+                if (preview == null)
+                {
+                    MessageBox.Show("No se pudo leer el archivo de backup.", "Error",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+                var win = new RestorePreviewWindow(preview)
+                {
+                    Owner = this,
+                };
+                win.ShowDialog();
+            }
+        };
+        restoreRow.Children.Add(restoreBtn);
+        panel.Children.Add(restoreRow);
         panel.Children.Add(new TextBlock
         {
             Text = "Dejar vacío para usar la carpeta predeterminada (Documentos/QuickNotes/backups)",
