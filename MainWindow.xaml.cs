@@ -158,7 +158,12 @@ public partial class MainWindow : Window
                 first = false;
             }
 
-            var grid = new Grid { Cursor = System.Windows.Input.Cursors.Hand, Margin = new Thickness(0, 1, 0, 1) };
+            var grid = new Grid
+            {
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Margin = new Thickness(0, 1, 0, 1),
+                Background = System.Windows.Media.Brushes.Transparent,
+            };
             var text = new TextBlock
             {
                 Text = $"{t.Icon}  {t.Name}",
@@ -168,6 +173,8 @@ public partial class MainWindow : Window
             };
             grid.Children.Add(text);
             var template = t; // capture
+            grid.MouseEnter += (_, _) => grid.Background = new SolidColorBrush(Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF));
+            grid.MouseLeave += (_, _) => grid.Background = System.Windows.Media.Brushes.Transparent;
             grid.MouseDown += (_, args) =>
             {
                 if (args.LeftButton == System.Windows.Input.MouseButtonState.Pressed)
