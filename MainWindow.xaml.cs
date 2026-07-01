@@ -170,6 +170,7 @@ public partial class MainWindow : Window
                 Padding = new Thickness(6, 5, 6, 5),
                 Foreground = new SolidColorBrush(Color.FromRgb(0xEE, 0xEE, 0xEE)),
                 FontSize = 13,
+                FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI"),
             };
             grid.Children.Add(text);
             var template = t; // capture
