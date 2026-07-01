@@ -143,7 +143,9 @@ public partial class SettingsWindow : Window
         panel.Children.Add(backupCheck);
 
         // Backup path
-        var pathRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
+        var pathGrid = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+        pathGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        pathGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var pathBox = new TextBox
         {
             Text = _backupPathVal,
@@ -158,7 +160,7 @@ public partial class SettingsWindow : Window
             Margin = new Thickness(0, 0, 6, 0),
             TextWrapping = TextWrapping.NoWrap,
         };
-        Grid.SetIsSharedSizeScope(pathBox, true);
+        Grid.SetColumn(pathBox, 0);
         // Sync back on text change
         pathBox.TextChanged += (_, _) => _backupPathVal = pathBox.Text;
         var browseBtn = new Button
@@ -169,6 +171,7 @@ public partial class SettingsWindow : Window
             Cursor = Cursors.Hand,
             FontSize = 12,
         };
+        Grid.SetColumn(browseBtn, 1);
         browseBtn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xBB, 0xBB, 0xBB), Color.FromRgb(0x3A, 0x3A, 0x3A), Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
         browseBtn.Click += (_, _) =>
         {
@@ -182,9 +185,9 @@ public partial class SettingsWindow : Window
                 pathBox.Text = result;
             }
         };
-        pathRow.Children.Add(pathBox);
-        pathRow.Children.Add(browseBtn);
-        panel.Children.Add(pathRow);
+        pathGrid.Children.Add(pathBox);
+        pathGrid.Children.Add(browseBtn);
+        panel.Children.Add(pathGrid);
         panel.Children.Add(new TextBlock
         {
             Text = "Dejar vacío para usar la carpeta predeterminada (Documentos/QuickNotes/backups)",

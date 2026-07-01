@@ -1,104 +1,98 @@
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace QuickNotes.Helpers;
 
 /// <summary>
-/// Native folder picker using the Vista/Windows 7+ IFileOpenDialog.
-/// No dependency on System.Windows.Forms required.
+/// Native folder browser via SHBrowseForFolder (shell32).
+/// Works on all Windows versions, no COM VTable trickery needed.
 /// </summary>
 public static class FolderPicker
 {
     public static string? Show(string? initialPath = null, string title = "Seleccionar carpeta")
     {
-        var dialog = (IFileOpenDialog)new FileOpenDialog();
+        var pidlRoot = IntPtr.Zero;
+        var psf = Marshal.AllocHGlobal(Marshal.SizeOf<BROWSEINFO>());
+
         try
         {
-            dialog.SetOptions(FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_DONTADDTORECENT);
-            dialog.SetTitle(title);
-
             if (!string.IsNullOrWhiteSpace(initialPath))
             {
-                if (NativeMethods.SHCreateItemFromParsingName(initialPath, IntPtr.Zero,
-                        typeof(IShellItem).GUID, out var item) == 0)
-                {
-                    dialog.SetFolder(item);
-                    Marshal.ReleaseComObject(item);
-                }
+                pidlRoot = SHILCreateFromPath(initialPath);
             }
 
-            int hr = dialog.Show(IntPtr.Zero);
-            if (hr < 0)
-                return null; // user cancelled or error
+            var displayBuf = Marshal.AllocHGlobal(260 * 2); // MAX_PATH wide chars
 
-            dialog.GetResult(out var result);
-            result.GetDisplayName(SIGDN_FILESYSPATH, out var path);
-            Marshal.ReleaseComObject(result);
+            var bi = new BROWSEINFO
+            {
+                hwndOwner = IntPtr.Zero,
+                pidlRoot = pidlRoot,
+                pszDisplayName = displayBuf,
+                lpszTitle = title,
+                ulFlags = BIF_NEWDIALOGSTYLE | BIF_RETURNONLYFSDIRS | BIF_DONTGOBELOWDOMAIN | BIF_USENEWUI,
+                lpfn = IntPtr.Zero,
+                lParam = IntPtr.Zero,
+                iImage = 0,
+            };
 
-            return path;
+            Marshal.StructureToPtr(bi, psf, false);
+
+            var pidl = SHBrowseForFolder(psf);
+            if (pidl == IntPtr.Zero)
+                return null;
+
+            var pathBuf = new StringBuilder(260);
+            SHGetPathFromIDList(pidl, pathBuf);
+            return pathBuf.ToString();
         }
         finally
         {
-            Marshal.ReleaseComObject(dialog);
+            if (pidlRoot != IntPtr.Zero)
+                Marshal.FreeCoTaskMem(pidlRoot);
+            Marshal.FreeHGlobal(psf);
         }
     }
 
-    private const uint FOS_PICKFOLDERS = 0x20;
-    private const uint FOS_FORCEFILESYSTEM = 0x40;
-    private const uint FOS_DONTADDTORECENT = 0x8000000;
-    private const uint SIGDN_FILESYSPATH = 0x80058000;
-
-    // ── COM interfaces (minimal VTable-correct declarations) ──
-
-    [ComImport, Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")]
-    private class FileOpenDialog { }
-
-    [ComImport, Guid("42f85136-db7e-49cf-bb39-0fb5a5a1c731"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IFileOpenDialog
+    private static IntPtr SHILCreateFromPath(string path)
     {
-        // IFileDialog methods (in VTable order)
-        void _SetFileTypes();                // 3
-        void _SetFileTypeIndex();            // 4
-        void _GetFileTypeIndex();            // 5
-        void _Advise();                      // 6
-        void _Unadvise();                    // 7
-        void SetOptions(uint options);       // 8
-        void _GetOptions();                  // 9
-        void _SetDefaultFolder(IShellItem psi); // 10
-        void SetFolder(IShellItem psi);      // 11
-        void _GetFolder();                   // 12
-        void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string title); // 13
-        void _SetOkButtonLabel();            // 14
-        void _SetFileName();                 // 15
-        void _GetFileName();                 // 16
-        void _SetFileTypeIndex2();           // 17
-        void _GetFileTypeIndex2();           // 18
-        void GetResult(out IShellItem ppsi); // 19
-        int Show(IntPtr hwndOwner);          // 20 — returns HRESULT
-        void _SetClientGuid();               // 21
-        void _ClearClientData();             // 22
-        void _SetFilter();                   // 23
-        void _GetResult2();                  // 24
-        void _SetCancelButtonLabel();        // 25
-        void _SetFileNameLabel();            // 26
+        // Use SHParseDisplayName to get PIDL from a path
+        var guid = new Guid("00000000-0000-0000-C000-000000000046"); // IID_IShellFolder
+        SHParseDisplayName(path, IntPtr.Zero, out var pidl, 0, out _);
+        return pidl;
     }
 
-    [ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IShellItem
-    {
-        void _BindToHandler();
-        void _GetParent();
-        void GetDisplayName(uint sigdnName, [MarshalAs(UnmanagedType.LPWStr)] out string ppszName);
-        void _GetAttributes();
-        void _Compare();
-    }
+    // ── P/Invoke ──
 
-    private static class NativeMethods
+    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+    private static extern IntPtr SHBrowseForFolder(IntPtr lpbi);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+    private static extern bool SHGetPathFromIDList(IntPtr pidl, StringBuilder pszPath);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHParseDisplayName(
+        [MarshalAs(UnmanagedType.LPWStr)] string pszName,
+        IntPtr pbc,
+        out IntPtr ppidl,
+        uint sfgaoIn,
+        out uint psfgaoOut);
+
+    private const uint BIF_RETURNONLYFSDIRS = 0x0001;
+    private const uint BIF_DONTGOBELOWDOMAIN = 0x0002;
+    private const uint BIF_USENEWUI = 0x0040;
+    private const uint BIF_NEWDIALOGSTYLE = 0x0040;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct BROWSEINFO
     {
-        [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
-        public static extern int SHCreateItemFromParsingName(
-            [MarshalAs(UnmanagedType.LPWStr)] string pszPath,
-            IntPtr pbc,
-            [MarshalAs(UnmanagedType.LPStruct)] Guid riid,
-            out IShellItem ppv);
+        public IntPtr hwndOwner;
+        public IntPtr pidlRoot;
+        public IntPtr pszDisplayName;
+        [MarshalAs(UnmanagedType.LPTStr)]
+        public string lpszTitle;
+        public uint ulFlags;
+        public IntPtr lpfn;
+        public IntPtr lParam;
+        public int iImage;
     }
 }
