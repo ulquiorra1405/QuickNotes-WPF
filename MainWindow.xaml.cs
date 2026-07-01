@@ -149,38 +149,32 @@ public partial class MainWindow : Window
         templatePanel.Children.Clear();
         var templates = store.GetTemplates();
 
-        // Separator between built-in section label and items
-        bool first = true;
+        // Label
+        templatePanel.Children.Add(new TextBlock
+        {
+            Text = "Nueva nota",
+            FontSize = 11,
+            Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xBB, 0xBB, 0xBB)),
+            Padding = new Thickness(8, 4, 8, 2),
+            FontWeight = FontWeights.SemiBold,
+        });
+
+        var menuItemStyle = (Style)FindResource("MenuItemBtn");
         foreach (var t in templates)
         {
-            if (t.IsBuiltIn && first)
+            var template = t;
+            var btn = new Button
             {
-                first = false;
-            }
-
-            var grid = new Grid
-            {
-                Cursor = System.Windows.Input.Cursors.Hand,
-                Margin = new Thickness(0, 1, 0, 1),
-                Background = System.Windows.Media.Brushes.Transparent,
-            };
-            var text = new TextBlock
-            {
-                Text = $"{t.Icon}  {t.Name}",
-                Padding = new Thickness(6, 5, 6, 5),
-                Foreground = new SolidColorBrush(Color.FromRgb(0xEE, 0xEE, 0xEE)),
+                Content = $"{t.Icon}  {t.Name}",
+                Height = 30,
+                Padding = new Thickness(8, 0, 8, 0),
                 FontSize = 13,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
             };
-            grid.Children.Add(text);
-            var template = t; // capture
-            grid.MouseEnter += (_, _) => grid.Background = new SolidColorBrush(Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF));
-            grid.MouseLeave += (_, _) => grid.Background = System.Windows.Media.Brushes.Transparent;
-            grid.MouseDown += (_, args) =>
-            {
-                if (args.LeftButton == System.Windows.Input.MouseButtonState.Pressed)
-                    CreateNoteFromTemplate(template);
-            };
-            templatePanel.Children.Add(grid);
+            if (menuItemStyle != null) btn.Style = menuItemStyle;
+            btn.Click += (_, _) => CreateNoteFromTemplate(template);
+            templatePanel.Children.Add(btn);
         }
 
         if (templatePanel.Children.Count > 0)

@@ -302,7 +302,7 @@
                            PlacementTarget="{Binding ElementName=addBtn}"
                            StaysOpen="False" AllowsTransparency="True"
                            PopupAnimation="Fade">
-                        <Border x:Name="templatePopupBorder" Background="#2D2D2D" CornerRadius="8" Padding="6"
+                        <Border x:Name="templatePopupBorder" Background="#2A2A2A" CornerRadius="8" Padding="4"
                                 BorderBrush="#40FFFFFF" BorderThickness="1"
                                 MinWidth="160" MaxWidth="200">
                             <StackPanel x:Name="templatePanel" />
