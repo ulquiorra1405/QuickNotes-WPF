@@ -1481,12 +1481,13 @@ public partial class MainWindow : Window
         popup.VerticalOffset = -4;
 
         // Build content
+        var isLight = _currentTheme == "light";
         var border = new Border
         {
-            Background = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x26, 0x26, 0x26)),
+            Background = new SolidColorBrush(isLight ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x2A, 0x2A, 0x2A)),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(6),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            BorderBrush = new SolidColorBrush(isLight ? Color.FromArgb(0x40, 0x00, 0x00, 0x00) : Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(1),
             MinWidth = 140,
             MaxHeight = 300,
@@ -1502,7 +1503,7 @@ public partial class MainWindow : Window
                 {
                     Text = "Sin libretas",
                     FontSize = 12,
-                    Foreground = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
+                    Foreground = new SolidColorBrush(isLight ? Color.FromArgb(0x66, 0x00, 0x00, 0x00) : Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
                     Margin = new Thickness(10, 6, 10, 6),
                 });
             }
@@ -1526,7 +1527,7 @@ public partial class MainWindow : Window
                 {
                     Text = "Sin tags",
                     FontSize = 12,
-                    Foreground = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
+                    Foreground = new SolidColorBrush(isLight ? Color.FromArgb(0x66, 0x00, 0x00, 0x00) : Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
                     Margin = new Thickness(10, 6, 10, 6),
                 });
             }
@@ -1566,7 +1567,7 @@ public partial class MainWindow : Window
         {
             Text = label,
             FontSize = 13,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            Foreground = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
             VerticalAlignment = VerticalAlignment.Center,
         };
         Grid.SetColumn(txt, 0);
@@ -1578,7 +1579,7 @@ public partial class MainWindow : Window
             {
                 Text = $"({count.Value})",
                 FontSize = 10,
-                Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                Foreground = new SolidColorBrush(_currentTheme == "light" ? Color.FromArgb(0x88, 0x00, 0x00, 0x00) : Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(8, 0, 0, 0),
             };
@@ -1589,7 +1590,7 @@ public partial class MainWindow : Window
         b.Child = grid;
 
         b.MouseEnter += (_, _) =>
-            b.Background = new SolidColorBrush(Color.FromArgb(0x3F, 0xFF, 0xFF, 0xFF));
+            b.Background = new SolidColorBrush(_currentTheme == "light" ? Color.FromArgb(0x3F, 0x00, 0x00, 0x00) : Color.FromArgb(0x3F, 0xFF, 0xFF, 0xFF));
         b.MouseLeave += (_, _) =>
             b.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
         b.PreviewMouseDown += (_, _) => onClick();
@@ -1613,11 +1614,14 @@ public partial class MainWindow : Window
             ShowInTaskbar = false,
         };
 
+        var isLight = _currentTheme == "light";
         var border = new Border
         {
-            Background = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x26, 0x26, 0x26)),
+            Background = new SolidColorBrush(isLight ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x2A, 0x2A, 0x2A)),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(20),
+            BorderBrush = new SolidColorBrush(isLight ? Color.FromArgb(0x40, 0x00, 0x00, 0x00) : Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1),
         };
 
         var grid = new Grid();
@@ -1630,7 +1634,7 @@ public partial class MainWindow : Window
             Text = "Nueva libreta",
             FontSize = 16,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            Foreground = new SolidColorBrush(isLight ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
         };
         Grid.SetRow(titleBlock, 0);
         grid.Children.Add(titleBlock);
@@ -1640,11 +1644,11 @@ public partial class MainWindow : Window
             FontSize = 14,
             Margin = new Thickness(0, 12, 0, 12),
             Padding = new Thickness(8, 6, 8, 6),
-            Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E)),
-            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            Background = new SolidColorBrush(isLight ? Color.FromRgb(0xE0, 0xE0, 0xE0) : Color.FromRgb(0x1E, 0x1E, 0x1E)),
+            Foreground = new SolidColorBrush(isLight ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            BorderBrush = new SolidColorBrush(isLight ? Color.FromArgb(0x40, 0x00, 0x00, 0x00) : Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(1),
-            CaretBrush = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            CaretBrush = new SolidColorBrush(isLight ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
         };
         Grid.SetRow(input, 1);
         grid.Children.Add(input);
@@ -1658,8 +1662,10 @@ public partial class MainWindow : Window
         grid.Children.Add(btnPanel);
 
         var cancelBtn = new Button { Content = "Cancelar", Width = 80, Height = 30, Cursor = Cursors.Hand, FontSize = 13, Margin = new Thickness(0, 0, 8, 0) };
-        cancelBtn.Style = MakeBtnStyle(Color.FromRgb(0xBB, 0xBB, 0xBB), Color.FromRgb(0x3A, 0x3A, 0x3A),
-            Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
+        cancelBtn.Style = MakeBtnStyle(isLight ? Color.FromRgb(0x44, 0x44, 0x44) : Color.FromRgb(0xBB, 0xBB, 0xBB),
+            isLight ? Color.FromRgb(0xD0, 0xD0, 0xD0) : Color.FromRgb(0x3A, 0x3A, 0x3A),
+            Color.FromRgb(0xFF, 0xFF, 0xFF),
+            isLight ? Color.FromRgb(0xBE, 0xBE, 0xBE) : Color.FromRgb(0x55, 0x55, 0x55));
         cancelBtn.Click += (_, _) => dialog.Close();
         btnPanel.Children.Add(cancelBtn);
 
@@ -1691,6 +1697,7 @@ public partial class MainWindow : Window
 
     private void AddTag_Click(object sender, MouseButtonEventArgs e)
     {
+        var isLight = _currentTheme == "light";
         var dialog = new Window
         {
             Title = "Nuevo tag",
@@ -1707,9 +1714,11 @@ public partial class MainWindow : Window
 
         var border = new Border
         {
-            Background = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x26, 0x26, 0x26)),
+            Background = new SolidColorBrush(isLight ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x2A, 0x2A, 0x2A)),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(20),
+            BorderBrush = new SolidColorBrush(isLight ? Color.FromArgb(0x40, 0x00, 0x00, 0x00) : Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1),
         };
 
         var grid = new Grid();
@@ -1722,7 +1731,7 @@ public partial class MainWindow : Window
             Text = "Nuevo tag",
             FontSize = 16,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            Foreground = new SolidColorBrush(isLight ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
         };
         Grid.SetRow(titleBlock, 0);
         grid.Children.Add(titleBlock);
@@ -1732,11 +1741,11 @@ public partial class MainWindow : Window
             FontSize = 14,
             Margin = new Thickness(0, 12, 0, 12),
             Padding = new Thickness(8, 6, 8, 6),
-            Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E)),
-            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            Background = new SolidColorBrush(isLight ? Color.FromRgb(0xE0, 0xE0, 0xE0) : Color.FromRgb(0x1E, 0x1E, 0x1E)),
+            Foreground = new SolidColorBrush(isLight ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            BorderBrush = new SolidColorBrush(isLight ? Color.FromArgb(0x40, 0x00, 0x00, 0x00) : Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(1),
-            CaretBrush = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            CaretBrush = new SolidColorBrush(isLight ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
         };
         Grid.SetRow(input, 1);
         grid.Children.Add(input);
@@ -1750,8 +1759,10 @@ public partial class MainWindow : Window
         grid.Children.Add(btnPanel);
 
         var cancelBtn = new Button { Content = "Cancelar", Width = 80, Height = 30, Cursor = Cursors.Hand, FontSize = 13, Margin = new Thickness(0, 0, 8, 0) };
-        cancelBtn.Style = MakeBtnStyle(Color.FromRgb(0xBB, 0xBB, 0xBB), Color.FromRgb(0x3A, 0x3A, 0x3A),
-            Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
+        cancelBtn.Style = MakeBtnStyle(isLight ? Color.FromRgb(0x44, 0x44, 0x44) : Color.FromRgb(0xBB, 0xBB, 0xBB),
+            isLight ? Color.FromRgb(0xD0, 0xD0, 0xD0) : Color.FromRgb(0x3A, 0x3A, 0x3A),
+            Color.FromRgb(0xFF, 0xFF, 0xFF),
+            isLight ? Color.FromRgb(0xBE, 0xBE, 0xBE) : Color.FromRgb(0x55, 0x55, 0x55));
         cancelBtn.Click += (_, _) => dialog.Close();
         btnPanel.Children.Add(cancelBtn);
 
