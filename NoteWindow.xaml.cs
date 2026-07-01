@@ -102,6 +102,7 @@ public partial class NoteWindow : Window
             UpdateButtonForegrounds();
             FormatUrlsInDocument();
             LoadAttachments();
+            SetupEditorContextMenu();
         };
 
         Activated += (_, _) => ToggleBars(show: true);
@@ -1785,6 +1786,81 @@ public partial class NoteWindow : Window
         }
     }
 
+    // ── Styled context menu helper ──
+
+    private ContextMenu BuildStyledContextMenu()
+    {
+        var noteColor = ParseColor(_note.Color);
+        var isDark = IsDarkColor(_note.Color);
+        var r = noteColor.R; var g = noteColor.G; var b = noteColor.B;
+        var bg = isDark
+            ? $"#{Math.Max(0, r - 40):X2}{Math.Max(0, g - 40):X2}{Math.Max(0, b - 40):X2}"
+            : $"#{Math.Min(255, r + 30):X2}{Math.Min(255, g + 30):X2}{Math.Min(255, b + 30):X2}";
+
+        var xaml = $@"<ContextMenu xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
+             Background='{bg}' BorderBrush='#50FFFFFF' BorderThickness='1'>
+  <ContextMenu.Resources>
+    <Style TargetType='MenuItem'>
+      <Setter Property='Background' Value='Transparent'/>
+      <Setter Property='BorderThickness' Value='0'/>
+      <Setter Property='FontSize' Value='13'/>
+      <Setter Property='Height' Value='32'/>
+      <Setter Property='Padding' Value='12,0'/>
+      <Setter Property='Foreground' Value='#CCFFFFFF'/>
+      <Setter Property='Template'>
+        <Setter.Value>
+          <ControlTemplate TargetType='MenuItem'>
+            <Border x:Name='bg' Background='{{TemplateBinding Background}}'
+                    CornerRadius='4' Padding='{{TemplateBinding Padding}}'
+                    SnapsToDevicePixels='True'
+                    HorizontalAlignment='Stretch'>
+              <ContentPresenter ContentSource='Header'
+                                RecognizesAccessKey='False'
+                                HorizontalAlignment='Left'
+                                VerticalAlignment='Center'/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property='IsHighlighted' Value='True'>
+                <Setter TargetName='bg' Property='Background' Value='#3FFFFFFF'/>
+              </Trigger>
+              <Trigger Property='IsPressed' Value='True'>
+                <Setter TargetName='bg' Property='Background' Value='#6FFFFFFF'/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </ContextMenu.Resources>
+</ContextMenu>";
+
+        using var ms = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(xaml));
+        return (ContextMenu)System.Windows.Markup.XamlReader.Load(ms);
+    }
+
+    private void SetupEditorContextMenu()
+    {
+        var menu = BuildStyledContextMenu();
+
+        var cut = new MenuItem { Header = "Cortar" }; cut.Click += (_, _) => noteText.Cut();
+        var copy = new MenuItem { Header = "Copiar" }; copy.Click += (_, _) => noteText.Copy();
+        var paste = new MenuItem { Header = "Pegar", IsEnabled = Clipboard.ContainsText() };
+        paste.Click += (_, _) => noteText.Paste();
+        var sep = new Separator { Background = new System.Windows.Media.SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)) };
+        var selectAll = new MenuItem { Header = "Seleccionar todo" };
+        selectAll.Click += (_, _) => noteText.SelectAll();
+
+        menu.Items.Add(cut);
+        menu.Items.Add(copy);
+        menu.Items.Add(paste);
+        menu.Items.Add(sep);
+        menu.Items.Add(selectAll);
+
+        noteText.ContextMenu = menu;
+    }
+
+    // ── Attachment helpers ──
+
     private Border BuildAttachmentChip(NoteAttachment att)
     {
         var border = new Border
@@ -1798,18 +1874,19 @@ public partial class NoteWindow : Window
             ToolTip = $"{att.FileName} ({att.SizeDisplay})",
         };
 
-        var ctxMenu = new ContextMenu
-        {
-            Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A)),
-            Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
-            BorderThickness = new Thickness(1, 1, 1, 1),
-        };
+        var ctxMenu = BuildStyledContextMenu();
 
-        AddCtxItem(ctxMenu, "Abrir archivo", "Open", att);
-        AddCtxItem(ctxMenu, "Abrir ubicación", "OpenLocation", att);
+        void AddAttItem(string header, string action)
+        {
+            var item = new MenuItem { Header = header };
+            item.Click += (_, _) => HandleAttachmentAction(action, att);
+            ctxMenu.Items.Add(item);
+        }
+
+        AddAttItem("Abrir archivo", "Open");
+        AddAttItem("Abrir ubicación", "OpenLocation");
         ctxMenu.Items.Add(new Separator { Background = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)) });
-        AddCtxItem(ctxMenu, "Quitar adjunto", "Remove", att);
+        AddAttItem("Quitar adjunto", "Remove");
 
         border.ContextMenu = ctxMenu;
 
@@ -1839,24 +1916,6 @@ public partial class NoteWindow : Window
         });
         border.Child = stack;
         return border;
-    }
-
-    private void AddCtxItem(ContextMenu menu, string header, string tag, NoteAttachment att)
-    {
-        var item = new MenuItem
-        {
-            Header = header,
-            Tag = tag,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
-            FontSize = 13,
-            Height = 30,
-            Padding = new Thickness(10, 0, 10, 0),
-        };
-        var storedAtt = att;
-        item.Click += (_, _) => HandleAttachmentAction(tag, storedAtt);
-        menu.Items.Add(item);
     }
 
     private void HandleAttachmentAction(string action, NoteAttachment att)
