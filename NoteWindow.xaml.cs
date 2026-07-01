@@ -1642,6 +1642,10 @@ public partial class NoteWindow : Window
         duplicateItem.Click += ContextMenu_DuplicateNote;
         menu.Items.Add(duplicateItem);
 
+        var saveTemplateItem = new MenuItem { Header = "Guardar como plantilla" };
+        saveTemplateItem.Click += ContextMenu_SaveAsTemplate;
+        menu.Items.Add(saveTemplateItem);
+
         var archiveItem = new MenuItem { Header = "Archivar nota" };
         archiveItem.Click += ContextMenu_ArchiveNote;
         menu.Items.Add(archiveItem);
@@ -1704,6 +1708,24 @@ public partial class NoteWindow : Window
         win.Left = Left + 25;
         win.Top = Top + 25;
         win.Show();
+    }
+
+    private void ContextMenu_SaveAsTemplate(object sender, RoutedEventArgs e)
+    {
+        SaveRichText();
+        var template = new NoteTemplate
+        {
+            Name = _note.Title,
+            Icon = string.IsNullOrEmpty(_note.Icon) ? "📄" : _note.Icon,
+            Content = _note.Text,
+            IsBuiltIn = false,
+        };
+        _store.SaveTemplate(template);
+        MessageBox.Show(
+            $"Plantilla \"{_note.Title}\" guardada.",
+            "Plantilla guardada",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
     }
 
     private void ContextMenu_ArchiveNote(object sender, RoutedEventArgs e)

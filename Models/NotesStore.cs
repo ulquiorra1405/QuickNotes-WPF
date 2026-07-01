@@ -92,6 +92,19 @@ public class NotesStore
             """;
         cmd.ExecuteNonQuery();
 
+        // Templates table
+        using var cmdTemplates = conn.CreateCommand();
+        cmdTemplates.CommandText = """
+            CREATE TABLE IF NOT EXISTS templates (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Name TEXT NOT NULL,
+                Icon TEXT NOT NULL DEFAULT '📄',
+                Content TEXT NOT NULL DEFAULT '',
+                CreatedAt TEXT NOT NULL
+            );
+            """;
+        cmdTemplates.ExecuteNonQuery();
+
         // Migration: drop IsMinimized if present (legacy column from old mini-notes)
         using var check = conn.CreateCommand();
         check.CommandText = "SELECT COUNT(*) FROM pragma_table_info('notes') WHERE name='IsMinimized'";
@@ -649,6 +662,65 @@ public class NotesStore
         {
             return false;
         }
+    }
+
+    // ── Template CRUD ──
+
+    public List<NoteTemplate> GetTemplates()
+    {
+        var templates = new List<NoteTemplate>();
+        templates.AddRange(NoteTemplate.GetBuiltIns());
+
+        try
+        {
+            using var conn = OpenDb();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT Id, Name, Icon, Content FROM templates ORDER BY Id";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                templates.Add(new NoteTemplate
+                {
+                    Id = r.GetInt32(0),
+                    Name = r.GetString(1),
+                    Icon = r.GetString(2),
+                    Content = r.GetString(3),
+                    IsBuiltIn = false,
+                });
+            }
+        }
+        catch { }
+
+        return templates;
+    }
+
+    public void SaveTemplate(NoteTemplate t)
+    {
+        try
+        {
+            using var conn = OpenDb();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "INSERT INTO templates (Name, Icon, Content, CreatedAt) VALUES ($name, $icon, $content, $date)";
+            cmd.Parameters.AddWithValue("$name", t.Name);
+            cmd.Parameters.AddWithValue("$icon", t.Icon);
+            cmd.Parameters.AddWithValue("$content", t.Content);
+            cmd.Parameters.AddWithValue("$date", DateTime.Now.ToString("O"));
+            cmd.ExecuteNonQuery();
+        }
+        catch { }
+    }
+
+    public void DeleteTemplate(int id)
+    {
+        try
+        {
+            using var conn = OpenDb();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM templates WHERE Id = $id";
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.ExecuteNonQuery();
+        }
+        catch { }
     }
 
     private class SettingsData

@@ -145,11 +145,81 @@ public partial class MainWindow : Window
 
     private void AddNote_Click(object sender, RoutedEventArgs e)
     {
+        // Build template popup on demand
+        templatePanel.Children.Clear();
+        var templates = store.GetTemplates();
+
+        // Separator between built-in section label and items
+        bool first = true;
+        foreach (var t in templates)
+        {
+            if (t.IsBuiltIn && first)
+            {
+                first = false;
+            }
+
+            var grid = new Grid { Cursor = System.Windows.Input.Cursors.Hand, Margin = new Thickness(0, 1, 0, 1) };
+            var text = new TextBlock
+            {
+                Text = $"{t.Icon}  {t.Name}",
+                Padding = new Thickness(6, 5, 6, 5),
+                Foreground = new SolidColorBrush(Color.FromRgb(0xEE, 0xEE, 0xEE)),
+                FontSize = 13,
+            };
+            grid.Children.Add(text);
+            var template = t; // capture
+            grid.MouseDown += (_, args) =>
+            {
+                if (args.LeftButton == System.Windows.Input.MouseButtonState.Pressed)
+                    CreateNoteFromTemplate(template);
+            };
+            templatePanel.Children.Add(grid);
+        }
+
+        if (templatePanel.Children.Count > 0)
+        {
+            templatePopup.PlacementTarget = addBtn;
+            templatePopup.IsOpen = true;
+        }
+        else
+        {
+            // Fallback: direct create blank note
+            CreateNoteFromTemplate(null);
+        }
+    }
+
+    private void CreateNoteFromTemplate(NoteTemplate? template)
+    {
+        templatePopup.IsOpen = false;
+
         var color = !string.IsNullOrEmpty(store.DefaultColor)
             ? store.DefaultColor
             : Note.RandomColor();
         var maxOrder = store.Notes.Count > 0 ? store.Notes.Max(n => n.Order) : -1;
-        var note = new Note { Color = color, Order = maxOrder + 1 };
+
+        Note note;
+        if (template == null || template.Name == "Nota en blanco")
+        {
+            note = new Note { Color = color, Order = maxOrder + 1 };
+        }
+        else
+        {
+            var content = template.Content;
+            // Replace date placeholder in Diario template
+            if (template.Name == "Diario")
+            {
+                var today = DateTime.Now.ToString("dddd, d MMMM yyyy", new System.Globalization.CultureInfo("es-DO"));
+                content = content.Replace("[fecha de hoy]", today);
+            }
+            note = new Note
+            {
+                Title = template.Name,
+                Text = content,
+                Color = color,
+                Order = maxOrder + 1,
+            };
+        }
+
         store.Notes.Add(note);
         store.Save();
         statusText.Text = "Note added";
