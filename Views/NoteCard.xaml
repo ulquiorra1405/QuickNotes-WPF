@@ -300,8 +300,23 @@
                         </WrapPanel.Style>
                     </WrapPanel>
 
-                    <!-- Actions -->
+                    <!-- Attachment indicator -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <TextBlock Text="📎" FontSize="10"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,4,0"
+                                   ToolTip="Tiene adjuntos">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasAttachments}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <Button Content="↗" Style="{DynamicResource CardBtn}"
                                 FontSize="13" Foreground="{Binding TextForeground}"
                                 Tag="PopOut"/>

@@ -119,6 +119,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Title bar with editable title -->
@@ -336,8 +337,29 @@
                     ClipToBounds="True" Visibility="Collapsed"/>
         </Grid>
 
+        <!-- Attachment bar -->
+        <Border Grid.Row="2" x:Name="attachmentBar"
+                Background="#14000000" Padding="6,2"
+                Height="28" Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="📎" FontSize="12"
+                           VerticalAlignment="Center" Margin="2,0,4,0"
+                           Foreground="#88DDDDDD"/>
+                <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Hidden"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalAlignment="Center">
+                    <StackPanel x:Name="attachmentsStack" Orientation="Horizontal"/>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
         <!-- Bottom bar: color picker (collapsed) + format buttons -->
-        <Border x:Name="colorBar" Grid.Row="2" Background="#18000000" Padding="8,0" Height="32">
+        <Border x:Name="colorBar" Grid.Row="3" Background="#18000000" Padding="8,0" Height="32">
             <Grid>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Border x:Name="currentColorDot" Style="{StaticResource ColorDot}"

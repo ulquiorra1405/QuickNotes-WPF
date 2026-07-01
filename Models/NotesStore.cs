@@ -105,6 +105,21 @@ public class NotesStore
             """;
         cmdTemplates.ExecuteNonQuery();
 
+        // Attachments table
+        using var cmdAttachments = conn.CreateCommand();
+        cmdAttachments.CommandText = """
+            CREATE TABLE IF NOT EXISTS attachments (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                NoteId TEXT NOT NULL,
+                FileName TEXT NOT NULL,
+                StoredPath TEXT NOT NULL,
+                SizeBytes INTEGER NOT NULL DEFAULT 0,
+                ContentType TEXT NOT NULL DEFAULT '',
+                AddedAt TEXT NOT NULL
+            );
+            """;
+        cmdAttachments.ExecuteNonQuery();
+
         // Migration: drop IsMinimized if present (legacy column from old mini-notes)
         using var check = conn.CreateCommand();
         check.CommandText = "SELECT COUNT(*) FROM pragma_table_info('notes') WHERE name='IsMinimized'";
@@ -260,6 +275,7 @@ public class NotesStore
         LoadTags(conn);
         LoadNotebooks(conn);
         LoadNoteTags(conn);
+        LoadAttachmentCounts(conn);
 
         LoadSettingsFromDb(conn);
     }
@@ -662,6 +678,140 @@ public class NotesStore
         {
             return false;
         }
+    }
+
+    // ── Attachment helpers ──
+
+    private static readonly string attachmentsFolder = Path.Combine(folder, "attachments");
+
+    private void LoadAttachmentCounts(SqliteConnection conn)
+    {
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT NoteId, COUNT(*) FROM attachments GROUP BY NoteId";
+            using var r = cmd.ExecuteReader();
+            var counts = new Dictionary<Guid, int>();
+            while (r.Read())
+            {
+                if (Guid.TryParse(r.GetString(0), out var noteId))
+                    counts[noteId] = r.GetInt32(1);
+            }
+            foreach (var n in Notes)
+            {
+                if (counts.TryGetValue(n.Id, out var c))
+                    n.AttachmentCount = c;
+            }
+        }
+        catch { }
+    }
+
+    public List<NoteAttachment> GetAttachments(Guid noteId)
+    {
+        var list = new List<NoteAttachment>();
+        try
+        {
+            using var conn = OpenDb();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT Id, NoteId, FileName, StoredPath, SizeBytes, ContentType, AddedAt FROM attachments WHERE NoteId = $id ORDER BY AddedAt";
+            cmd.Parameters.AddWithValue("$id", noteId.ToString());
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                list.Add(new NoteAttachment
+                {
+                    Id = r.GetInt32(0),
+                    NoteId = Guid.Parse(r.GetString(1)),
+                    FileName = r.GetString(2),
+                    StoredPath = r.GetString(3),
+                    SizeBytes = r.GetInt64(4),
+                    ContentType = r.GetString(5),
+                    AddedAt = DateTime.Parse(r.GetString(6), CultureInfo.InvariantCulture),
+                });
+            }
+        }
+        catch { }
+        return list;
+    }
+
+    public bool AddAttachment(Guid noteId, string originalFilePath)
+    {
+        try
+        {
+            Directory.CreateDirectory(attachmentsFolder);
+            var ext = Path.GetExtension(originalFilePath);
+            var storedName = $"{noteId:N}_{Guid.NewGuid():N}{ext}";
+            var storedPath = Path.Combine(attachmentsFolder, storedName);
+            File.Copy(originalFilePath, storedPath, overwrite: false);
+
+            var fi = new FileInfo(originalFilePath);
+            using var conn = OpenDb();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "INSERT INTO attachments (NoteId, FileName, StoredPath, SizeBytes, ContentType, AddedAt) VALUES ($nid, $name, $path, $size, $type, $at)";
+            cmd.Parameters.AddWithValue("$nid", noteId.ToString());
+            cmd.Parameters.AddWithValue("$name", Path.GetFileName(originalFilePath));
+            cmd.Parameters.AddWithValue("$path", storedPath);
+            cmd.Parameters.AddWithValue("$size", fi.Length);
+            cmd.Parameters.AddWithValue("$type", "");
+            cmd.Parameters.AddWithValue("$at", DateTime.Now.ToString("O"));
+            cmd.ExecuteNonQuery();
+
+            // Update note's attachment count
+            var note = Notes.FirstOrDefault(n => n.Id == noteId);
+            if (note != null) note.AttachmentCount++;
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ErrorLog.Write(ex, "AddAttachment");
+            return false;
+        }
+    }
+
+    public bool RemoveAttachment(int attachmentId, Guid noteId)
+    {
+        try
+        {
+            string? storedPath = null;
+            using (var conn = OpenDb())
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT StoredPath FROM attachments WHERE Id = $id";
+                cmd.Parameters.AddWithValue("$id", attachmentId);
+                storedPath = cmd.ExecuteScalar() as string;
+
+                using var del = conn.CreateCommand();
+                del.CommandText = "DELETE FROM attachments WHERE Id = $id";
+                del.Parameters.AddWithValue("$id", attachmentId);
+                del.ExecuteNonQuery();
+            }
+
+            // Delete stored file
+            if (storedPath != null && File.Exists(storedPath))
+            {
+                try { File.Delete(storedPath); } catch { }
+            }
+
+            // Update note's attachment count
+            var note = Notes.FirstOrDefault(n => n.Id == noteId);
+            if (note != null && note.AttachmentCount > 0) note.AttachmentCount--;
+
+            return true;
+        }
+        catch { return false; }
+    }
+
+    public long GetTotalAttachmentSize()
+    {
+        try
+        {
+            using var conn = OpenDb();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT COALESCE(SUM(SizeBytes), 0) FROM attachments";
+            return (long)(cmd.ExecuteScalar() ?? 0L);
+        }
+        catch { return 0; }
     }
 
     // ── Template CRUD ──

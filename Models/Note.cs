@@ -121,6 +121,22 @@ public class Note : INotifyPropertyChanged
         set { _icon = value; OnPropertyChanged(); }
     }
 
+    private int _attachmentCount;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int AttachmentCount
+    {
+        get => _attachmentCount;
+        set
+        {
+            _attachmentCount = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasAttachments));
+        }
+    }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasAttachments => _attachmentCount > 0;
+
     [System.Text.Json.Serialization.JsonIgnore]
     public string PlainText
     {

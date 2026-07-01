@@ -1,6 +1,7 @@
-using System.IO;
 using System.Linq;
 using System.Text;
+using System.IO;
+using Path = System.IO.Path;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -28,7 +29,7 @@ public partial class NoteWindow : Window
     /// </summary>
     internal static bool IsAppShuttingDown;
 
-    private static readonly string _imageFolder = System.IO.Path.Combine(
+    private static readonly string _imageFolder = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         "QuickNotes", "images");
 
@@ -100,6 +101,7 @@ public partial class NoteWindow : Window
             LoadRichText();
             UpdateButtonForegrounds();
             FormatUrlsInDocument();
+            LoadAttachments();
         };
 
         Activated += (_, _) => ToggleBars(show: true);
@@ -166,15 +168,27 @@ public partial class NoteWindow : Window
         if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
         var files = (string[]?)e.Data.GetData(DataFormats.FileDrop);
         if (files == null || files.Length == 0) return;
-        var validExts = new HashSet<string> { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
+        var imgExts = new HashSet<string> { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
+        bool any = false;
         foreach (var file in files)
         {
-            var ext = System.IO.Path.GetExtension(file).ToLowerInvariant();
-            if (validExts.Contains(ext))
+            var ext = Path.GetExtension(file).ToLowerInvariant();
+            if (imgExts.Contains(ext))
             {
                 InsertImageFromFile(file);
-                e.Handled = true;
+                any = true;
             }
+            else
+            {
+                // Non-image: add as attachment
+                if (_store.AddAttachment(_note.Id, file))
+                    any = true;
+            }
+        }
+        if (any)
+        {
+            RefreshAttachments();
+            e.Handled = true;
         }
     }
 
@@ -946,7 +960,7 @@ public partial class NoteWindow : Window
                 var files = Clipboard.GetFileDropList();
                 if (files.Count > 0 && files[0] != null)
                 {
-                    var ext = System.IO.Path.GetExtension(files[0]).ToLowerInvariant();
+                    var ext = Path.GetExtension(files[0]).ToLowerInvariant();
                     var validExts = new System.Collections.Generic.HashSet<string>
                         { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
                     if (validExts.Contains(ext))
@@ -1745,6 +1759,141 @@ public partial class NoteWindow : Window
         Close();
     }
 
+    // ── Attachment support ──
+
+    private void LoadAttachments()
+    {
+        RefreshAttachments();
+    }
+
+    private void RefreshAttachments()
+    {
+        var attachments = _store.GetAttachments(_note.Id);
+        attachmentsStack.Children.Clear();
+
+        if (attachments.Count == 0)
+        {
+            attachmentBar.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        attachmentBar.Visibility = Visibility.Visible;
+        foreach (var att in attachments)
+        {
+            var chip = BuildAttachmentChip(att);
+            attachmentsStack.Children.Add(chip);
+        }
+    }
+
+    private Border BuildAttachmentChip(NoteAttachment att)
+    {
+        var border = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0x30, 0x00, 0x00, 0x00)),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(4, 1, 4, 1),
+            Margin = new Thickness(2, 0, 2, 0),
+            Cursor = Cursors.Hand,
+            Tag = att,
+            ToolTip = $"{att.FileName} ({att.SizeDisplay})",
+        };
+
+        var ctxMenu = new ContextMenu
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A)),
+            Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1, 1, 1, 1),
+        };
+
+        AddCtxItem(ctxMenu, "Abrir archivo", "Open", att);
+        AddCtxItem(ctxMenu, "Abrir ubicación", "OpenLocation", att);
+        ctxMenu.Items.Add(new Separator { Background = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)) });
+        AddCtxItem(ctxMenu, "Quitar adjunto", "Remove", att);
+
+        border.ContextMenu = ctxMenu;
+
+        // Click to open
+        border.MouseDown += (_, args) =>
+        {
+            if (args.LeftButton == MouseButtonState.Pressed)
+                OpenAttachment(att);
+        };
+
+        var stack = new StackPanel { Orientation = Orientation.Horizontal };
+        stack.Children.Add(new TextBlock
+        {
+            Text = att.Icon,
+            FontSize = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 2, 0),
+        });
+        stack.Children.Add(new TextBlock
+        {
+            Text = att.FileName,
+            FontSize = 10,
+            Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
+            VerticalAlignment = VerticalAlignment.Center,
+            MaxWidth = 100,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        border.Child = stack;
+        return border;
+    }
+
+    private void AddCtxItem(ContextMenu menu, string header, string tag, NoteAttachment att)
+    {
+        var item = new MenuItem
+        {
+            Header = header,
+            Tag = tag,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
+            FontSize = 13,
+            Height = 30,
+            Padding = new Thickness(10, 0, 10, 0),
+        };
+        var storedAtt = att;
+        item.Click += (_, _) => HandleAttachmentAction(tag, storedAtt);
+        menu.Items.Add(item);
+    }
+
+    private void HandleAttachmentAction(string action, NoteAttachment att)
+    {
+        switch (action)
+        {
+            case "Open":
+                OpenAttachment(att);
+                break;
+            case "OpenLocation":
+                var dir = Path.GetDirectoryName(att.StoredPath);
+                if (dir != null) System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{att.StoredPath}\"");
+                break;
+            case "Remove":
+                if (_store.RemoveAttachment(att.Id, _note.Id))
+                    RefreshAttachments();
+                break;
+        }
+    }
+
+    private void OpenAttachment(NoteAttachment att)
+    {
+        try
+        {
+            if (File.Exists(att.StoredPath))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = att.StoredPath,
+                    UseShellExecute = true,
+                });
+        }
+        catch (Exception ex)
+        {
+            ErrorLog.Write(ex, "OpenAttachment");
+        }
+    }
+
     // ── Image support ──
 
     private void InsertImageFromFile(string sourcePath)
@@ -1752,9 +1901,9 @@ public partial class NoteWindow : Window
         try
         {
             Directory.CreateDirectory(_imageFolder);
-            var ext = System.IO.Path.GetExtension(sourcePath).ToLowerInvariant();
+            var ext = Path.GetExtension(sourcePath).ToLowerInvariant();
             var fileName = $"{Guid.NewGuid()}{ext}";
-            var destPath = System.IO.Path.Combine(_imageFolder, fileName);
+            var destPath = Path.Combine(_imageFolder, fileName);
             File.Copy(sourcePath, destPath, overwrite: false);
             InsertImageBlock(destPath);
         }
@@ -1810,7 +1959,7 @@ public partial class NoteWindow : Window
     private static string SanitizeFileName(string name)
     {
         if (string.IsNullOrEmpty(name)) return "untitled";
-        var invalid = System.IO.Path.GetInvalidFileNameChars();
+        var invalid = Path.GetInvalidFileNameChars();
         var sanitized = new string(name.Where(c => !invalid.Contains(c)).ToArray()).Trim();
         return string.IsNullOrEmpty(sanitized) ? "untitled" : sanitized.Length > 100 ? sanitized[..100] : sanitized;
     }
@@ -1826,7 +1975,7 @@ public partial class NoteWindow : Window
         {
             try
             {
-                var ext = System.IO.Path.GetExtension(dlg.FileName).ToLowerInvariant();
+                var ext = Path.GetExtension(dlg.FileName).ToLowerInvariant();
                 var raw = File.ReadAllText(dlg.FileName, Encoding.UTF8);
                 SaveRichText();
 
@@ -1860,7 +2009,7 @@ public partial class NoteWindow : Window
 
             Directory.CreateDirectory(_imageFolder);
             var fileName = $"{Guid.NewGuid()}.png";
-            var filePath = System.IO.Path.Combine(_imageFolder, fileName);
+            var filePath = Path.Combine(_imageFolder, fileName);
 
             {
                 using var fs = new FileStream(filePath, FileMode.Create);
