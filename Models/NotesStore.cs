@@ -26,6 +26,7 @@ public class NotesStore
     public bool StartWithWindows { get; set; }
     public int AutoSaveInterval { get; set; } = 10;
     public bool BackupEnabled { get; set; } = true;
+    public string BackupPath { get; set; } = "";
     public bool ConfirmOnExit { get; set; } = true;
     public string DefaultColor { get; set; } = "";
     public int NoteFontSize { get; set; } = 13;
@@ -350,6 +351,7 @@ public class NotesStore
         SaveSetting(conn, "StartWithWindows", StartWithWindows ? "1" : "0");
         SaveSetting(conn, "AutoSaveInterval", AutoSaveInterval.ToString(CultureInfo.InvariantCulture));
         SaveSetting(conn, "BackupEnabled", BackupEnabled ? "1" : "0");
+        SaveSetting(conn, "BackupPath", BackupPath ?? "");
         SaveSetting(conn, "ConfirmOnExit", ConfirmOnExit ? "1" : "0");
         SaveSetting(conn, "DefaultColor", DefaultColor ?? "");
         SaveSetting(conn, "NoteFontSize", NoteFontSize.ToString(CultureInfo.InvariantCulture));
@@ -388,6 +390,7 @@ public class NotesStore
                 case "StartWithWindows": StartWithWindows = val == "1"; break;
                 case "AutoSaveInterval": if (int.TryParse(val, NumberStyles.Any, CultureInfo.InvariantCulture, out var asi)) AutoSaveInterval = Math.Clamp(asi, 3, 300); break;
                 case "BackupEnabled": BackupEnabled = val == "1"; break;
+                case "BackupPath": BackupPath = val; break;
                 case "ConfirmOnExit": ConfirmOnExit = val == "1"; break;
                 case "DefaultColor": DefaultColor = val; break;
                 case "NoteFontSize": if (int.TryParse(val, NumberStyles.Any, CultureInfo.InvariantCulture, out var nfs)) NoteFontSize = Math.Clamp(nfs, 8, 48); break;
@@ -535,7 +538,9 @@ public class NotesStore
         if (!BackupEnabled) return;
         try
         {
-            string dir = Path.Combine(folder, "backups");
+            string dir = string.IsNullOrWhiteSpace(BackupPath)
+                ? Path.Combine(folder, "backups")
+                : BackupPath;
             Directory.CreateDirectory(dir);
 
             string today = DateTime.Now.ToString("yyyy-MM-dd");

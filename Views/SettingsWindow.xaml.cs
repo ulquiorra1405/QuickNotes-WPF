@@ -18,6 +18,7 @@ public partial class SettingsWindow : Window
     private bool _startupVal;
     private int _autoSaveVal;
     private bool _backupVal;
+    private string _backupPathVal;
     private bool _confirmVal;
     private string _defaultColorVal;
     private int _fontSizeVal;
@@ -38,6 +39,7 @@ public partial class SettingsWindow : Window
         _startupVal = store.StartWithWindows;
         _autoSaveVal = store.AutoSaveInterval;
         _backupVal = store.BackupEnabled;
+        _backupPathVal = store.BackupPath ?? "";
         _confirmVal = store.ConfirmOnExit;
         _defaultColorVal = string.IsNullOrEmpty(store.DefaultColor) ? Note.RandomColor() : store.DefaultColor;
         _fontSizeVal = store.NoteFontSize;
@@ -139,6 +141,58 @@ public partial class SettingsWindow : Window
             Margin = new Thickness(0, 0, 0, 4),
         };
         panel.Children.Add(backupCheck);
+
+        // Backup path
+        var pathRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
+        var pathBox = new TextBox
+        {
+            Text = _backupPathVal,
+            FontSize = 12,
+            Height = 28,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            Background = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x3A)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1),
+            CaretBrush = new SolidColorBrush(Colors.White),
+            Margin = new Thickness(0, 0, 6, 0),
+            TextWrapping = TextWrapping.NoWrap,
+        };
+        Grid.SetIsSharedSizeScope(pathBox, true);
+        // Sync back on text change
+        pathBox.TextChanged += (_, _) => _backupPathVal = pathBox.Text;
+        var browseBtn = new Button
+        {
+            Content = "Examinar…",
+            Width = 80,
+            Height = 28,
+            Cursor = Cursors.Hand,
+            FontSize = 12,
+        };
+        browseBtn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xBB, 0xBB, 0xBB), Color.FromRgb(0x3A, 0x3A, 0x3A), Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
+        browseBtn.Click += (_, _) =>
+        {
+            var initialPath = string.IsNullOrWhiteSpace(_backupPathVal)
+                ? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+                : _backupPathVal;
+            var result = Helpers.FolderPicker.Show(initialPath, "Seleccionar carpeta para copias de seguridad");
+            if (result != null)
+            {
+                _backupPathVal = result;
+                pathBox.Text = result;
+            }
+        };
+        pathRow.Children.Add(pathBox);
+        pathRow.Children.Add(browseBtn);
+        panel.Children.Add(pathRow);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Dejar vacío para usar la carpeta predeterminada (Documentos/QuickNotes/backups)",
+            FontSize = 10,
+            Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xBB, 0xBB, 0xBB)),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 4),
+        });
 
         // ── Confirm exit ──
         panel.Children.Add(MakeLabel("Salida"));
@@ -332,6 +386,7 @@ public partial class SettingsWindow : Window
             _store.StartWithWindows = startupCheck.IsChecked == true;
             _store.AutoSaveInterval = _autoSaveVal;
             _store.BackupEnabled = backupCheck.IsChecked == true;
+            _store.BackupPath = _backupPathVal;
             _store.ConfirmOnExit = confirmCheck.IsChecked == true;
             _store.DefaultColor = _defaultColorVal;
             _store.NoteFontSize = _fontSizeVal;
