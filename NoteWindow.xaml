@@ -129,8 +129,7 @@
                            Text="{Binding Title}"
                            Foreground="{Binding TextForeground}" Opacity="0.67"
                            FontSize="12" FontWeight="SemiBold"
-                           VerticalAlignment="Center" Padding="8,0,0,0"
-                           TextOptions.TextFormattingMode="Display"/>
+                           VerticalAlignment="Center" Padding="8,0,0,0"/>
 
                 <TextBox x:Name="titleInput"
                          Visibility="Collapsed"
@@ -142,8 +141,7 @@
                          Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"
                          LostFocus="TitleInput_LostFocus"
                          KeyDown="TitleInput_KeyDown"
-                         TextChanged="Title_TextChanged"
-                         TextOptions.TextFormattingMode="Display"/>
+                         TextChanged="Title_TextChanged"/>
 
                 <StackPanel x:Name="titleRightPanel" HorizontalAlignment="Right" Orientation="Horizontal">
                     <Button x:Name="emojiBtn" Width="24" Height="24"
@@ -151,7 +149,6 @@
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             ToolTip="Icono para el dock"
                             Click="EmojiBtn_Click"
-                            FontFamily="Segoe UI Emoji"
                             Content="📝"/>
                     <Popup x:Name="emojiPopup" Placement="Bottom"
                            PlacementTarget="{Binding ElementName=emojiBtn}"
