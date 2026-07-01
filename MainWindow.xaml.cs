@@ -13,6 +13,8 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using QuickNotes.Models;
 using QuickNotes.Views;
+using System.Runtime.InteropServices; using System.Windows.Interop; using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using System.Text.RegularExpressions;
 
 namespace QuickNotes;
@@ -23,6 +25,20 @@ public partial class MainWindow : Window
     private readonly ListCollectionView _view;
     private readonly DispatcherTimer _saveTimer = new();
     private Note? _dragNote;
+    private HwndSource? _hwndSource;
+
+    // P/Invoke for global hotkey
+    private const int WM_HOTKEY = 0x0312;
+    private const int HOTKEY_NEWNOTE = 9001;
+    private const int MOD_WIN = 0x0008;
+    private const int MOD_SHIFT = 0x0004;
+    private const int MOD_NOREPEAT = 0x4000;
+
+    [DllImport("user32.dll")]
+    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll")]
+    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
     private FrameworkElement? _dragCard;
     private Point _dragStart;
     private bool _isDragging;
@@ -106,6 +122,25 @@ public partial class MainWindow : Window
             UpdateTagNotebookLookups();
             SetActiveSection(_activeSection);
             UpdateCounters();
+
+            // Register global hotkey Win+Shift+N for new note
+            _hwndSource = PresentationSource.FromVisual(this) as HwndSource;
+            if (_hwndSource != null)
+            {
+                _hwndSource.AddHook(WndProc);
+                RegisterHotKey(new WindowInteropHelper(this).Handle,
+                    HOTKEY_NEWNOTE, MOD_WIN | MOD_SHIFT | MOD_NOREPEAT, (uint)Key.N);
+            }
+        };
+
+        // Unregister hotkey on close
+        Closed += (_, _) =>
+        {
+            var h = new WindowInteropHelper(this).Handle;
+            if (h != IntPtr.Zero)
+            {
+                UnregisterHotKey(h, HOTKEY_NEWNOTE);
+            }
         };
     }
 
@@ -239,7 +274,17 @@ public partial class MainWindow : Window
                 case Key.F: searchBox.Focus(); e.Handled = true; break;
                 case Key.S: store.Save(); store.SaveSettings(); statusText.Text = "Saved"; e.Handled = true; break;
                 case Key.Z: UndoLastDelete(); e.Handled = true; break;
-                case Key.D1: Topmost = !Topmost; pinBtn.IsChecked = Topmost; e.Handled = true; break;
+                case Key.T: Topmost = !Topmost; pinBtn.IsChecked = Topmost; e.Handled = true; break;
+                // Ctrl+1..9 = open pinned note by dock position
+                case Key.D1: OpenPinnedNoteByIndex(0); e.Handled = true; break;
+                case Key.D2: OpenPinnedNoteByIndex(1); e.Handled = true; break;
+                case Key.D3: OpenPinnedNoteByIndex(2); e.Handled = true; break;
+                case Key.D4: OpenPinnedNoteByIndex(3); e.Handled = true; break;
+                case Key.D5: OpenPinnedNoteByIndex(4); e.Handled = true; break;
+                case Key.D6: OpenPinnedNoteByIndex(5); e.Handled = true; break;
+                case Key.D7: OpenPinnedNoteByIndex(6); e.Handled = true; break;
+                case Key.D8: OpenPinnedNoteByIndex(7); e.Handled = true; break;
+                case Key.D9: OpenPinnedNoteByIndex(8); e.Handled = true; break;
             }
         }
 
@@ -248,6 +293,51 @@ public partial class MainWindow : Window
             AddNote_Click(this, null!);
             e.Handled = true;
         }
+    }
+
+    private void OpenPinnedNoteByIndex(int index)
+    {
+        var pinned = store.Notes
+            .Where(n => !n.IsArchived && !n.IsDeleted && n.IsPinned)
+            .OrderBy(n => n.Order)
+            .ToList();
+
+        if (index < 0 || index >= pinned.Count) return;
+
+        var note = pinned[index];
+        var existing = Application.Current.Windows.OfType<NoteWindow>()
+            .FirstOrDefault(w => w.DataContext is Note n && n.Id == note.Id);
+
+        if (existing != null)
+        {
+            if (!existing.IsVisible) existing.Show();
+            existing.Activate();
+            existing.Focus();
+        }
+        else
+        {
+            var win = new NoteWindow(note, store);
+            win.Closed += (_, _) => { store.Save(); RestoreFromDock(); };
+            win.Show();
+        }
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_NEWNOTE)
+        {
+            // If minimized/hidden, restore
+            if (WindowState == WindowState.Minimized)
+                WindowState = WindowState.Normal;
+            if (!IsVisible)
+                Show();
+            Activate();
+            Focus();
+
+            AddNote_Click(this, null!);
+            handled = true;
+        }
+        return IntPtr.Zero;
     }
 
     private void UndoLastDelete()
