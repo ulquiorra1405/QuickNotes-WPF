@@ -99,12 +99,6 @@
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#3FFFFFFF"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#6FFFFFFF"/>
-                            </Trigger>
                             <EventTrigger RoutedEvent="ButtonBase.Click">
                                 <BeginStoryboard>
                                     <Storyboard>
@@ -139,17 +133,48 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="ButtonBase">
                         <Border x:Name="bg" Background="{TemplateBinding Background}"
-                                CornerRadius="4" Padding="0">
+                                CornerRadius="4" Padding="0"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="scaleTf" ScaleX="1" ScaleY="1"/>
+                            </Border.RenderTransform>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="bg" Property="Background" Value="#20000000"/>
                             </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#40000000"/>
+                            </Trigger>
+                            <EventTrigger RoutedEvent="ButtonBase.Click">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="scaleTf" Storyboard.TargetProperty="ScaleX"
+                                                        From="0.7" To="1" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="scaleTf" Storyboard.TargetProperty="ScaleY"
+                                                        From="0.7" To="1" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <Style x:Key="SidebarItem" TargetType="Border">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="CornerRadius" Value="6"/>
         </Style>
 
         <Style x:Key="MenuItemBtn" TargetType="Button">
@@ -168,14 +193,6 @@
                             <ContentPresenter HorizontalAlignment="Left"
                                               VerticalAlignment="Center"/>
                         </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#3FFFFFFF"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#6FFFFFFF"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -211,21 +228,20 @@
                     <Popup x:Name="menuPopup" Placement="Bottom"
                            PlacementTarget="{Binding ElementName=menuBtn}"
                            StaysOpen="False" AllowsTransparency="True"
-                           PopupAnimation="Fade">
-                        <Border Background="#2A2A2A" CornerRadius="8" Padding="4"
+                           PopupAnimation="Fade"
+                           Closed="MenuPopup_Closed">
+                        <Border x:Name="menuPopupBorder" Background="#2A2A2A" CornerRadius="8" Padding="4"
                                 BorderBrush="#40FFFFFF" BorderThickness="1">
-                            <StackPanel>
+                            <StackPanel x:Name="menuStack">
                                 <Button Style="{StaticResource MenuItemBtn}" Click="About_Click">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="24"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="ℹ" FontWeight="Normal"
-                                                   Foreground="#CCFFFFFF" FontSize="13"
+                                        <TextBlock Grid.Column="0" Text="ℹ" FontWeight="Normal" FontSize="13"
                                                    HorizontalAlignment="Center"/>
-                                        <TextBlock Grid.Column="1" Text="Acerca de"
-                                                   Foreground="#CCFFFFFF" FontSize="13"/>
+                                        <TextBlock Grid.Column="1" Text="Acerca de" FontSize="13"/>
                                     </Grid>
                                 </Button>
                                 <Button Style="{StaticResource MenuItemBtn}" Click="Settings_Click">
@@ -234,11 +250,9 @@
                                             <ColumnDefinition Width="24"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="⚙" FontWeight="Normal"
-                                                   Foreground="#CCFFFFFF" FontSize="13"
+                                        <TextBlock Grid.Column="0" Text="⚙" FontWeight="Normal" FontSize="13"
                                                    HorizontalAlignment="Center"/>
-                                        <TextBlock Grid.Column="1" Text="Ajustes"
-                                                   Foreground="#CCFFFFFF" FontSize="13"/>
+                                        <TextBlock Grid.Column="1" Text="Ajustes" FontSize="13"/>
                                     </Grid>
                                 </Button>
                                 <Button Style="{StaticResource MenuItemBtn}" Click="MenuExit_Click">
@@ -247,11 +261,9 @@
                                             <ColumnDefinition Width="24"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="✕" FontWeight="Normal"
-                                                   Foreground="#CCFFFFFF" FontSize="13"
+                                        <TextBlock Grid.Column="0" Text="✕" FontWeight="Normal" FontSize="13"
                                                    HorizontalAlignment="Center"/>
-                                        <TextBlock Grid.Column="1" Text="Salir"
-                                                   Foreground="#CCFFFFFF" FontSize="13"/>
+                                        <TextBlock Grid.Column="1" Text="Salir" FontSize="13"/>
                                     </Grid>
                                 </Button>
                             </StackPanel>
@@ -301,7 +313,8 @@
                     <Popup x:Name="templatePopup" Placement="Bottom"
                            PlacementTarget="{Binding ElementName=addBtn}"
                            StaysOpen="False" AllowsTransparency="True"
-                           PopupAnimation="Fade">
+                           PopupAnimation="Fade"
+                           Closed="TemplatePopup_Closed">
                         <Border x:Name="templatePopupBorder" Background="#2A2A2A" CornerRadius="8" Padding="4"
                                 BorderBrush="#40FFFFFF" BorderThickness="1"
                                 MinWidth="160" MaxWidth="200">
@@ -331,18 +344,20 @@
                             <StackPanel>
                                 <!-- Toggle button -->
                             <Border x:Name="sidebarToggleBtn" Padding="4" Margin="2,0,2,6"
-                                    CornerRadius="6" Cursor="Hand"
-                                    Background="Transparent"
-                                    PreviewMouseDown="SidebarToggle_Click">
+                                    Style="{StaticResource SidebarItem}"
+                                    PreviewMouseDown="SidebarToggle_Click"
+                                    MouseEnter="SidebarItem_MouseEnter"
+                                    MouseLeave="SidebarItem_MouseLeave">
                                 <TextBlock x:Name="sidebarToggleIcon" Text="☰" FontSize="16" Foreground="#BBFFFFFF"
                                            HorizontalAlignment="Center"/>
                             </Border>
 
                             <!-- Todas las notas -->
                             <Border x:Name="sectAll" Padding="8,8" Margin="2,1"
-                                    CornerRadius="6" Cursor="Hand"
-                                    Background="Transparent"
+                                    Style="{StaticResource SidebarItem}"
                                     PreviewMouseDown="SidebarSection_Click"
+                                    MouseEnter="SidebarItem_MouseEnter"
+                                    MouseLeave="SidebarItem_MouseLeave"
                                     Tag="all">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock x:Name="sectAllIcon" Text="✏️" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
@@ -357,9 +372,10 @@
 
                             <!-- Archivadas -->
                             <Border x:Name="sectArchived" Padding="8,8" Margin="2,1"
-                                    CornerRadius="6" Cursor="Hand"
-                                    Background="Transparent"
+                                    Style="{StaticResource SidebarItem}"
                                     PreviewMouseDown="SidebarSection_Click"
+                                    MouseEnter="SidebarItem_MouseEnter"
+                                    MouseLeave="SidebarItem_MouseLeave"
                                     Tag="archived">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock x:Name="sectArchivedIcon" Text="📁" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
@@ -374,9 +390,10 @@
 
                             <!-- Papelera -->
                             <Border x:Name="sectTrash" Padding="8,8" Margin="2,1"
-                                    CornerRadius="6" Cursor="Hand"
-                                    Background="Transparent"
+                                    Style="{StaticResource SidebarItem}"
                                     PreviewMouseDown="SidebarSection_Click"
+                                    MouseEnter="SidebarItem_MouseEnter"
+                                    MouseLeave="SidebarItem_MouseLeave"
                                     Tag="trash">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock x:Name="sectTrashIcon" Text="♻️" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
@@ -390,14 +407,15 @@
                             </Border>
 
                             <!-- Separator -->
-                            <Rectangle Height="1" Fill="#30FFFFFF" Margin="4,6"/>
+                            <Rectangle x:Name="sidebarSepH" Height="1" Fill="#30FFFFFF" Margin="4,6"/>
 
                             <!-- 📚 Libretas -->
                             <StackPanel>
                                 <Border x:Name="sectNotebooksHeader" Padding="8,8" Margin="2,1"
-                                        CornerRadius="6" Cursor="Hand"
-                                        Background="Transparent"
+                                        Style="{StaticResource SidebarItem}"
                                         PreviewMouseDown="SidebarAccordion_Click"
+                                        MouseEnter="SidebarItem_MouseEnter"
+                                        MouseLeave="SidebarItem_MouseLeave"
                                         Tag="notebooks">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock x:Name="sectNotebooksIcon" Text="📚" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
@@ -415,9 +433,10 @@
                             <!-- 🏷 Tags -->
                             <StackPanel>
                                 <Border x:Name="sectTagsHeader" Padding="8,8" Margin="2,1"
-                                        CornerRadius="6" Cursor="Hand"
-                                        Background="Transparent"
+                                        Style="{StaticResource SidebarItem}"
                                         PreviewMouseDown="SidebarAccordion_Click"
+                                        MouseEnter="SidebarItem_MouseEnter"
+                                        MouseLeave="SidebarItem_MouseLeave"
                                         Tag="tags">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock x:Name="sectTagsIcon" Text="🏷" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
@@ -434,9 +453,10 @@
 
                             <!-- Timeline -->
                             <Border x:Name="sectTimeline" Padding="8,8" Margin="2,1"
-                                    CornerRadius="6" Cursor="Hand"
-                                    Background="Transparent"
+                                    Style="{StaticResource SidebarItem}"
                                     PreviewMouseDown="SidebarSection_Click"
+                                    MouseEnter="SidebarItem_MouseEnter"
+                                    MouseLeave="SidebarItem_MouseLeave"
                                     Tag="timeline">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock x:Name="sectTimelineIcon" Text="🕐" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
@@ -453,7 +473,7 @@
                 </Border>
 
                 <!-- Vertical separator -->
-                <Rectangle Grid.Column="0" HorizontalAlignment="Right" Width="1" Fill="#30FFFFFF" IsHitTestVisible="False"/>
+                <Rectangle x:Name="sidebarSepV" Grid.Column="0" HorizontalAlignment="Right" Width="1" Fill="#30FFFFFF" IsHitTestVisible="False"/>
 
                 <!-- Notes list (existing) -->
                 <ScrollViewer x:Name="scrollViewer" Grid.Column="1"

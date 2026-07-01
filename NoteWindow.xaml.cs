@@ -597,6 +597,9 @@ public partial class NoteWindow : Window
         SetPanelForeground(titleRightPanel, fg);
         SetPanelForeground(bottomRightPanel, fg);
 
+        // Caret (text cursor) contrast against note background
+        noteText.CaretBrush = dark ? Brushes.White : Brushes.Black;
+
         // Update floating toolbar too
         var floatFg = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(0xCC, 0x3A, 0x3A, 0x3A));
         foreach (var child in formatToolbar.Children)
@@ -1595,28 +1598,13 @@ public partial class NoteWindow : Window
 
     private void NoteText_ContextMenuOpening(object? sender, ContextMenuEventArgs e)
     {
-        var menu = new ContextMenu();
+        var menu = BuildStyledContextMenu();
 
         // Standard edit items
-        menu.Items.Add(new MenuItem
-        {
-            Header = "Cortar",
-            Command = ApplicationCommands.Cut,
-            CommandTarget = noteText,
-        });
-        menu.Items.Add(new MenuItem
-        {
-            Header = "Copiar",
-            Command = ApplicationCommands.Copy,
-            CommandTarget = noteText,
-        });
-        menu.Items.Add(new MenuItem
-        {
-            Header = "Pegar",
-            Command = ApplicationCommands.Paste,
-            CommandTarget = noteText,
-        });
-        menu.Items.Add(new Separator());
+        AddStyledItem(menu, "Cortar", cmd: ApplicationCommands.Cut);
+        AddStyledItem(menu, "Copiar", cmd: ApplicationCommands.Copy);
+        AddStyledItem(menu, "Pegar", cmd: ApplicationCommands.Paste);
+        AddSeparator(menu);
 
         // Move to notebook submenu
         var notebookMenu = new MenuItem { Header = "Mover a libreta" };
@@ -1650,26 +1638,39 @@ public partial class NoteWindow : Window
             tagMenu.Items.Add(item);
         }
         menu.Items.Add(tagMenu);
-        menu.Items.Add(new Separator());
+        AddSeparator(menu);
 
         // Note actions
-        var duplicateItem = new MenuItem { Header = "Duplicar nota" };
-        duplicateItem.Click += ContextMenu_DuplicateNote;
-        menu.Items.Add(duplicateItem);
-
-        var saveTemplateItem = new MenuItem { Header = "Guardar como plantilla" };
-        saveTemplateItem.Click += ContextMenu_SaveAsTemplate;
-        menu.Items.Add(saveTemplateItem);
-
-        var archiveItem = new MenuItem { Header = "Archivar nota" };
-        archiveItem.Click += ContextMenu_ArchiveNote;
-        menu.Items.Add(archiveItem);
-
-        var deleteItem = new MenuItem { Header = "Eliminar nota" };
-        deleteItem.Click += ContextMenu_DeleteNote;
-        menu.Items.Add(deleteItem);
+        AddStyledItem(menu, "Duplicar nota", click: ContextMenu_DuplicateNote);
+        AddStyledItem(menu, "Guardar como plantilla", click: ContextMenu_SaveAsTemplate);
+        AddStyledItem(menu, "Archivar nota", click: ContextMenu_ArchiveNote);
+        AddStyledItem(menu, "Eliminar nota", click: ContextMenu_DeleteNote);
 
         noteText.ContextMenu = menu;
+    }
+
+    private static void AddStyledItem(ContextMenu menu, string header,
+        ICommand? cmd = null, IInputElement? cmdTarget = null,
+        RoutedEventHandler? click = null)
+    {
+        var item = new MenuItem { Header = header };
+        if (cmd != null)
+        {
+            item.Command = cmd;
+            if (cmdTarget != null)
+                item.CommandTarget = cmdTarget;
+        }
+        if (click != null)
+            item.Click += click;
+        menu.Items.Add(item);
+    }
+
+    private static void AddSeparator(ContextMenu menu)
+    {
+        menu.Items.Add(new Separator
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF))
+        });
     }
 
     private void ContextMenu_MoveToNotebook(object sender, RoutedEventArgs e)
@@ -1790,28 +1791,42 @@ public partial class NoteWindow : Window
 
     private ContextMenu BuildStyledContextMenu()
     {
-        var noteColor = ParseColor(_note.Color);
-        var isDark = IsDarkColor(_note.Color);
-        var r = noteColor.R; var g = noteColor.G; var b = noteColor.B;
-        var bg = isDark
-            ? $"#{Math.Max(0, r - 40):X2}{Math.Max(0, g - 40):X2}{Math.Max(0, b - 40):X2}"
-            : $"#{Math.Min(255, r + 30):X2}{Math.Min(255, g + 30):X2}{Math.Min(255, b + 30):X2}";
-
-        var xaml = $@"<ContextMenu xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
-             Background='{bg}' BorderBrush='#50FFFFFF' BorderThickness='1'>
+        var xaml = @"<ContextMenu xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
+                    xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'
+                    Background='#2A2A2A' Foreground='#CCFFFFFF'
+                    BorderBrush='#40FFFFFF' BorderThickness='1'
+                    FontSize='13' HasDropShadow='False'>
+  <ContextMenu.Template>
+    <ControlTemplate TargetType='ContextMenu'>
+      <Border Background='{TemplateBinding Background}'
+              BorderBrush='{TemplateBinding BorderBrush}'
+              BorderThickness='{TemplateBinding BorderThickness}'
+              CornerRadius='8'
+              Padding='4'>
+        <ScrollViewer Style='{x:Null}' Padding='0' Margin='0'
+                      HorizontalScrollBarVisibility='Hidden'
+                      VerticalScrollBarVisibility='Auto'
+                      HorizontalContentAlignment='Stretch'>
+          <ItemsPresenter Margin='0' HorizontalAlignment='Stretch'/>
+        </ScrollViewer>
+      </Border>
+    </ControlTemplate>
+  </ContextMenu.Template>
   <ContextMenu.Resources>
     <Style TargetType='MenuItem'>
       <Setter Property='Background' Value='Transparent'/>
       <Setter Property='BorderThickness' Value='0'/>
-      <Setter Property='FontSize' Value='13'/>
-      <Setter Property='Height' Value='32'/>
-      <Setter Property='Padding' Value='12,0'/>
       <Setter Property='Foreground' Value='#CCFFFFFF'/>
+      <Setter Property='FontSize' Value='13'/>
+      <Setter Property='Height' Value='30'/>
+      <Setter Property='Padding' Value='10,0'/>
       <Setter Property='Template'>
         <Setter.Value>
           <ControlTemplate TargetType='MenuItem'>
-            <Border x:Name='bg' Background='{{TemplateBinding Background}}'
-                    CornerRadius='4' Padding='{{TemplateBinding Padding}}'
+            <Border x:Name='bg'
+                    Background='{TemplateBinding Background}'
+                    CornerRadius='4'
+                    Padding='{TemplateBinding Padding}'
                     SnapsToDevicePixels='True'
                     HorizontalAlignment='Stretch'>
               <ContentPresenter ContentSource='Header'

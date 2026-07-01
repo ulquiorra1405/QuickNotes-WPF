@@ -47,6 +47,10 @@ public partial class MainWindow : Window
     private string _searchFilter = "";
     private bool _sidebarExpanded;
     private Brush _sidebarActiveBg = new SolidColorBrush(Color.FromArgb(0xFF, 0x3A, 0x3A, 0x3A));
+    private Brush _sidebarHoverBg = new SolidColorBrush(Color.FromArgb(0xFF, 0x2D, 0x2D, 0x2D));
+    private Brush _sidebarSepFg = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
+    private Brush _topbarHoverBg = new SolidColorBrush(Color.FromArgb(0x3F, 0xFF, 0xFF, 0xFF));
+    private string _currentTheme = "dark";
 
     public MainWindow()
     {
@@ -75,6 +79,7 @@ public partial class MainWindow : Window
         statusText.Text = "Ready";
         UpdateStats();
         ApplyTheme(store.Theme);
+        AttachTopbarEventHandlers();
         SetStartWithWindows(store.StartWithWindows);
         AnimationHelper.Enabled = store.AnimationsEnabled;
         ApplyCompactMode(store.CompactMode);
@@ -189,7 +194,9 @@ public partial class MainWindow : Window
         {
             Text = "Nueva nota",
             FontSize = 11,
-            Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xBB, 0xBB, 0xBB)),
+            Foreground = new SolidColorBrush(_currentTheme == "light"
+                ? Color.FromArgb(0x88, 0x00, 0x00, 0x00)
+                : Color.FromArgb(0x88, 0xBB, 0xBB, 0xBB)),
             Padding = new Thickness(8, 4, 8, 2),
             FontWeight = FontWeights.SemiBold,
         });
@@ -208,12 +215,17 @@ public partial class MainWindow : Window
                 HorizontalContentAlignment = HorizontalAlignment.Left,
             };
             if (menuItemStyle != null) btn.Style = menuItemStyle;
+            btn.Foreground = new SolidColorBrush(_currentTheme == "light"
+                ? Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A)
+                : Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF));
             btn.Click += (_, _) => CreateNoteFromTemplate(template);
             templatePanel.Children.Add(btn);
         }
 
         if (templatePanel.Children.Count > 0)
         {
+            addBtn.Background = _topbarHoverBg;
+            AttachPopupItemHandlers(templatePanel);
             templatePopup.PlacementTarget = addBtn;
             templatePopup.IsOpen = true;
         }
@@ -318,6 +330,8 @@ public partial class MainWindow : Window
         {
             var win = new NoteWindow(note, store);
             win.Closed += (_, _) => { store.Save(); RestoreFromDock(); };
+            win.Left = Left + Width + 10;
+            win.Top = Top + 30;
             win.Show();
         }
     }
@@ -379,6 +393,8 @@ public partial class MainWindow : Window
         }
 
         var win = new NoteWindow(note, store);
+        win.Left = Left + Width + 10;
+        win.Top = Top + 30;
         win.Show();
         statusText.Text = "Note popped out";
     }
@@ -824,6 +840,7 @@ public partial class MainWindow : Window
                 Focus();
                 RestoreFromDock();
             });
+            _dockWindow.ApplyTheme(_currentTheme);
             _dockWindow.RefreshNotes();
             _dockWindow.Show();
         }
@@ -846,16 +863,58 @@ public partial class MainWindow : Window
     private void MenuBtn_Click(object sender, RoutedEventArgs e)
     {
         menuPopup.IsOpen = !menuPopup.IsOpen;
+        if (menuPopup.IsOpen)
+        {
+            menuBtn.Background = _topbarHoverBg;
+            AttachPopupItemHandlers(menuStack);
+        }
+    }
+
+    private void MenuPopup_Closed(object sender, EventArgs e)
+    {
+        menuBtn.Background = Brushes.Transparent;
+    }
+
+    private void TemplatePopup_Closed(object sender, EventArgs e)
+    {
+        addBtn.Background = Brushes.Transparent;
+    }
+
+    private void AttachPopupItemHandlers(Panel panel)
+    {
+        foreach (var child in panel.Children)
+        {
+            if (child is Button btn)
+            {
+                btn.MouseEnter -= PopupItem_MouseEnter;
+                btn.MouseEnter += PopupItem_MouseEnter;
+                btn.MouseLeave -= PopupItem_MouseLeave;
+                btn.MouseLeave += PopupItem_MouseLeave;
+            }
+        }
+    }
+
+    private void PopupItem_MouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is Button btn)
+            btn.Background = _topbarHoverBg;
+    }
+
+    private void PopupItem_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (sender is Button btn)
+            btn.Background = Brushes.Transparent;
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
         menuPopup.IsOpen = false;
-        new SettingsWindow(store, this).ShowDialog();
+        new SettingsWindow(store, this, _currentTheme).ShowDialog();
     }
 
     public void ApplyTheme(string theme)
     {
+        _currentTheme = theme;
         var effective = theme;
         if (effective == "system")
         {
@@ -904,15 +963,51 @@ public partial class MainWindow : Window
 
         // Sidebar
         var sidebarBg = effective == "light"
-            ? Color.FromArgb(0xFF, 0xEA, 0xEA, 0xEA)
+            ? Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0)
             : Color.FromArgb(0xFF, 0x23, 0x23, 0x23);
         sidebarBorder.Background = new SolidColorBrush(sidebarBg);
 
-        var sidebarMuted = new SolidColorBrush(Color.FromArgb(effective == "light" ? (byte)0x66 : (byte)0x88, textColor.R, textColor.G, textColor.B));
+        var sidebarMuted = new SolidColorBrush(effective == "light"
+            ? Color.FromArgb(0xFF, 0x66, 0x66, 0x66)
+            : Color.FromArgb(0x88, textColor.R, textColor.G, textColor.B));
         var activeBg = effective == "light"
             ? new SolidColorBrush(Color.FromArgb(0xFF, 0xD0, 0xD0, 0xD0))
             : new SolidColorBrush(Color.FromArgb(0xFF, 0x3A, 0x3A, 0x3A));
+        _sidebarHoverBg = new SolidColorBrush(effective == "light"
+            ? Color.FromArgb(0x3F, 0x00, 0x00, 0x00)
+            : Color.FromArgb(0xFF, 0x2D, 0x2D, 0x2D));
+        _sidebarSepFg = new SolidColorBrush(effective == "light"
+            ? Color.FromArgb(0x30, 0x00, 0x00, 0x00)
+            : Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
+        sidebarSepH.Fill = _sidebarSepFg;
+        sidebarSepV.Fill = _sidebarSepFg;
         UpdateSidebarHighlightColors(activeBg, sidebarMuted);
+
+        // Topbar hover
+        _topbarHoverBg = new SolidColorBrush(effective == "light"
+            ? Color.FromArgb(0x3F, 0x00, 0x00, 0x00)
+            : Color.FromArgb(0x3F, 0xFF, 0xFF, 0xFF));
+
+        // Popup backgrounds
+        var popupBg = effective == "light"
+            ? Color.FromArgb(0xFF, 0xF0, 0xF0, 0xF0)
+            : Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A);
+        var popupBorder = effective == "light"
+            ? Color.FromArgb(0x40, 0x00, 0x00, 0x00)
+            : Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF);
+        var popupText = effective == "light"
+            ? Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A)
+            : Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF);
+        menuPopupBorder.Background = new SolidColorBrush(popupBg);
+        menuPopupBorder.BorderBrush = new SolidColorBrush(popupBorder);
+        templatePopupBorder.Background = new SolidColorBrush(popupBg);
+        templatePopupBorder.BorderBrush = new SolidColorBrush(popupBorder);
+
+        // Update popup item foregrounds (QN menu)
+        UpdatePopupItemForegrounds(menuStack, popupText);
+
+        // Dock theme
+        _dockWindow?.ApplyTheme(effective);
 
         // Status bar
         statusText.Foreground = new SolidColorBrush(textMuted);
@@ -1063,7 +1158,7 @@ public partial class MainWindow : Window
             ResizeMode = ResizeMode.NoResize,
             WindowStyle = WindowStyle.None,
             AllowsTransparency = true,
-            Background = new SolidColorBrush(Color.FromRgb(0x26, 0x26, 0x26)),
+            Background = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x26, 0x26, 0x26)),
             Owner = this,
             ShowInTaskbar = false,
             Topmost = true,
@@ -1079,7 +1174,7 @@ public partial class MainWindow : Window
             Text = "QuickNotes",
             FontSize = 20,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            Foreground = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
         };
         Grid.SetRow(titleBlock, 0);
         grid.Children.Add(titleBlock);
@@ -1088,7 +1183,7 @@ public partial class MainWindow : Window
         {
             Text = $"QuickNotes v1.0{Environment.NewLine}Desarrollado por Felix Bryan Batista{Environment.NewLine}República Dominicana{Environment.NewLine}{Environment.NewLine}App de notas con formato enriquecido,{Environment.NewLine}pestañas laterales y temas oscuros.",
             FontSize = 13,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x99, 0x99, 0x99)),
+            Foreground = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0x55, 0x55, 0x55) : Color.FromRgb(0x99, 0x99, 0x99)),
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
             LineHeight = 20,
@@ -1106,8 +1201,10 @@ public partial class MainWindow : Window
             Cursor = Cursors.Hand,
             FontSize = 13,
         };
-        okBtn.Style = MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x5A, 0x5A, 0x5A),
-            Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x77, 0x77, 0x77));
+        okBtn.Style = MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF),
+                _currentTheme == "light" ? Color.FromRgb(0x55, 0x55, 0x55) : Color.FromRgb(0x5A, 0x5A, 0x5A),
+                Color.FromRgb(0xFF, 0xFF, 0xFF),
+                _currentTheme == "light" ? Color.FromRgb(0x44, 0x44, 0x44) : Color.FromRgb(0x77, 0x77, 0x77));
         okBtn.Click += (_, _) => about.Close();
         btnPanel.Children.Add(okBtn);
         Grid.SetRow(btnPanel, 2);
@@ -1137,8 +1234,25 @@ public partial class MainWindow : Window
 
     // ── Sidebar ──
 
+    private void AnimateSidebarClick(FrameworkElement target)
+    {
+        var animX = new DoubleAnimation(0.7, 1, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new QuadraticEase()
+        };
+        var animY = new DoubleAnimation(0.7, 1, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new QuadraticEase()
+        };
+        target.RenderTransformOrigin = new Point(0.5, 0.5);
+        target.RenderTransform = new ScaleTransform(1, 1);
+        target.BeginAnimation(ScaleTransform.ScaleXProperty, animX);
+        target.BeginAnimation(ScaleTransform.ScaleYProperty, animY);
+    }
+
     private void SidebarToggle_Click(object sender, MouseButtonEventArgs e)
     {
+        if (sender is FrameworkElement fe) AnimateSidebarClick(fe);
         ToggleSidebar();
     }
 
@@ -1169,6 +1283,42 @@ public partial class MainWindow : Window
         sectTagsBtnAdd.BeginAnimation(OpacityProperty, fade);
     }
 
+    private void AttachTopbarEventHandlers()
+    {
+        foreach (var child in titleBarGrid.Children)
+        {
+            if (child is ButtonBase btn)
+            {
+                btn.MouseEnter += TopbarBtn_MouseEnter;
+                btn.MouseLeave += TopbarBtn_MouseLeave;
+            }
+        }
+    }
+
+    private void TopbarBtn_MouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is ButtonBase btn)
+            btn.Background = _topbarHoverBg;
+    }
+
+    private void TopbarBtn_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (sender is ButtonBase btn)
+            btn.Background = Brushes.Transparent;
+    }
+
+    private void UpdatePopupItemForegrounds(StackPanel stack, Color fgColor)
+    {
+        var brush = new SolidColorBrush(fgColor);
+        foreach (var child in stack.Children)
+        {
+            if (child is Button btn)
+                btn.Foreground = brush;
+            else if (child is TextBlock tb)
+                tb.Foreground = brush;
+        }
+    }
+
     private void UpdateSidebarLabels()
     {
         double o = _sidebarExpanded ? 1.0 : 0.0;
@@ -1185,10 +1335,32 @@ public partial class MainWindow : Window
         sectTagsBtnAdd.Opacity = o;
     }
 
+    private void SidebarItem_MouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is Border b)
+        {
+            if (b.Tag is string tag && tag == _activeSection)
+                return;
+            b.Background = _sidebarHoverBg;
+        }
+    }
+
+    private void SidebarItem_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (sender is Border b)
+        {
+            if (b.Tag is string tag && (tag == "all" || tag == "archived" || tag == "trash" || tag == "timeline"))
+                UpdateSidebarHighlight();
+            else
+                b.Background = Brushes.Transparent;
+        }
+    }
+
     private void SidebarSection_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is Border b && b.Tag is string section)
         {
+            if (sender is FrameworkElement fe) AnimateSidebarClick(fe);
             SetActiveSection(section);
         }
     }
@@ -1276,7 +1448,10 @@ public partial class MainWindow : Window
     private void SidebarAccordion_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is Border b && b.Tag is string section)
+        {
+            if (sender is FrameworkElement fe) AnimateSidebarClick(fe);
             ShowSidebarFlyout(b, section);
+        }
     }
 
     private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
@@ -1308,7 +1483,7 @@ public partial class MainWindow : Window
         // Build content
         var border = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(0x26, 0x26, 0x26)),
+            Background = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x26, 0x26, 0x26)),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(6),
             BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
@@ -1440,7 +1615,7 @@ public partial class MainWindow : Window
 
         var border = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(0x26, 0x26, 0x26)),
+            Background = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x26, 0x26, 0x26)),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(20),
         };
@@ -1455,7 +1630,7 @@ public partial class MainWindow : Window
             Text = "Nueva libreta",
             FontSize = 16,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            Foreground = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
         };
         Grid.SetRow(titleBlock, 0);
         grid.Children.Add(titleBlock);
@@ -1489,8 +1664,10 @@ public partial class MainWindow : Window
         btnPanel.Children.Add(cancelBtn);
 
         var okBtn = new Button { Content = "Crear", Width = 80, Height = 30, Cursor = Cursors.Hand, FontSize = 13 };
-        okBtn.Style = MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x5A, 0x5A, 0x5A),
-            Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x77, 0x77, 0x77));
+        okBtn.Style = MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF),
+                _currentTheme == "light" ? Color.FromRgb(0x55, 0x55, 0x55) : Color.FromRgb(0x5A, 0x5A, 0x5A),
+                Color.FromRgb(0xFF, 0xFF, 0xFF),
+                _currentTheme == "light" ? Color.FromRgb(0x44, 0x44, 0x44) : Color.FromRgb(0x77, 0x77, 0x77));
         okBtn.Click += (_, _) =>
         {
             var name = input.Text.Trim();
@@ -1530,7 +1707,7 @@ public partial class MainWindow : Window
 
         var border = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(0x26, 0x26, 0x26)),
+            Background = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x26, 0x26, 0x26)),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(20),
         };
@@ -1545,7 +1722,7 @@ public partial class MainWindow : Window
             Text = "Nuevo tag",
             FontSize = 16,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            Foreground = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
         };
         Grid.SetRow(titleBlock, 0);
         grid.Children.Add(titleBlock);
@@ -1579,8 +1756,10 @@ public partial class MainWindow : Window
         btnPanel.Children.Add(cancelBtn);
 
         var okBtn = new Button { Content = "Crear", Width = 80, Height = 30, Cursor = Cursors.Hand, FontSize = 13 };
-        okBtn.Style = MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x5A, 0x5A, 0x5A),
-            Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x77, 0x77, 0x77));
+        okBtn.Style = MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF),
+                _currentTheme == "light" ? Color.FromRgb(0x55, 0x55, 0x55) : Color.FromRgb(0x5A, 0x5A, 0x5A),
+                Color.FromRgb(0xFF, 0xFF, 0xFF),
+                _currentTheme == "light" ? Color.FromRgb(0x44, 0x44, 0x44) : Color.FromRgb(0x77, 0x77, 0x77));
         okBtn.Click += (_, _) =>
         {
             var name = input.Text.Trim();
@@ -1726,8 +1905,15 @@ public partial class MainWindow : Window
         base.OnClosing(e);
     }
 
-    private static bool ShowConfirm(string title, string message)
+    private bool ShowConfirm(string title, string message)
     {
+        var isLight = _currentTheme == "light";
+        var btnDefFg = isLight ? Color.FromRgb(0x44, 0x44, 0x44) : Color.FromRgb(0xBB, 0xBB, 0xBB);
+        var btnDefBg = isLight ? Color.FromRgb(0xD0, 0xD0, 0xD0) : Color.FromRgb(0x3A, 0x3A, 0x3A);
+        var btnDefHoverBg = isLight ? Color.FromRgb(0xBE, 0xBE, 0xBE) : Color.FromRgb(0x55, 0x55, 0x55);
+        var btnActBg = isLight ? Color.FromRgb(0x55, 0x55, 0x55) : Color.FromRgb(0x5A, 0x5A, 0x5A);
+        var btnActHoverBg = isLight ? Color.FromRgb(0x44, 0x44, 0x44) : Color.FromRgb(0x77, 0x77, 0x77);
+
         var win = new Window
         {
             Title = title,
@@ -1737,7 +1923,7 @@ public partial class MainWindow : Window
             ResizeMode = ResizeMode.NoResize,
             WindowStyle = WindowStyle.None,
             AllowsTransparency = true,
-            Background = new SolidColorBrush(Color.FromRgb(0x26, 0x26, 0x26)),
+            Background = new SolidColorBrush(isLight ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x26, 0x26, 0x26)),
             Owner = Application.Current.MainWindow,
             ShowInTaskbar = false,
             Topmost = true,
@@ -1753,7 +1939,7 @@ public partial class MainWindow : Window
             Text = title,
             FontSize = 16,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            Foreground = new SolidColorBrush(isLight ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD)),
         };
         Grid.SetRow(titleBlock, 0);
         grid.Children.Add(titleBlock);
@@ -1762,7 +1948,7 @@ public partial class MainWindow : Window
         {
             Text = message,
             FontSize = 13,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x99, 0x99, 0x99)),
+            Foreground = new SolidColorBrush(isLight ? Color.FromRgb(0x55, 0x55, 0x55) : Color.FromRgb(0x99, 0x99, 0x99)),
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -1782,8 +1968,8 @@ public partial class MainWindow : Window
             Cursor = Cursors.Hand,
             FontSize = 13,
         };
-        noBtn.Style = MakeBtnStyle(Color.FromRgb(0xBB, 0xBB, 0xBB), Color.FromRgb(0x3A, 0x3A, 0x3A),
-            Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
+        noBtn.Style = MakeBtnStyle(btnDefFg, btnDefBg,
+            Color.FromRgb(0xFF, 0xFF, 0xFF), btnDefHoverBg);
         noBtn.Click += (_, _) => { win.DialogResult = false; win.Close(); };
         btnPanel.Children.Add(noBtn);
 
@@ -1795,8 +1981,8 @@ public partial class MainWindow : Window
             Cursor = Cursors.Hand,
             FontSize = 13,
         };
-        yesBtn.Style = MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x5A, 0x5A, 0x5A),
-            Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x77, 0x77, 0x77));
+        yesBtn.Style = MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF), btnActBg,
+            Color.FromRgb(0xFF, 0xFF, 0xFF), btnActHoverBg);
         yesBtn.Click += (_, _) => { win.DialogResult = true; win.Close(); };
         btnPanel.Children.Add(yesBtn);
 

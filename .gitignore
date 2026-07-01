@@ -36,3 +36,6 @@ err_*
 out_*
 stderr*
 stdout*
+
+## Agent memory (not part of source)
+memory/

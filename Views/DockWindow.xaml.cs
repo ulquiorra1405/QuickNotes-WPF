@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using QuickNotes.Models;
 
 namespace QuickNotes.Views;
@@ -41,6 +42,9 @@ public partial class DockWindow : Window
     private readonly Action _onExit;
     private readonly Rect _monitorBounds;
     private readonly SolidColorBrush _dockBgBrush;
+    private Color _dockBgNormal = Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A);
+    private Color _dockBgHover = Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A);
+    private Color _exitBtnHoverBg = Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A);
 
     public DockWindow(NotesStore store, Rect monitorBounds, Action onExit)
     {
@@ -51,7 +55,7 @@ public partial class DockWindow : Window
         AnimationHelper.Enabled = _store.AnimationsEnabled;
 
         // Create an unfrozen brush for hover-to-opaque animation
-        _dockBgBrush = new SolidColorBrush(Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A));
+        _dockBgBrush = new SolidColorBrush(_dockBgNormal);
         dockBorder.Background = _dockBgBrush;
 
         // Position: right edge of the correct monitor, vertically centered
@@ -120,22 +124,26 @@ public partial class DockWindow : Window
 
     private void DockBorder_MouseEnter(object sender, MouseEventArgs e)
     {
-        var anim = new ColorAnimation(
-            Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A),
-            Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A),
-            AnimationHelper.Dur(200));
+        var anim = new ColorAnimation(_dockBgNormal, _dockBgHover, AnimationHelper.Dur(200));
         if (AnimationHelper.Enabled) anim.EasingFunction = new QuadraticEase();
         _dockBgBrush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
     }
 
     private void DockBorder_MouseLeave(object sender, MouseEventArgs e)
     {
-        var anim = new ColorAnimation(
-            Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A),
-            Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A),
-            AnimationHelper.Dur(200));
+        var anim = new ColorAnimation(_dockBgHover, _dockBgNormal, AnimationHelper.Dur(200));
         if (AnimationHelper.Enabled) anim.EasingFunction = new QuadraticEase();
         _dockBgBrush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
+    }
+
+    private void ExitBtn_MouseEnter(object sender, MouseEventArgs e)
+    {
+        exitDockBtn.Background = new SolidColorBrush(_exitBtnHoverBg);
+    }
+
+    private void ExitBtn_MouseLeave(object sender, MouseEventArgs e)
+    {
+        exitDockBtn.Background = Brushes.Transparent;
     }
 
     // ── Note opening (click) + reorder (drag with live ghost + shifts) ──
@@ -439,6 +447,42 @@ public partial class DockWindow : Window
         }
 
         RefreshNotes();
+    }
+
+    public void ApplyTheme(string theme)
+    {
+        if (theme == "light")
+        {
+            _dockBgNormal = Color.FromArgb(0x4C, 0xDD, 0xDD, 0xDD);
+            _dockBgHover = Color.FromArgb(0xFF, 0xDD, 0xDD, 0xDD);
+            dockBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC));
+            exitDockBtn.Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x88, 0x88, 0x88));
+            _exitBtnHoverBg = Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC);
+            dockBorder.Effect = null;
+        }
+        else
+        {
+            _dockBgNormal = Color.FromArgb(0x4C, 0x1A, 0x1A, 0x1A);
+            _dockBgHover = Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A);
+            dockBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x3A, 0x3A, 0x3A));
+            exitDockBtn.Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x55, 0x55, 0x55));
+            _exitBtnHoverBg = Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A);
+            dockBorder.Effect = new DropShadowEffect
+            {
+                ShadowDepth = 4,
+                Color = Colors.Black,
+                Opacity = 0.5,
+                BlurRadius = 12,
+                Direction = 270
+            };
+        }
+
+        // Reset current state
+        var currentAlpha = _dockBgBrush.Color.A;
+        if (currentAlpha > 0xA0)
+            _dockBgBrush.Color = _dockBgHover;
+        else
+            _dockBgBrush.Color = _dockBgNormal;
     }
 
     // ── Exit ──

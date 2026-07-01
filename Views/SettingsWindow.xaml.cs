@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -12,6 +12,7 @@ public partial class SettingsWindow : Window
 {
     private readonly NotesStore _store;
     private readonly MainWindow _mainWindow;
+    private readonly string _currentTheme;
 
     // Local working copies of settings (modified before save)
     private string _selectedTheme;
@@ -26,12 +27,13 @@ public partial class SettingsWindow : Window
     private string _fontVal;
     private bool _animVal;
 
-    public SettingsWindow(NotesStore store, MainWindow mainWindow)
+    public SettingsWindow(NotesStore store, MainWindow mainWindow, string currentTheme = "dark")
     {
         InitializeComponent();
 
         _store = store;
         _mainWindow = mainWindow;
+        _currentTheme = currentTheme;
         Owner = mainWindow;
 
         // Snapshot current settings
@@ -52,12 +54,33 @@ public partial class SettingsWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        var isLight = _currentTheme == "light";
+        Background = new SolidColorBrush(isLight ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x26, 0x26, 0x26));
         BuildUI();
     }
 
     private void BuildUI()
     {
-        var outerGrid = new Grid { Margin = new Thickness(24) };
+        var isLight = _currentTheme == "light";
+
+        var winBg = isLight ? Color.FromRgb(0xF0, 0xF0, 0xF0) : Color.FromRgb(0x26, 0x26, 0x26);
+        var textBright = isLight ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD);
+        var textMuted = isLight ? Color.FromRgb(0x55, 0x55, 0x55) : Color.FromRgb(0xBB, 0xBB, 0xBB);
+        var textDim = isLight ? Color.FromArgb(0x88, 0x00, 0x00, 0x00) : Color.FromArgb(0x88, 0xBB, 0xBB, 0xBB);
+        var sepColor = isLight ? Color.FromArgb(0x20, 0x00, 0x00, 0x00) : Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF);
+        var inputBg = isLight ? Color.FromRgb(0xE0, 0xE0, 0xE0) : Color.FromRgb(0x3A, 0x3A, 0x3A);
+        var inputBorder = isLight ? Color.FromArgb(0x40, 0x00, 0x00, 0x00) : Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF);
+        var inputFg = isLight ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD);
+
+        // Button color schemes
+        var btnDefaultFg = isLight ? Color.FromRgb(0x44, 0x44, 0x44) : Color.FromRgb(0xBB, 0xBB, 0xBB);
+        var btnDefaultBg = isLight ? Color.FromRgb(0xD0, 0xD0, 0xD0) : Color.FromRgb(0x3A, 0x3A, 0x3A);
+        var btnDefaultHoverBg = isLight ? Color.FromRgb(0xBE, 0xBE, 0xBE) : Color.FromRgb(0x55, 0x55, 0x55);
+        var btnActiveFg = Color.FromRgb(0xFF, 0xFF, 0xFF);
+        var btnActiveBg = isLight ? Color.FromRgb(0x55, 0x55, 0x55) : Color.FromRgb(0x5A, 0x5A, 0x5A);
+        var btnActiveHoverBg = isLight ? Color.FromRgb(0x44, 0x44, 0x44) : Color.FromRgb(0x77, 0x77, 0x77);
+
+        var outerGrid = new Grid { Margin = new Thickness(24), Background = new SolidColorBrush(winBg) };
         outerGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         outerGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         outerGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -67,7 +90,7 @@ public partial class SettingsWindow : Window
             Text = "Ajustes",
             FontSize = 18,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+            Foreground = new SolidColorBrush(textBright),
             Margin = new Thickness(0, 0, 0, 12),
         };
         Grid.SetRow(titleBlock, 0);
@@ -78,7 +101,7 @@ public partial class SettingsWindow : Window
 
         var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
 
-        var lblBrush = new SolidColorBrush(Color.FromRgb(0xBB, 0xBB, 0xBB));
+        var lblBrush = new SolidColorBrush(textMuted);
         Label MakeLabel(string text) => new Label { Content = text, FontSize = 12, Foreground = lblBrush, Padding = new Thickness(0, 8, 0, 2) };
 
         // ── Theme ──
@@ -105,7 +128,7 @@ public partial class SettingsWindow : Window
         }
         panel.Children.Add(themePanel);
 
-        panel.Children.Add(new Rectangle { Height = 1, Fill = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF)), Margin = new Thickness(0, 8, 0, 4) });
+        panel.Children.Add(new Rectangle { Height = 1, Fill = new SolidColorBrush(sepColor), Margin = new Thickness(0, 8, 0, 4) });
 
         // ── Autosave ──
         panel.Children.Add(MakeLabel("Autoguardado"));
@@ -152,9 +175,9 @@ public partial class SettingsWindow : Window
             FontSize = 12,
             Height = 28,
             VerticalContentAlignment = VerticalAlignment.Center,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
-            Background = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x3A)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            Foreground = new SolidColorBrush(inputFg),
+            Background = new SolidColorBrush(inputBg),
+            BorderBrush = new SolidColorBrush(inputBorder),
             BorderThickness = new Thickness(1),
             CaretBrush = new SolidColorBrush(Colors.White),
             Margin = new Thickness(0, 0, 6, 0),
@@ -172,7 +195,7 @@ public partial class SettingsWindow : Window
             FontSize = 12,
         };
         Grid.SetColumn(browseBtn, 1);
-        browseBtn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xBB, 0xBB, 0xBB), Color.FromRgb(0x3A, 0x3A, 0x3A), Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
+        browseBtn.Style = MainWindow.MakeBtnStyle(btnDefaultFg, btnDefaultBg, btnActiveFg, btnDefaultHoverBg);
         browseBtn.Click += (_, _) =>
         {
             var initialPath = string.IsNullOrWhiteSpace(_backupPathVal)
@@ -198,7 +221,7 @@ public partial class SettingsWindow : Window
             Cursor = Cursors.Hand,
             FontSize = 12,
         };
-        restoreBtn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xDD, 0xCC, 0x66), Color.FromRgb(0x3A, 0x3A, 0x3A), Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
+        restoreBtn.Style = MainWindow.MakeBtnStyle(btnDefaultFg, btnDefaultBg, btnActiveFg, btnDefaultHoverBg);
         restoreBtn.Click += (_, _) =>
         {
             // Open backup file picker, defaulting to backup folder
@@ -240,7 +263,7 @@ public partial class SettingsWindow : Window
         {
             Text = "Dejar vacío para usar la carpeta predeterminada (Documentos/QuickNotes/backups)",
             FontSize = 10,
-            Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xBB, 0xBB, 0xBB)),
+            Foreground = new SolidColorBrush(textDim),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 4),
         });
@@ -257,7 +280,7 @@ public partial class SettingsWindow : Window
         };
         panel.Children.Add(confirmCheck);
 
-        panel.Children.Add(new Rectangle { Height = 1, Fill = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF)), Margin = new Thickness(0, 8, 0, 4) });
+        panel.Children.Add(new Rectangle { Height = 1, Fill = new SolidColorBrush(sepColor), Margin = new Thickness(0, 8, 0, 4) });
 
         // ── Default color ──
         var defColorHeader = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 2) };
@@ -321,7 +344,7 @@ public partial class SettingsWindow : Window
         {
             Text = string.IsNullOrEmpty(_store.DefaultColor) ? "Aleatorio" : _defaultColorVal,
             FontSize = 10,
-            Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xBB, 0xBB, 0xBB)),
+            Foreground = new SolidColorBrush(textDim),
             Margin = new Thickness(2, 0, 0, 4),
         };
         panel.Children.Add(defaultColorLabel);
@@ -337,19 +360,19 @@ public partial class SettingsWindow : Window
         // ── Font size ──
         panel.Children.Add(MakeLabel("Tamaño de fuente"));
         var fontRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 4) };
-        var fontSizeLabel = new TextBlock { Text = _fontSizeVal.ToString(), FontSize = 16, Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)), Width = 40, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var fontSizeLabel = new TextBlock { Text = _fontSizeVal.ToString(), FontSize = 16, Foreground = new SolidColorBrush(textBright), Width = 40, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var decBtn = new Button { Content = "−", Width = 30, Height = 30, Cursor = Cursors.Hand, FontSize = 16 };
-        decBtn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xBB, 0xBB, 0xBB), Color.FromRgb(0x3A, 0x3A, 0x3A), Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
+        decBtn.Style = MainWindow.MakeBtnStyle(btnDefaultFg, btnDefaultBg, btnActiveFg, btnDefaultHoverBg);
         decBtn.Click += (_, _) => { _fontSizeVal = Math.Max(8, _fontSizeVal - 1); fontSizeLabel.Text = _fontSizeVal.ToString(); };
         var incBtn = new Button { Content = "+", Width = 30, Height = 30, Cursor = Cursors.Hand, FontSize = 16 };
-        incBtn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xBB, 0xBB, 0xBB), Color.FromRgb(0x3A, 0x3A, 0x3A), Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
+        incBtn.Style = MainWindow.MakeBtnStyle(btnDefaultFg, btnDefaultBg, btnActiveFg, btnDefaultHoverBg);
         incBtn.Click += (_, _) => { _fontSizeVal = Math.Min(48, _fontSizeVal + 1); fontSizeLabel.Text = _fontSizeVal.ToString(); };
         fontRow.Children.Add(decBtn);
         fontRow.Children.Add(fontSizeLabel);
         fontRow.Children.Add(incBtn);
         panel.Children.Add(fontRow);
 
-        panel.Children.Add(new Rectangle { Height = 1, Fill = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF)), Margin = new Thickness(0, 8, 0, 4) });
+        panel.Children.Add(new Rectangle { Height = 1, Fill = new SolidColorBrush(sepColor), Margin = new Thickness(0, 8, 0, 4) });
 
         // ── Compact mode ──
         panel.Children.Add(MakeLabel("Tarjetas"));
@@ -379,6 +402,9 @@ public partial class SettingsWindow : Window
             Margin = new Thickness(0, 0, 0, 4),
             HorizontalAlignment = HorizontalAlignment.Left,
             Style = MainWindow.MakeComboStyle(),
+            Foreground = new SolidColorBrush(inputFg),
+            Background = new SolidColorBrush(inputBg),
+            BorderBrush = new SolidColorBrush(inputBorder),
         };
         fontCombo.SelectionChanged += (_, args) =>
         {
@@ -404,7 +430,7 @@ public partial class SettingsWindow : Window
         };
         panel.Children.Add(animCheck);
 
-        panel.Children.Add(new Rectangle { Height = 1, Fill = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF)), Margin = new Thickness(0, 8, 0, 4) });
+        panel.Children.Add(new Rectangle { Height = 1, Fill = new SolidColorBrush(sepColor), Margin = new Thickness(0, 8, 0, 4) });
 
         // ── Start with Windows ──
         panel.Children.Add(MakeLabel("Inicio"));
@@ -430,7 +456,7 @@ public partial class SettingsWindow : Window
         btnPanel.Children.Add(cancelBtn);
 
         var saveBtn = new Button { Content = "Guardar", Width = 90, Height = 30, Cursor = Cursors.Hand, FontSize = 13 };
-        saveBtn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x5A, 0x5A, 0x5A), Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x77, 0x77, 0x77));
+        saveBtn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF), btnActiveBg, Color.FromRgb(0xFF, 0xFF, 0xFF), btnActiveHoverBg);
         saveBtn.Click += (_, _) =>
         {
             _store.Theme = _selectedTheme;
@@ -462,17 +488,23 @@ public partial class SettingsWindow : Window
         Content = outerGrid;
     }
 
-    private static void UpdateThemeBtn(Button btn, bool active)
+    private void UpdateThemeBtn(Button btn, bool active)
     {
+        var isLight = _currentTheme == "light";
         if (active)
         {
-            btn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x5A, 0x5A, 0x5A),
-                Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x77, 0x77, 0x77));
+            var bg = isLight ? Color.FromRgb(0x55, 0x55, 0x55) : Color.FromRgb(0x5A, 0x5A, 0x5A);
+            var hoverBg = isLight ? Color.FromRgb(0x44, 0x44, 0x44) : Color.FromRgb(0x77, 0x77, 0x77);
+            btn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xFF, 0xFF, 0xFF), bg,
+                Color.FromRgb(0xFF, 0xFF, 0xFF), hoverBg);
         }
         else
         {
-            btn.Style = MainWindow.MakeBtnStyle(Color.FromRgb(0xBB, 0xBB, 0xBB), Color.FromRgb(0x3A, 0x3A, 0x3A),
-                Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0x55, 0x55, 0x55));
+            var fg = isLight ? Color.FromRgb(0x44, 0x44, 0x44) : Color.FromRgb(0xBB, 0xBB, 0xBB);
+            var bg = isLight ? Color.FromRgb(0xD0, 0xD0, 0xD0) : Color.FromRgb(0x3A, 0x3A, 0x3A);
+            var hoverBg = isLight ? Color.FromRgb(0xBE, 0xBE, 0xBE) : Color.FromRgb(0x55, 0x55, 0x55);
+            btn.Style = MainWindow.MakeBtnStyle(fg, bg,
+                Color.FromRgb(0xFF, 0xFF, 0xFF), hoverBg);
         }
     }
 }
