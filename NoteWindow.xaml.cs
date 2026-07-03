@@ -25,6 +25,13 @@ public partial class NoteWindow : Window
     public const double DefaultWidth = 340;
     public const double DefaultHeight = 260;
 
+    // DWM attributes for Mica backdrop
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
+    private const int DWMSBT_MAINWINDOW = 2;
+
     /// <summary>
     /// Set to true during app shutdown to preserve positions.
     /// </summary>
@@ -129,24 +136,32 @@ public partial class NoteWindow : Window
             FormatUrlsInDocument();
             LoadAttachments();
             SetupEditorContextMenu();
+            ApplyMicaBackground();
         };
 
         Activated += (_, _) =>
         {
             ToggleBars(show: true);
             if (_note.IsMimetized)
-                BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(Opacity, 1, 200));
+                micaBackdrop.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(micaBackdrop.Opacity, 1, 200));
         };
         Deactivated += (_, _) =>
         {
             ToggleBars(show: false);
             if (_note.IsMimetized)
-                BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(1, 0.25, 200));
+                micaBackdrop.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(1, 0.4, 200));
         };
         SourceInitialized += (_, _) =>
         {
             var source = (HwndSource?)PresentationSource.FromVisual(this);
             source?.AddHook(WndProc);
+
+            // Enable Mica (Win11 22621+)
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var backdrop = DWMSBT_MAINWINDOW;
+            DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int));
+            var darkMode = IsDarkColor(_note.Color) ? 1 : 0;
+            DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
         };
         PreviewKeyDown += NoteWindow_PreviewKeyDown;
         PreviewKeyUp += (_, e) =>
@@ -659,7 +674,24 @@ public partial class NoteWindow : Window
             FlashElement(border);
             colorPopup.IsOpen = false;
             UpdateButtonForegrounds();
+            ApplyMicaBackground();
+            UpdateDwmTheme();
         }
+    }
+
+    private void UpdateDwmTheme()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        var darkMode = IsDarkColor(_note.Color) ? 1 : 0;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+    }
+
+    private void ApplyMicaBackground()
+    {
+        var hex = _note.Color ?? "#F8F9FA";
+        var color = ParseColor(hex);
+        var alpha = IsDarkColor(hex) ? (byte)0xC0 : (byte)0xD8;
+        micaBackdrop.Background = new SolidColorBrush(Color.FromArgb(alpha, color.R, color.G, color.B));
     }
 
     private void CurrentColorDot_MouseDown(object sender, MouseButtonEventArgs e)

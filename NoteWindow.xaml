@@ -6,7 +6,7 @@
         Topmost="True"
         ResizeMode="CanResize"
         WindowStartupLocation="Manual"
-        Background="{Binding Color}"
+        Background="Transparent"
         UseLayoutRounding="True"
         FontFamily="Segoe UI">
 
@@ -115,7 +115,8 @@
 
     </Window.Resources>
 
-    <Grid x:Name="rootContentGrid">
+    <Border x:Name="micaBackdrop">
+        <Grid x:Name="rootContentGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -563,5 +564,6 @@
             </Border>
         </Popup>
 
-    </Grid>
+        </Grid>
+    </Border>
 </Window>
