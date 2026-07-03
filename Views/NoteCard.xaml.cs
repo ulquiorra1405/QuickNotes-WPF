@@ -786,3 +786,4 @@ public partial class NoteCard : UserControl
         return null;
     }
 }
+

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -13,7 +13,7 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using QuickNotes.Models;
 using QuickNotes.Views;
-using System.Runtime.InteropServices; using System.Windows.Interop; using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Text.RegularExpressions;
 
@@ -573,7 +573,7 @@ public partial class MainWindow : Window
 
     private void ClearAll_Click(object sender, RoutedEventArgs e)
     {
-        if (ShowConfirm("¿Borrar todas las notas?", "Esta acción no se puede deshacer."))
+        if (ShowConfirm("�Borrar todas las notas?", "Esta acci�n no se puede deshacer."))
         {
             store.Notes.Clear();
             store.Save();
@@ -606,7 +606,7 @@ public partial class MainWindow : Window
         {
             var note = store.Notes.FirstOrDefault(n => n.Id == reminder.NoteId);
             var title = note?.Title ?? reminder.Title;
-            ShowStatus($"🔔 {title}", false);
+            ShowStatus($"?? {title}", false);
         }
 
         // Try to open the most recent overdue note
@@ -638,7 +638,7 @@ public partial class MainWindow : Window
     {
         var due = store.GetOverdueReminders();
         if (due.Count == 0) return;
-        ShowStatus($"🔔 Tienes {due.Count} recordatorio(s) vencido(s)", false);
+        ShowStatus($"?? Tienes {due.Count} recordatorio(s) vencido(s)", false);
     }
 
     private void Card_MouseDown(object sender, MouseButtonEventArgs e)
@@ -809,7 +809,7 @@ public partial class MainWindow : Window
                     RestoreFromArchive(note);
                 break;
             case "Export":
-                statusText.Text = "⏳ Exportar disponible en Fase 4";
+                statusText.Text = "? Exportar disponible en Fase 4";
                 break;
             case "Reminder":
                 HandleNoteAction(note, "Reminder");
@@ -1254,7 +1254,7 @@ public partial class MainWindow : Window
 
         var body = new TextBlock
         {
-            Text = $"QuickNotes v1.0{Environment.NewLine}Desarrollado por Felix Bryan Batista{Environment.NewLine}República Dominicana{Environment.NewLine}{Environment.NewLine}App de notas con formato enriquecido,{Environment.NewLine}pestañas laterales y temas oscuros.",
+            Text = $"QuickNotes v1.0{Environment.NewLine}Desarrollado por Felix Bryan Batista{Environment.NewLine}Rep�blica Dominicana{Environment.NewLine}{Environment.NewLine}App de notas con formato enriquecido,{Environment.NewLine}pesta�as laterales y temas oscuros.",
             FontSize = 13,
             Foreground = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0x55, 0x55, 0x55) : Color.FromRgb(0x99, 0x99, 0x99)),
             TextWrapping = TextWrapping.Wrap,
@@ -1305,7 +1305,7 @@ public partial class MainWindow : Window
             ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    // ── Sidebar ──
+    // -- Sidebar --
 
     private void AnimateSidebarClick(FrameworkElement target)
     {
@@ -1516,7 +1516,7 @@ public partial class MainWindow : Window
         UpdateTagNotebookLookups();
     }
 
-    // ── Sidebar flyout (for notebooks / tags) ──
+    // -- Sidebar flyout (for notebooks / tags) --
 
     private void SidebarAccordion_Click(object sender, MouseButtonEventArgs e)
     {
@@ -1584,7 +1584,7 @@ public partial class MainWindow : Window
             foreach (var nb in store.Notebooks)
             {
                 var captured = nb;
-                var item = CreateFlyoutItem($"📓 {nb.Name}", nb.Count, () =>
+                var item = CreateFlyoutItem($"?? {nb.Name}", nb.Count, () =>
                 {
                     SetActiveSection($"notebook:{captured.Id}");
                     popup.IsOpen = false;
@@ -1948,7 +1948,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
-        if (store.ConfirmOnExit && !ShowConfirm("¿Salir de QuickNotes?", "Se cerrarán todas las notas y pestañas abiertas."))
+        if (store.ConfirmOnExit && !ShowConfirm("�Salir de QuickNotes?", "Se cerrar�n todas las notas y pesta�as abiertas."))
         {
             e.Cancel = true;
             return;
@@ -1972,7 +1972,7 @@ public partial class MainWindow : Window
         // Close DockWindow if open
         _dockWindow?.Close();
 
-        // Don't reset note positions — app is shutting down
+        // Don't reset note positions � app is shutting down
         NoteWindow.IsAppShuttingDown = true;
 
         // Close all NoteWindows except MainWindow
@@ -2148,16 +2148,17 @@ public class DateGroupConverter : IValueConverter
         if (value is not DateTime dt) return "";
 
         var today = DateTime.Today;
-        if (dt == today) return "─── Hoy ───";
-        if (dt == today.AddDays(-1)) return "─── Ayer ───";
+        if (dt == today) return "--- Hoy ---";
+        if (dt == today.AddDays(-1)) return "--- Ayer ---";
 
         var daysDiff = (today - dt).Days;
         if (daysDiff > 0 && daysDiff <= 6)
-            return $"─── {dt:dddd} ───";
+            return $"--- {dt:dddd} ---";
 
-        return $"─── {dt:dd MMM} ───";
+        return $"--- {dt:dd MMM} ---";
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         => throw new NotImplementedException();
 }
+
