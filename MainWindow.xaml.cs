@@ -811,6 +811,9 @@ public partial class MainWindow : Window
             case "Export":
                 statusText.Text = "⏳ Exportar disponible en Fase 4";
                 break;
+            case "Reminder":
+                HandleNoteAction(note, "Reminder");
+                break;
 
             case string s when s.StartsWith("notebook:"):
                 {
@@ -855,16 +858,18 @@ public partial class MainWindow : Window
             ShowStatus("Tags actualizados", false);
         else if (actionTag == "Reminder")
         {
-            var existing = Application.Current.Windows.OfType<NoteWindow>()
+            NoteWindow? target = Application.Current.Windows.OfType<NoteWindow>()
                 .FirstOrDefault(w => w.DataContext is Note n && n.Id == note.Id);
-            if (existing == null)
+            if (target == null)
             {
-                var win = new NoteWindow(note, store);
-                win.Show();
+                target = new NoteWindow(note, store);
+                target.Show();
+                target.OpenReminderPopup();
             }
             else
             {
-                existing.Activate();
+                target.Activate();
+                target.OpenReminderPopup();
             }
         }
     }

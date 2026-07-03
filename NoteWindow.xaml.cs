@@ -2391,6 +2391,11 @@ public partial class NoteWindow : Window
         exportPopup.IsOpen = true;
     }
 
+    public void OpenReminderPopup()
+    {
+        ReminderMenu_Click(this, null!);
+    }
+
     private void ReminderMenu_Click(object sender, RoutedEventArgs e)
     {
         // Pre-fill from existing reminder if any
