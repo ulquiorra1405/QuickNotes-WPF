@@ -165,20 +165,10 @@
                             </ScrollViewer>
                         </Border>
                     </Popup>
-                    <ToggleButton x:Name="pinNoteBtn" FontSize="10" IsChecked="True"
-                                   WindowChrome.IsHitTestVisibleInChrome="True"
-                                   Checked="PinNote_Click" Unchecked="PinNote_Click">
-                        <ToggleButton.Style>
-                            <Style TargetType="ToggleButton" BasedOn="{StaticResource TitleBtn}">
-                                <Setter Property="Content" Value="📌"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsChecked" Value="True">
-                                        <Setter Property="Content" Value="📍"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </ToggleButton.Style>
-                    </ToggleButton>
+                    <Button x:Name="pinNoteBtn" FontSize="10" Content="📌"
+                            WindowChrome.IsHitTestVisibleInChrome="True"
+                            Style="{StaticResource TitleBtn}"
+                            Click="PinNote_Click"/>
                     <Button x:Name="exportMenuBtn" Content="⋮" Style="{StaticResource TitleBtn}"
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             ToolTip="Exportar / Importar"

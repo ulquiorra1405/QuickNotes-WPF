@@ -18,6 +18,12 @@ public class Note : INotifyPropertyChanged
         get => _isPinned;
         set { _isPinned = value; OnPropertyChanged(); }
     }
+    private bool _isMimetized;
+    public bool IsMimetized
+    {
+        get => _isMimetized;
+        set { _isMimetized = value; OnPropertyChanged(); }
+    }
     private bool _isArchived;
     public bool IsArchived
     {
@@ -201,6 +207,7 @@ public class Note : INotifyPropertyChanged
         Color = Color,
         Icon = Icon,
         IsPinned = IsPinned,
+        IsMimetized = IsMimetized,
         IsArchived = IsArchived,
         IsDeleted = IsDeleted,
         DeletedAt = DeletedAt,

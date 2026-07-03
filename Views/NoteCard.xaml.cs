@@ -212,6 +212,7 @@ public partial class NoteCard : UserControl
         if (DataContext is Note note)
         {
             note.IsPinned = !note.IsPinned;
+            note.IsMimetized = false;
             UpdatePinVisual((Button)sender, note, true);
             RaiseEvent(new RoutedEventArgs(PinToggleEvent));
         }

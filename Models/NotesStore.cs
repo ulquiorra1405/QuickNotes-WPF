@@ -63,6 +63,7 @@ public class NotesStore
                 Icon TEXT NOT NULL DEFAULT '',
                 IsMinimized INTEGER NOT NULL DEFAULT 0,
                 IsPinned INTEGER NOT NULL DEFAULT 0,
+                IsMimetized INTEGER NOT NULL DEFAULT 0,
                 OrderNum INTEGER NOT NULL DEFAULT 0,
                 LastModified TEXT NOT NULL,
                 WinLeft REAL,
@@ -184,6 +185,17 @@ public class NotesStore
             using var addNb = conn.CreateCommand();
             addNb.CommandText = "ALTER TABLE notes ADD COLUMN NotebookId TEXT";
             addNb.ExecuteNonQuery();
+        }
+
+        // Migration: add IsMimetized column if missing
+        using var checkMimetized = conn.CreateCommand();
+        checkMimetized.CommandText = "SELECT COUNT(*) FROM pragma_table_info('notes') WHERE name='IsMimetized'";
+        var hasMimetized = (long)(checkMimetized.ExecuteScalar() ?? 0) > 0;
+        if (!hasMimetized)
+        {
+            using var addMimetized = conn.CreateCommand();
+            addMimetized.CommandText = "ALTER TABLE notes ADD COLUMN IsMimetized INTEGER NOT NULL DEFAULT 0";
+            addMimetized.ExecuteNonQuery();
         }
 
         return conn;
@@ -312,10 +324,10 @@ public class NotesStore
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO notes
-                (Id, Title, Text, Color, Icon, IsPinned, IsArchived, IsDeleted, DeletedAt,
+                (Id, Title, Text, Color, Icon, IsPinned, IsMimetized, IsArchived, IsDeleted, DeletedAt,
                  NotebookId, OrderNum, LastModified,
                  WinLeft, WinTop, WinWidth, WinHeight)
-            VALUES ($id, $title, $text, $color, $icon, $pin, $archived, $deleted, $deletedAt,
+            VALUES ($id, $title, $text, $color, $icon, $pin, $mimetized, $archived, $deleted, $deletedAt,
                     $nbId, $ord, $mod,
                     $wl, $wt, $ww, $wh)
             """;
@@ -440,6 +452,7 @@ public class NotesStore
         var idxColor = r.GetOrdinal("Color");
         var idxIcon = r.GetOrdinal("Icon");
         var idxPinned = r.GetOrdinal("IsPinned");
+        var idxMimetized = r.GetOrdinal("IsMimetized");
         var idxArchived = r.GetOrdinal("IsArchived");
         var idxDeleted = r.GetOrdinal("IsDeleted");
         var idxDeletedAt = r.GetOrdinal("DeletedAt");
@@ -460,6 +473,7 @@ public class NotesStore
             Color = r.IsDBNull(idxColor) ? "#F8F9FA" : r.GetString(idxColor),
             Icon = r.IsDBNull(idxIcon) ? "" : r.GetString(idxIcon),
             IsPinned = r.GetInt32(idxPinned) != 0,
+            IsMimetized = r.GetInt32(idxMimetized) != 0,
             IsArchived = r.GetInt32(idxArchived) != 0,
             IsDeleted = r.GetInt32(idxDeleted) != 0,
             DeletedAt = r.IsDBNull(idxDeletedAt) ? null : DateTime.Parse(r.GetString(idxDeletedAt), CultureInfo.InvariantCulture),
@@ -482,6 +496,7 @@ public class NotesStore
         cmd.Parameters.AddWithValue("$color", note.Color ?? "#F8F9FA");
         cmd.Parameters.AddWithValue("$icon", note.Icon ?? "");
         cmd.Parameters.AddWithValue("$pin", note.IsPinned ? 1 : 0);
+        cmd.Parameters.AddWithValue("$mimetized", note.IsMimetized ? 1 : 0);
         cmd.Parameters.AddWithValue("$archived", note.IsArchived ? 1 : 0);
         cmd.Parameters.AddWithValue("$deleted", note.IsDeleted ? 1 : 0);
         cmd.Parameters.AddWithValue("$deletedAt", note.DeletedAt?.ToString("O") ?? (object)DBNull.Value);

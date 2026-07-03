@@ -124,14 +124,25 @@ public partial class NoteWindow : Window
         {
             BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(0, 1, 200));
             LoadRichText();
+            UpdatePinButtonState();
             UpdateButtonForegrounds();
             FormatUrlsInDocument();
             LoadAttachments();
             SetupEditorContextMenu();
         };
 
-        Activated += (_, _) => ToggleBars(show: true);
-        Deactivated += (_, _) => ToggleBars(show: false);
+        Activated += (_, _) =>
+        {
+            ToggleBars(show: true);
+            if (_note.IsMimetized)
+                BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(Opacity, 1, 200));
+        };
+        Deactivated += (_, _) =>
+        {
+            ToggleBars(show: false);
+            if (_note.IsMimetized)
+                BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(1, 0.25, 200));
+        };
         SourceInitialized += (_, _) =>
         {
             var source = (HwndSource?)PresentationSource.FromVisual(this);
@@ -567,10 +578,48 @@ public partial class NoteWindow : Window
         return null;
     }
 
+    private void UpdatePinButtonState()
+    {
+        if (_note.IsMimetized)
+        {
+            pinNoteBtn.Content = "🔖";
+            Topmost = true;
+        }
+        else if (_note.IsPinned)
+        {
+            pinNoteBtn.Content = "📍";
+            Topmost = true;
+        }
+        else
+        {
+            pinNoteBtn.Content = "📌";
+            Topmost = false;
+        }
+    }
+
     private void PinNote_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is ToggleButton btn)
-            Topmost = btn.IsChecked == true;
+        // Cycle: 📌 (normal) → 📍 (pinned) → 🔖 (pinned+mimetized) → 📌 (normal)
+        if (_note.IsMimetized)
+        {
+            // 🔖 → 📌
+            _note.IsPinned = false;
+            _note.IsMimetized = false;
+        }
+        else if (_note.IsPinned)
+        {
+            // 📍 → 🔖
+            _note.IsMimetized = true;
+        }
+        else
+        {
+            // 📌 → 📍
+            _note.IsPinned = true;
+        }
+
+        UpdatePinButtonState();
+        _note.LastModified = DateTime.Now;
+        _store.Save();
     }
 
     private void MinimizeNote_Click(object sender, RoutedEventArgs e)

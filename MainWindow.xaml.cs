@@ -682,7 +682,9 @@ public partial class MainWindow : Window
     {
         if (e.Source is NoteCard card && card.DataContext is Note note)
         {
+            // Toggle pinned state; reset mimetized when accessing from main window
             note.IsPinned = !note.IsPinned;
+            note.IsMimetized = false;
             note.LastModified = DateTime.Now;
             note.IsDirty = false;
             MoveNoteToCorrectPosition(note);
@@ -736,6 +738,7 @@ public partial class MainWindow : Window
                 break;
             case "Pin":
                 note.IsPinned = !note.IsPinned;
+                note.IsMimetized = false;
                 note.LastModified = DateTime.Now;
                 note.IsDirty = false;
                 MoveNoteToCorrectPosition(note);
