@@ -25,12 +25,31 @@ public partial class NoteWindow : Window
     public const double DefaultWidth = 340;
     public const double DefaultHeight = 260;
 
-    // DWM attributes for Mica backdrop
+    // DWM attributes
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-    private const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
-    private const int DWMSBT_MAINWINDOW = 2;
+    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const int DWMWCP_ROUND = 2;
+
+    // Drag support for WindowStyle=None + AllowsTransparency=True
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hwnd, ref RECT lpRect);
+    private const int WM_NCLBUTTONDOWN = 0x00A1;
+    private const int HTCAPTION = 2;
+    private const int HTCLIENT = 1;
+    private const int HTLEFT = 10;
+    private const int HTRIGHT = 11;
+    private const int HTTOP = 12;
+    private const int HTTOPLEFT = 13;
+    private const int HTTOPRIGHT = 14;
+    private const int HTBOTTOM = 15;
+    private const int HTBOTTOMLEFT = 16;
+    private const int HTBOTTOMRIGHT = 17;
 
     /// <summary>
     /// Set to true during app shutdown to preserve positions.
@@ -156,12 +175,11 @@ public partial class NoteWindow : Window
             var source = (HwndSource?)PresentationSource.FromVisual(this);
             source?.AddHook(WndProc);
 
-            // Enable Mica (Win11 22621+)
-            var hwnd = new WindowInteropHelper(this).Handle;
-            var backdrop = DWMSBT_MAINWINDOW;
-            DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int));
-            var darkMode = IsDarkColor(_note.Color) ? 1 : 0;
-            DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+            // Enable rounded corners via DWM (Win11)
+            var hwnd2 = new WindowInteropHelper(this).Handle;
+            var cornerPref = DWMWCP_ROUND;
+            DwmSetWindowAttribute(hwnd2, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPref, sizeof(int));
+            UpdateDwmTheme();
         };
         PreviewKeyDown += NoteWindow_PreviewKeyDown;
         PreviewKeyUp += (_, e) =>
@@ -287,6 +305,40 @@ public partial class NoteWindow : Window
             int vk = (int)wParam;
             if (vk == VK_LCONTROL || vk == VK_RCONTROL)
                 _ctrlHeld = msg == WM_KEYDOWN;
+        }
+
+        // Resize via WM_NCHITTEST (replaces WindowChrome resize border)
+        const int WM_NCHITTEST = 0x0084;
+        const int resizeBorder = 5;
+        if (msg == WM_NCHITTEST)
+        {
+            var pt = new Point((short)(lParam.ToInt32() & 0xFFFF), (short)((lParam.ToInt32() >> 16) & 0xFFFF));
+            var rc = new RECT();
+            GetWindowRect(hwnd, ref rc);
+            var x = pt.X - rc.left;
+            var y = pt.Y - rc.top;
+            var w = rc.right - rc.left;
+            var h = rc.bottom - rc.top;
+
+            handled = true;
+            if (x <= resizeBorder && y <= resizeBorder)
+                return (IntPtr)HTTOPLEFT;
+            if (x >= w - resizeBorder && y <= resizeBorder)
+                return (IntPtr)HTTOPRIGHT;
+            if (x <= resizeBorder && y >= h - resizeBorder)
+                return (IntPtr)HTBOTTOMLEFT;
+            if (x >= w - resizeBorder && y >= h - resizeBorder)
+                return (IntPtr)HTBOTTOMRIGHT;
+            if (x <= resizeBorder)
+                return (IntPtr)HTLEFT;
+            if (x >= w - resizeBorder)
+                return (IntPtr)HTRIGHT;
+            if (y <= resizeBorder)
+                return (IntPtr)HTTOP;
+            if (y >= h - resizeBorder)
+                return (IntPtr)HTBOTTOM;
+
+            return (IntPtr)HTCLIENT;
         }
 
         // Grid snap: modify sizing RECT in place when Ctrl is held.
@@ -610,6 +662,18 @@ public partial class NoteWindow : Window
             pinNoteBtn.Content = "📌";
             Topmost = false;
         }
+    }
+
+    private void TitleBar_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        // Don't drag if clicking on a button
+        if (e.OriginalSource is DependencyObject src && FindParent<Button>(src) != null) return;
+        if (e.OriginalSource is DependencyObject src2 && FindParent<TextBox>(src2) != null) return;
+        var hwnd = new WindowInteropHelper(this).Handle;
+        ReleaseCapture();
+        SendMessage(hwnd, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+        e.Handled = true;
     }
 
     private void PinNote_Click(object sender, RoutedEventArgs e)

@@ -5,16 +5,12 @@
         Title="Note" Height="260" Width="340"
         Topmost="True"
         ResizeMode="CanResize"
-        WindowStartupLocation="Manual"
+        WindowStyle="None"
+        AllowsTransparency="True"
         Background="Transparent"
+        WindowStartupLocation="Manual"
         UseLayoutRounding="True"
         FontFamily="Segoe UI">
-
-    <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="30" ResizeBorderThickness="5"
-                      CornerRadius="12"
-                      UseAeroCaptionButtons="False" GlassFrameThickness="0"/>
-    </WindowChrome.WindowChrome>
 
     <Window.Resources>
         <Style x:Key="ColorDot" TargetType="Border">
@@ -115,7 +111,11 @@
 
     </Window.Resources>
 
-    <Border x:Name="micaBackdrop">
+    <Border x:Name="windowRoot" CornerRadius="12">
+        <Border.Effect>
+            <DropShadowEffect ShadowDepth="2" Color="#000000" Opacity="0.4" BlurRadius="12" Direction="270"/>
+        </Border.Effect>
+        <Border x:Name="micaBackdrop" CornerRadius="12" ClipToBounds="True">
         <Grid x:Name="rootContentGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -126,7 +126,7 @@
 
         <!-- Title bar with editable title -->
         <Border x:Name="titleBar" Grid.Row="0" Background="#18000000" Padding="0" Height="30"
->
+                PreviewMouseDown="TitleBar_PreviewMouseDown">
             <Grid>
                 <TextBlock x:Name="titleDisplay"
                            Text="{Binding Title}"
@@ -565,5 +565,6 @@
         </Popup>
 
         </Grid>
+    </Border>
     </Border>
 </Window>
