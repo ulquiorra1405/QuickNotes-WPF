@@ -668,9 +668,14 @@ public partial class NoteWindow : Window
     private void TitleBar_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed) return;
-        // Don't drag if clicking on a button
-        if (e.OriginalSource is DependencyObject src && FindParent<Button>(src) != null) return;
-        if (e.OriginalSource is DependencyObject src2 && FindParent<TextBox>(src2) != null) return;
+        if (e.OriginalSource is DependencyObject src)
+        {
+            // Don't drag if clicking inside a Popup (they have separate HWND)
+            if (FindParent<Popup>(src) != null) return;
+            // Don't drag if clicking on a button or textbox
+            if (FindParent<Button>(src) != null) return;
+            if (FindParent<TextBox>(src) != null) return;
+        }
         var hwnd = new WindowInteropHelper(this).Handle;
         ReleaseCapture();
         SendMessage(hwnd, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);

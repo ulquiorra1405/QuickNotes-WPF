@@ -190,76 +190,76 @@
                                            Foreground="#80FFFFFF" Padding="6,2,6,4"
                                            FontWeight="SemiBold"/>
                                 <Separator Background="#30FFFFFF" Margin="4,0"/>
-                                <TextBlock x:Name="reminderMenuBtn" Text="🔔  Recordatorio..." FontSize="12"
-                                           Foreground="#EEFFFFFF" Padding="6,4" Cursor="Hand"
-                                           MouseDown="ReminderMenu_Click">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
+                                <Border x:Name="reminderMenuBtn" Padding="6,4" Cursor="Hand" Background="Transparent"
+                                        MouseDown="ReminderMenu_Click" CornerRadius="4">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter Property="Background" Value="#3FFFFFFF"/>
                                                 </Trigger>
                                             </Style.Triggers>
                                         </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
+                                    </Border.Style>
+                                    <TextBlock Text="🔔  Recordatorio..." FontSize="12" Foreground="#EEFFFFFF"/>
+                                </Border>
                                 <Separator Background="#30FFFFFF" Margin="4,0"/>
                                 <TextBlock Text="Exportar como..." FontSize="11"
                                            Foreground="#80FFFFFF" Padding="6,2,6,4"
                                            FontWeight="SemiBold"/>
-                                <TextBlock Text="📄  Markdown (.md)" FontSize="12"
-                                           Foreground="#EEFFFFFF" Padding="6,4" Cursor="Hand"
-                                           MouseDown="ExportMarkdown_Click">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
+                                <Border Padding="6,4" Cursor="Hand" Background="Transparent"
+                                        MouseDown="ExportMarkdown_Click" CornerRadius="4">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter Property="Background" Value="#3FFFFFFF"/>
                                                 </Trigger>
                                             </Style.Triggers>
                                         </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                                <TextBlock Text="📄  Texto plano (.txt)" FontSize="12"
-                                           Foreground="#EEFFFFFF" Padding="6,4" Cursor="Hand"
-                                           MouseDown="ExportText_Click">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
+                                    </Border.Style>
+                                    <TextBlock Text="📄  Markdown (.md)" FontSize="12" Foreground="#EEFFFFFF"/>
+                                </Border>
+                                <Border Padding="6,4" Cursor="Hand" Background="Transparent"
+                                        MouseDown="ExportText_Click" CornerRadius="4">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter Property="Background" Value="#3FFFFFFF"/>
                                                 </Trigger>
                                             </Style.Triggers>
                                         </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                                <TextBlock Text="🌐  HTML (.html)" FontSize="12"
-                                           Foreground="#EEFFFFFF" Padding="6,4" Cursor="Hand"
-                                           MouseDown="ExportHtml_Click">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
+                                    </Border.Style>
+                                    <TextBlock Text="📄  Texto plano (.txt)" FontSize="12" Foreground="#EEFFFFFF"/>
+                                </Border>
+                                <Border Padding="6,4" Cursor="Hand" Background="Transparent"
+                                        MouseDown="ExportHtml_Click" CornerRadius="4">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter Property="Background" Value="#3FFFFFFF"/>
                                                 </Trigger>
                                             </Style.Triggers>
                                         </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
+                                    </Border.Style>
+                                    <TextBlock Text="🌐  HTML (.html)" FontSize="12" Foreground="#EEFFFFFF"/>
+                                </Border>
                                 <Separator Background="#30FFFFFF" Margin="4,0"/>
-                                <TextBlock Text="📥  Importar archivo..." FontSize="12"
-                                           Foreground="#EEFFFFFF" Padding="6,4" Cursor="Hand"
-                                           MouseDown="ImportFile_Click">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
+                                <Border Padding="6,4" Cursor="Hand" Background="Transparent"
+                                        MouseDown="ImportFile_Click" CornerRadius="4">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter Property="Background" Value="#3FFFFFFF"/>
                                                 </Trigger>
                                             </Style.Triggers>
                                         </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
+                                    </Border.Style>
+                                    <TextBlock Text="📥  Importar archivo..." FontSize="12" Foreground="#EEFFFFFF"/>
+                                </Border>
                             </StackPanel>
                         </Border>
                     </Popup>
