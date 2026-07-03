@@ -156,6 +156,7 @@ public partial class NoteWindow : Window
             LoadAttachments();
             SetupEditorContextMenu();
             ApplyMicaBackground();
+            UpdateReminderIndicator();
         };
 
         Activated += (_, _) =>
@@ -2388,6 +2389,68 @@ public partial class NoteWindow : Window
     {
         exportPopup.PlacementTarget = exportMenuBtn;
         exportPopup.IsOpen = true;
+    }
+
+    private void ReminderMenu_Click(object sender, RoutedEventArgs e)
+    {
+        // Pre-fill from existing reminder if any
+        var existing = _store.GetRemindersForNote(_note.Id).FirstOrDefault();
+        if (existing != null)
+        {
+            reminderDatePicker.SelectedDate = existing.DueAt.Date;
+            reminderTimeBox.Text = existing.DueAt.ToString("HH:mm");
+            reminderTitleBox.Text = existing.Title;
+            reminderDeleteBtn.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            reminderDatePicker.SelectedDate = DateTime.Now.Date;
+            reminderTimeBox.Text = "12:00";
+            reminderTitleBox.Text = _note.Title ?? "";
+            reminderDeleteBtn.Visibility = Visibility.Collapsed;
+        }
+        reminderPopup.PlacementTarget = exportMenuBtn;
+        reminderPopup.IsOpen = true;
+    }
+
+    private void ScheduleReminder_Click(object sender, RoutedEventArgs e)
+    {
+        var date = reminderDatePicker.SelectedDate;
+        if (date == null) return;
+        if (!TimeSpan.TryParse(reminderTimeBox.Text, out var time)) return;
+
+        var dueAt = date.Value.Date + time;
+        var existing = _store.GetRemindersForNote(_note.Id).FirstOrDefault();
+        var reminder = existing ?? new Reminder { NoteId = _note.Id };
+        reminder.DueAt = dueAt;
+        reminder.Title = reminderTitleBox.Text.Trim();
+        if (string.IsNullOrEmpty(reminder.Title))
+            reminder.Title = _note.Title ?? "Recordatorio";
+        reminder.IsCompleted = false;
+
+        _store.SaveReminder(reminder);
+        if (existing == null) _store.Reminders.Add(reminder);
+        reminderPopup.IsOpen = false;
+        UpdateReminderIndicator();
+    }
+
+    private void DeleteReminder_Click(object sender, RoutedEventArgs e)
+    {
+        var existing = _store.GetRemindersForNote(_note.Id).FirstOrDefault();
+        if (existing != null)
+        {
+            _store.Reminders.Remove(existing);
+            _store.DeleteReminder(existing.Id);
+        }
+        reminderPopup.IsOpen = false;
+        UpdateReminderIndicator();
+    }
+
+    private void UpdateReminderIndicator()
+    {
+        var hasPending = _store.Reminders.Any(r => r.NoteId == _note.Id && !r.IsCompleted);
+        reminderIndicator.Text = hasPending ? "🔔" : "";
+        reminderIndicator.Visibility = hasPending ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ExportMarkdown_Click(object sender, MouseButtonEventArgs e)

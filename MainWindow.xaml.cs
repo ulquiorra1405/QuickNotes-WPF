@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private readonly NotesStore store = new();
     private readonly ListCollectionView _view;
     private readonly DispatcherTimer _saveTimer = new();
+    private readonly DispatcherTimer _reminderTimer = new();
     private Note? _dragNote;
     private HwndSource? _hwndSource;
 
@@ -94,6 +95,10 @@ public partial class MainWindow : Window
             UpdateStats();
         };
 
+        _reminderTimer.Interval = TimeSpan.FromSeconds(30);
+        _reminderTimer.Tick += (_, _) => CheckDueReminders();
+        _reminderTimer.Start();
+
         // Wire NoteCard routed events
         AddHandler(NoteCard.PinToggleEvent, new RoutedEventHandler(NoteCard_PinToggle));
         AddHandler(NoteCard.ColorChangedEvent, new RoutedEventHandler(NoteCard_ColorChanged));
@@ -136,6 +141,8 @@ public partial class MainWindow : Window
                 RegisterHotKey(new WindowInteropHelper(this).Handle,
                     HOTKEY_NEWNOTE, MOD_WIN | MOD_SHIFT | MOD_NOREPEAT, (uint)Key.N);
             }
+            // Show overdue reminders on startup
+            Dispatcher.BeginInvoke(() => ShowOverdueReminders());
         };
 
         // Unregister hotkey on close
@@ -590,6 +597,50 @@ public partial class MainWindow : Window
             : new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA));
     }
 
+    private void CheckDueReminders()
+    {
+        var due = store.GetOverdueReminders();
+        if (due.Count == 0) return;
+
+        foreach (var reminder in due)
+        {
+            var note = store.Notes.FirstOrDefault(n => n.Id == reminder.NoteId);
+            var title = note?.Title ?? reminder.Title;
+            ShowStatus($"🔔 {title}", false);
+        }
+
+        // Try to open the most recent overdue note
+        var latest = due.LastOrDefault();
+        if (latest != null)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                var note = store.Notes.FirstOrDefault(n => n.Id == latest.NoteId);
+                if (note != null)
+                {
+                    var existing = Application.Current.Windows.OfType<NoteWindow>()
+                        .FirstOrDefault(w => w.DataContext is Note n && n.Id == note.Id);
+                    if (existing == null)
+                    {
+                        var win = new NoteWindow(note, store);
+                        win.Show();
+                    }
+                    else
+                    {
+                        existing.Activate();
+                    }
+                }
+            });
+        }
+    }
+
+    private void ShowOverdueReminders()
+    {
+        var due = store.GetOverdueReminders();
+        if (due.Count == 0) return;
+        ShowStatus($"🔔 Tienes {due.Count} recordatorio(s) vencido(s)", false);
+    }
+
     private void Card_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (_activeSection == "timeline") return; // no drag reorder in timeline
@@ -802,6 +853,20 @@ public partial class MainWindow : Window
             ShowStatus("Nota movida", false);
         else if (actionTag.StartsWith("tagtoggle:"))
             ShowStatus("Tags actualizados", false);
+        else if (actionTag == "Reminder")
+        {
+            var existing = Application.Current.Windows.OfType<NoteWindow>()
+                .FirstOrDefault(w => w.DataContext is Note n && n.Id == note.Id);
+            if (existing == null)
+            {
+                var win = new NoteWindow(note, store);
+                win.Show();
+            }
+            else
+            {
+                existing.Activate();
+            }
+        }
     }
 
     private static Button? FindCardButton(DependencyObject parent, string tag)

@@ -16,6 +16,7 @@ public class NotesStore
     public ObservableCollection<Note> Notes { get; } = new();
     public ObservableCollection<Tag> Tags { get; } = new();
     public ObservableCollection<Notebook> Notebooks { get; } = new();
+    public ObservableCollection<Reminder> Reminders { get; } = new();
 
     public double MainLeft { get; set; } = 100;
     public double MainTop { get; set; } = 100;
@@ -83,6 +84,14 @@ public class NotesStore
                 NoteId TEXT NOT NULL,
                 TagId TEXT NOT NULL,
                 PRIMARY KEY (NoteId, TagId)
+            );
+            CREATE TABLE IF NOT EXISTS reminders (
+                Id TEXT PRIMARY KEY,
+                NoteId TEXT NOT NULL,
+                Title TEXT NOT NULL DEFAULT '',
+                DueAt TEXT NOT NULL,
+                IsCompleted INTEGER NOT NULL DEFAULT 0,
+                CreatedAt TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS notebooks (
                 Id TEXT PRIMARY KEY,
@@ -289,6 +298,7 @@ public class NotesStore
         LoadNoteTags(conn);
         LoadAttachmentCounts(conn);
 
+        LoadReminders(conn);
         LoadSettingsFromDb(conn);
     }
 
@@ -887,6 +897,70 @@ public class NotesStore
         }
         catch { }
     }
+
+    // ── Reminders ──
+
+    public void LoadReminders(SqliteConnection conn)
+    {
+        Reminders.Clear();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM reminders ORDER BY DueAt ASC";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            Reminders.Add(new Reminder
+            {
+                Id = Guid.Parse(r.GetString(r.GetOrdinal("Id"))),
+                NoteId = Guid.Parse(r.GetString(r.GetOrdinal("NoteId"))),
+                Title = r.IsDBNull(r.GetOrdinal("Title")) ? "" : r.GetString(r.GetOrdinal("Title")),
+                DueAt = DateTime.Parse(r.GetString(r.GetOrdinal("DueAt")), CultureInfo.InvariantCulture),
+                IsCompleted = r.GetInt32(r.GetOrdinal("IsCompleted")) != 0,
+                CreatedAt = DateTime.Parse(r.GetString(r.GetOrdinal("CreatedAt")), CultureInfo.InvariantCulture),
+            });
+        }
+    }
+
+    public void SaveReminder(Reminder reminder)
+    {
+        try
+        {
+            using var conn = OpenDb();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT OR REPLACE INTO reminders
+                    (Id, NoteId, Title, DueAt, IsCompleted, CreatedAt)
+                VALUES ($id, $noteId, $title, $dueAt, $completed, $createdAt)
+                """;
+            cmd.Parameters.AddWithValue("$id", reminder.Id.ToString());
+            cmd.Parameters.AddWithValue("$noteId", reminder.NoteId.ToString());
+            cmd.Parameters.AddWithValue("$title", reminder.Title);
+            cmd.Parameters.AddWithValue("$dueAt", reminder.DueAt.ToString("O"));
+            cmd.Parameters.AddWithValue("$completed", reminder.IsCompleted ? 1 : 0);
+            cmd.Parameters.AddWithValue("$createdAt", reminder.CreatedAt.ToString("O"));
+            cmd.ExecuteNonQuery();
+        }
+        catch { }
+    }
+
+    public void DeleteReminder(Guid id)
+    {
+        try
+        {
+            using var conn = OpenDb();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM reminders WHERE Id = $id";
+            cmd.Parameters.AddWithValue("$id", id.ToString());
+            cmd.ExecuteNonQuery();
+        }
+        catch { }
+    }
+
+    public List<Reminder> GetOverdueReminders()
+        => Reminders.Where(r => !r.IsCompleted && r.DueAt <= DateTime.Now)
+                     .OrderBy(r => r.DueAt).ToList();
+
+    public List<Reminder> GetRemindersForNote(Guid noteId)
+        => Reminders.Where(r => r.NoteId == noteId).OrderBy(r => r.DueAt).ToList();
 
     private class SettingsData
     {

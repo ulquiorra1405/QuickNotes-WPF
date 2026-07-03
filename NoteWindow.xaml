@@ -170,6 +170,10 @@
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             Style="{StaticResource TitleBtn}"
                             Click="PinNote_Click"/>
+                    <TextBlock x:Name="reminderIndicator" Text="" FontSize="9"
+                               Visibility="Collapsed"
+                               WindowChrome.IsHitTestVisibleInChrome="False"
+                               VerticalAlignment="Center" Margin="2,0"/>
                     <Button x:Name="exportMenuBtn" Content="⋮" Style="{StaticResource TitleBtn}"
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             ToolTip="Exportar / Importar"
@@ -182,10 +186,27 @@
                                 BorderBrush="#40FFFFFF" BorderThickness="1"
                                 MinWidth="140">
                             <StackPanel>
-                                <TextBlock Text="Exportar como..." FontSize="11"
+                                <TextBlock Text="Opciones" FontSize="11"
                                            Foreground="#80FFFFFF" Padding="6,2,6,4"
                                            FontWeight="SemiBold"/>
                                 <Separator Background="#30FFFFFF" Margin="4,0"/>
+                                <TextBlock x:Name="reminderMenuBtn" Text="🔔  Recordatorio..." FontSize="12"
+                                           Foreground="#EEFFFFFF" Padding="6,4" Cursor="Hand"
+                                           MouseDown="ReminderMenu_Click">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#3FFFFFFF"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <Separator Background="#30FFFFFF" Margin="4,0"/>
+                                <TextBlock Text="Exportar como..." FontSize="11"
+                                           Foreground="#80FFFFFF" Padding="6,2,6,4"
+                                           FontWeight="SemiBold"/>
                                 <TextBlock Text="📄  Markdown (.md)" FontSize="12"
                                            Foreground="#EEFFFFFF" Padding="6,4" Cursor="Hand"
                                            MouseDown="ExportMarkdown_Click">
@@ -239,6 +260,48 @@
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                    <Popup x:Name="reminderPopup" Placement="Bottom"
+                           PlacementTarget="{Binding ElementName=exportMenuBtn}"
+                           StaysOpen="False" AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Background="#2A2A2A" CornerRadius="8" Padding="10"
+                                BorderBrush="#40FFFFFF" BorderThickness="1"
+                                MinWidth="220">
+                            <StackPanel TextElement.Foreground="#EEFFFFFF" TextElement.FontSize="12">
+                                <TextBlock Text="🔔  Recordatorio" FontSize="13"
+                                           FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <Separator Background="#30FFFFFF" Margin="0,0,0,8"/>
+                                <TextBlock Text="Fecha" Margin="0,0,0,2"/>
+                                <DatePicker x:Name="reminderDatePicker"
+                                            FirstDayOfWeek="Monday"
+                                            Margin="0,0,0,6"
+                                            Foreground="Black"/>
+                                <TextBlock Text="Hora" Margin="0,0,0,2"/>
+                                <TextBox x:Name="reminderTimeBox"
+                                         Text="12:00" Width="80"
+                                         HorizontalAlignment="Left"
+                                         Margin="0,0,0,8"
+                                         Foreground="Black"
+                                         Background="White"/>
+                                <TextBlock Text="Título (opcional)" Margin="0,0,0,2"/>
+                                <TextBox x:Name="reminderTitleBox"
+                                         Text="" Margin="0,0,0,10"
+                                         Foreground="Black" Background="White"/>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button x:Name="reminderDeleteBtn"
+                                            Content="✕ Quitar"
+                                            Visibility="Collapsed"
+                                            Margin="0,0,6,0"
+                                            Style="{StaticResource TitleBtn}"
+                                            Foreground="#FF6666"
+                                            Click="DeleteReminder_Click"/>
+                                    <Button Content="Programar"
+                                            Style="{StaticResource TitleBtn}"
+                                            Click="ScheduleReminder_Click"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </Popup>

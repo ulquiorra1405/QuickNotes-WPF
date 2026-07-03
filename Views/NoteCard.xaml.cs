@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using QuickNotes.Models;
 using QuickNotes;
+using System.Windows.Shapes;
 
 namespace QuickNotes.Views;
 
@@ -107,8 +108,55 @@ public partial class NoteCard : UserControl
                 UpdatePinVisual(pinBtn, note, false);
         }
 
+        UpdateReminderBadge();
         RebuildTagPills();
         RenderBodyWithHighlight();
+    }
+
+    private void UpdateReminderBadge()
+    {
+        if (DataContext is not Note note) return;
+        if (Application.Current.MainWindow is MainWindow mw)
+        {
+            var hasReminder = mw.GetStore().GetRemindersForNote(note.Id).Any(r => !r.IsCompleted);
+            // Find or create the badge TextBlock in the card
+            var badge = FindVisualChild<TextBlock>(this, tb => tb.Name == "reminderBadge");
+            if (badge == null)
+            {
+                // Create programmatically — attach to the header grid
+                if (FindVisualChild<Ellipse>(this) is Ellipse ellipse && VisualTreeHelper.GetParent(ellipse) is Grid headerGrid)
+                {
+                    badge = new TextBlock
+                    {
+                        Name = "reminderBadge",
+                        Text = "🔔",
+                        FontSize = 9,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(0, 0, 4, 0),
+                        IsHitTestVisible = false,
+                        Visibility = Visibility.Collapsed,
+                    };
+                    Grid.SetColumn(badge, 1);
+                    headerGrid.Children.Add(badge);
+                }
+            }
+            if (badge != null)
+                badge.Visibility = hasReminder ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject? parent, Func<T, bool>? predicate = null) where T : DependencyObject
+    {
+        if (parent == null) return null;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T t && (predicate == null || predicate(t)))
+                return t;
+            var found = FindVisualChild(child, predicate);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private void RebuildTagPills()
@@ -330,6 +378,14 @@ public partial class NoteCard : UserControl
                         break;
                     case "TagsSubmenu":
                         mi.Visibility = isDeleted ? Visibility.Collapsed : Visibility.Visible;
+                        break;
+                    case "Reminder":
+                        mi.Visibility = isDeleted ? Visibility.Collapsed : Visibility.Visible;
+                        if (note != null && Application.Current.MainWindow is MainWindow mw)
+                        {
+                            var hasReminder = mw.GetStore().GetRemindersForNote(note.Id).Any(r => !r.IsCompleted);
+                            mi.Header = hasReminder ? "🔔  Editar recordatorio" : "🔔  Recordatorio";
+                        }
                         break;
                 }
             }

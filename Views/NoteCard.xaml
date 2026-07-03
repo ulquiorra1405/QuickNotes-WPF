@@ -95,6 +95,8 @@
                 <MenuItem x:Name="tagsSubmenu" Header="Asignar tag" Tag="TagsSubmenu" Click="ContextMenuItem_Click"/>
                 <Separator x:Name="sep2" Background="#40FFFFFF"/>
                 <MenuItem Header="Exportar" Tag="Export" Click="ContextMenuItem_Click"/>
+                <Separator Background="#40FFFFFF"/>
+                <MenuItem x:Name="reminderMenuItem" Header="🔔  Recordatorio" Tag="Reminder" Click="ContextMenuItem_Click"/>
             </ContextMenu>
         </Border.ContextMenu>
         <Grid AllowDrop="True">
