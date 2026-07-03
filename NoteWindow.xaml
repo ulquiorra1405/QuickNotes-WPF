@@ -7,6 +7,7 @@
         ResizeMode="CanResize"
         WindowStartupLocation="Manual"
         Background="{Binding Color}"
+        UseLayoutRounding="True"
         FontFamily="Segoe UI">
 
     <WindowChrome.WindowChrome>
@@ -114,7 +115,7 @@
 
     </Window.Resources>
 
-    <Grid>
+    <Grid x:Name="rootContentGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -414,6 +415,94 @@
                 </StackPanel>
 
                 <StackPanel x:Name="bottomRightPanel" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Rectangle x:Name="sep1" Width="1" Fill="#40FFFFFF" Margin="3,2"/>
+                    <Button x:Name="checkboxBtn" Content="◻" FontSize="14"
+                            Width="24" Height="22" Cursor="Hand" ToolTip="Checklist"
+                            Style="{StaticResource TitleBtn}"
+                            Click="CheckboxBtn_Click"/>
+                    <Button x:Name="emojiInsertBtn" Content="😀" FontSize="13"
+                            Width="24" Height="22" Cursor="Hand" ToolTip="Insertar emoji"
+                            Style="{StaticResource TitleBtn}"
+                            Click="EmojiInsertBtn_Click"/>
+                    <Popup x:Name="emojiInsertPopup" Placement="Top"
+                           PlacementTarget="{Binding ElementName=emojiInsertBtn}"
+                           StaysOpen="True" AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border x:Name="emojiInsertBorder"
+                                CornerRadius="6" Padding="5"
+                                BorderBrush="#40000000" BorderThickness="1"
+                                Background="{Binding Color}">
+                            <Grid TextElement.Foreground="{Binding TextForeground}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <UniformGrid x:Name="emojiInsertGrid" Grid.Row="0" Columns="6" Rows="4"/>
+                                <Grid Grid.Row="1" Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="emojiPrevBtn" Grid.Column="0" Content="◀"
+                                            Width="20" Height="20" FontSize="8"
+                                            Cursor="Hand" ToolTip="Anterior"
+                                            Style="{StaticResource TitleBtn}"
+                                            Click="EmojiPrevPage_Click"/>
+                                    <StackPanel x:Name="emojiPageDots" Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"/>
+                                    <Button x:Name="emojiNextBtn" Grid.Column="2" Content="▶"
+                                            Width="20" Height="20" FontSize="8"
+                                            Cursor="Hand" ToolTip="Siguiente"
+                                            Style="{StaticResource TitleBtn}"
+                                            Click="EmojiNextPage_Click"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Popup>
+                    <Button x:Name="alignLeftBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Alinear izquierda"
+                            Style="{StaticResource TitleBtn}"
+                            Click="AlignLeft_Click">
+                        <Grid Width="12" Height="11">
+                            <Path x:Name="alignLeftPath" Data="M0,2 L12,2 M0,6 L8,6 M0,10 L5,10"
+                                  StrokeThickness="1.2"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"/>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="alignCenterBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Centrar"
+                            Style="{StaticResource TitleBtn}"
+                            Click="AlignCenter_Click">
+                        <Grid Width="12" Height="11">
+                            <Path x:Name="alignCenterPath" Data="M1,2 L11,2 M3,6 L9,6 M5,10 L7,10"
+                                  StrokeThickness="1.2"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"/>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="alignRightBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Alinear derecha"
+                            Style="{StaticResource TitleBtn}"
+                            Click="AlignRight_Click">
+                        <Grid Width="12" Height="11">
+                            <Path x:Name="alignRightPath" Data="M0,2 L12,2 M4,6 L12,6 M7,10 L12,10"
+                                  StrokeThickness="1.2"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"/>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="alignJustifyBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Justificar"
+                            Style="{StaticResource TitleBtn}"
+                            Click="AlignJustify_Click">
+                        <Grid Width="12" Height="11">
+                            <Path x:Name="alignJustifyPath" Data="M0,2 L12,2 M0,6 L12,6 M0,10 L12,10"
+                                  StrokeThickness="1.2"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"/>
+                        </Grid>
+                    </Button>
+                    <Rectangle x:Name="sep2" Width="1" Fill="#40FFFFFF" Margin="3,2"/>
                     <Button x:Name="undoBtn" Content="↩" FontSize="13"
                             Width="24" Height="22" Cursor="Hand" ToolTip="Deshacer (Ctrl+Z)"
                             Style="{StaticResource TitleBtn}"
@@ -479,11 +568,7 @@
                                 Visibility="Collapsed" Opacity="0">
                         <!-- Heading options built in code -->
                     </StackPanel>
-                    <Rectangle Width="1" Fill="#40FFFFFF" Margin="3,2"/>
-                    <Button x:Name="floatCheckboxBtn" Content="◻" FontSize="14"
-                            Width="26" Height="24" Cursor="Hand" ToolTip="Checklist"
-                            Style="{StaticResource TitleBtn}"
-                            Click="FloatCheckbox_Click"/>
+
                 </StackPanel>
             </Border>
         </Popup>

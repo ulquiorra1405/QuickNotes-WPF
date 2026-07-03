@@ -439,7 +439,7 @@ public partial class DockWindow : Window
                 NoteWindow.ResetToDefaultPosition(win, Left);
             else
             {
-                win.Left = Left - 350;
+                win.Left = Left - win.Width - 10;
                 win.Top = Top;
             }
             win.Show();

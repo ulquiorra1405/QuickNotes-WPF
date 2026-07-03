@@ -1,3 +1,4 @@
+﻿﻿using System.Runtime.InteropServices;
 using System.Linq;
 using System.Text;
 using System.IO;
@@ -33,6 +34,31 @@ public partial class NoteWindow : Window
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         "QuickNotes", "images");
 
+    /// <summary>
+    /// Extended emoji palette for the editor emoji picker (72 emojis = 3 pages of 24).
+    /// </summary>
+    private static readonly string[] _editorEmojiPalette =
+    [
+        // Page 1: Faces &amp; Emotions
+        "😀", "😂", "🤣", "😍", "🥰", "😘",
+        "😊", "🤗", "😎", "🤩", "😜", "🤪",
+        "🤔", "🙄", "😴", "🥳", "🤯", "😰",
+        "🤩", "🥺", "😤", "🤭", "🤫", "😶",
+        // Page 2: Objects &amp; Actions
+        "❤️", "🔥", "⭐", "✅", "❌", "💯",
+        "💡", "📌", "🔔", "🎯", "🚀", "🎉",
+        "💻", "📱", "⌨️", "🖥️", "📷", "🎧",
+        "🔐", "💰", "💳", "📊", "🗂️", "🔗",
+        // Page 3: Nature &amp; Symbols
+        "☀️", "🌙", "⭐", "🌈", "🌍", "🌺",
+        "🌸", "🌻", "🍀", "🌿", "🍎", "🍕",
+        "☕", "🍺", "🎂", "🎵", "🎶", "🎬",
+        "⚽", "🏀", "🎮", "♟️", "📚", "✏️",
+    ];
+
+    private int _emojiPage;
+    private int _emojiTotalPages => (int)Math.Ceiling((double)_editorEmojiPalette.Length / 24);
+
     private readonly Note _note;
     private readonly NotesStore _store;
 
@@ -62,7 +88,6 @@ public partial class NoteWindow : Window
     ];
 
     private static readonly Color _noHighlightColor = Color.FromArgb(0x00, 0x00, 0x00, 0x00);
-
 
 
     public NoteWindow(Note note, NotesStore? store = null)
@@ -113,9 +138,13 @@ public partial class NoteWindow : Window
             source?.AddHook(WndProc);
         };
         PreviewKeyDown += NoteWindow_PreviewKeyDown;
+        PreviewKeyUp += (_, e) =>
+        {
+            if (e.Key is Key.LeftCtrl or Key.RightCtrl) _ctrlHeld = false;
+        };
         PreviewMouseDown += (_, e) =>
         {
-            bool anyOpen = colorPopup.IsOpen || emojiPopup.IsOpen || formatPopup.IsOpen;
+            bool anyOpen = colorPopup.IsOpen || emojiPopup.IsOpen || formatPopup.IsOpen || emojiInsertPopup.IsOpen;
             if (!anyOpen) return;
 
             bool clickedTrigger = false;
@@ -125,7 +154,11 @@ public partial class NoteWindow : Window
             {
                 clickedTrigger =
                     (colorPopup.IsOpen && FindParent<Border>(src) == currentColorDot) ||
-                    (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn);
+                    (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn) ||
+                    (emojiInsertPopup.IsOpen && (FindParent<Button>(src) == emojiInsertBtn ||
+                        FindParent<Border>(src) == emojiInsertBorder ||
+                        FindParent<Button>(src) == emojiPrevBtn ||
+                        FindParent<Button>(src) == emojiNextBtn));
                 insideEditor = FindParent<RichTextBox>(src) == noteText;
 
             }
@@ -134,6 +167,7 @@ public partial class NoteWindow : Window
 
             colorPopup.IsOpen = false;
             emojiPopup.IsOpen = false;
+            emojiInsertPopup.IsOpen = false;
 
             // Close formatPopup only if click is outside it AND outside editor
             if (formatPopup.IsOpen && !insideEditor)
@@ -207,12 +241,53 @@ public partial class NoteWindow : Window
     {
         const int WM_NCLBUTTONDBLCLK = 0x00A3;
         const int HTCAPTION = 2;
+        const int WM_SIZING = 0x0214;
+        const int WM_EXITSIZEMOVE = 0x0232;
+        const int WM_KEYDOWN = 0x0100;
+        const int WM_KEYUP = 0x0101;
+        const int VK_LCONTROL = 0xA2;
+        const int VK_RCONTROL = 0xA3;
 
         if (msg == WM_NCLBUTTONDBLCLK && (int)wParam == HTCAPTION)
         {
             handled = true;
             Dispatcher.BeginInvoke(() => EnterEditMode());
             return IntPtr.Zero;
+        }
+
+        // Track Ctrl in WndProc (works during modal resize loop where WPF events may not)
+        if (msg == WM_KEYDOWN || msg == WM_KEYUP)
+        {
+            int vk = (int)wParam;
+            if (vk == VK_LCONTROL || vk == VK_RCONTROL)
+                _ctrlHeld = msg == WM_KEYDOWN;
+        }
+
+        // Grid snap: modify sizing RECT in place when Ctrl is held.
+        // We do NOT handled=true — DefWindowProc must process our modified RECT.
+        if (msg == WM_SIZING)
+        {
+            bool ctrlHeld = _ctrlHeld;
+            if (ctrlHeld)
+            {
+                // Hide content synchronously BEFORE modifying the RECT —
+                // avoids the 1-frame flicker from Dispatcher.BeginInvoke delay.
+                rootContentGrid.Opacity = 0;
+
+                var rect = Marshal.PtrToStructure<RECT>(lParam);
+                SnapRect(ref rect, (int)wParam);
+                Marshal.StructureToPtr(rect, lParam, false);
+                RECT captured = rect;
+                int edge = (int)wParam;
+                Dispatcher.BeginInvoke(() => ShowSizeIndicatorFromRect(captured, edge));
+                Dispatcher.BeginInvoke(FadeInResize);
+            }
+        }
+
+        if (msg == WM_EXITSIZEMOVE)
+        {
+            Dispatcher.BeginInvoke(HideSizeIndicator);
+            Dispatcher.BeginInvoke(FadeOutResize);
         }
 
         return IntPtr.Zero;
@@ -448,12 +523,24 @@ public partial class NoteWindow : Window
     {
         SaveRichText();
         _note.IsDirty = false;
-        // Reset position on individual close (not during app shutdown)
-        if (!IsAppShuttingDown)
+
+        // Always save current size before closing
+        _note.WinWidth = Width;
+        _note.WinHeight = Height;
+
+        if (IsAppShuttingDown)
         {
+            // App shutdown: save position too so notes reopen where they were
+            _note.WinLeft = Left;
+            _note.WinTop = Top;
+        }
+        else
+        {
+            // Individual close: reset position (next open goes to default spot)
             _note.WinLeft = double.NaN;
             _note.WinTop = double.NaN;
         }
+
         _store.Save();
         base.OnClosing(e);
 
@@ -580,11 +667,144 @@ public partial class NoteWindow : Window
         _store.Save();
         emojiPopup.IsOpen = false;
 
+        // Close editor emoji picker too if open
+        emojiInsertPopup.IsOpen = false;
+
         // Flash feedback
         var down = AnimationHelper.MakeAnimation(0.7, 80);
         var up = AnimationHelper.MakeAnimation(1, 120);
         down.Completed += (_, _) => emojiBtn.BeginAnimation(OpacityProperty, up);
         emojiBtn.BeginAnimation(OpacityProperty, down);
+    }
+
+    // ── Editor Emoji Picker ────────────────────────────────────────────────
+
+    private void BuildEditorEmojiPicker()
+    {
+        emojiInsertGrid.Children.Clear();
+        emojiPageDots.Children.Clear();
+        _emojiPage = 0;
+        RenderEmojiPage();
+    }
+
+    private void RenderEmojiPage()
+    {
+        emojiInsertGrid.Children.Clear();
+        emojiPageDots.Children.Clear();
+
+        int page = _emojiPage;
+        int pageSize = 24;
+        int start = page * pageSize;
+        int end = Math.Min(start + pageSize, _editorEmojiPalette.Length);
+
+        for (int i = start; i < end; i++)
+        {
+            var emoji = _editorEmojiPalette[i];
+            var border = new Border
+            {
+                Height = 28,
+                CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(2),
+                Cursor = Cursors.Hand,
+                Background = Brushes.Transparent,
+            };
+            var text = new TextBlock
+            {
+                Text = emoji,
+                FontSize = 15,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            border.Child = text;
+            border.MouseDown += (s, e) =>
+            {
+                if (e.LeftButton == MouseButtonState.Pressed)
+                    InsertEmojiInEditor(emoji);
+            };
+            border.MouseEnter += (_, _) =>
+                border.Background = new SolidColorBrush(Color.FromArgb(0x3F, 0xFF, 0xFF, 0xFF));
+            border.MouseLeave += (_, _) =>
+                border.Background = Brushes.Transparent;
+            emojiInsertGrid.Children.Add(border);
+        }
+
+        // Fill remaining slots
+        for (int i = end; i < start + pageSize && i < start + 24; i++)
+        {
+            emojiInsertGrid.Children.Add(new Border());
+        }
+
+        // Dots indicator (dynamic color based on note background)
+        bool dotDark = IsDarkColor(_note.Color);
+        var dotActiveBrush = new SolidColorBrush(dotDark ? Colors.White : Color.FromArgb(0xCC, 0x3A, 0x3A, 0x3A));
+        var dotInactiveBrush = new SolidColorBrush(dotDark
+            ? Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x66, 0x3A, 0x3A, 0x3A));
+
+        int totalPages = _emojiTotalPages;
+        for (int p = 0; p < totalPages; p++)
+        {
+            var dot = new Ellipse
+            {
+                Width = p == page ? 7 : 5,
+                Height = p == page ? 7 : 5,
+                Margin = new Thickness(3, 0, 3, 0),
+                Fill = p == page ? dotActiveBrush : dotInactiveBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            emojiPageDots.Children.Add(dot);
+        }
+    }
+
+    private void EmojiInsertBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (!emojiInsertPopup.IsOpen)
+        {
+            BuildEditorEmojiPicker();
+            emojiInsertPopup.IsOpen = true;
+        }
+        else
+        {
+            emojiInsertPopup.IsOpen = false;
+        }
+    }
+
+    private void EmojiPrevPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_emojiPage > 0)
+        {
+            _emojiPage--;
+            RenderEmojiPage();
+        }
+    }
+
+    private void EmojiNextPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_emojiPage < _emojiTotalPages - 1)
+        {
+            _emojiPage++;
+            RenderEmojiPage();
+        }
+    }
+
+    private void InsertEmojiInEditor(string emoji)
+    {
+        try
+        {
+            var sel = noteText.Selection;
+            if (sel.IsEmpty)
+                sel.Start.InsertTextInRun(emoji);
+            else
+                sel.Text = emoji;
+
+            noteText.Focus();
+            MarkDirtyAndDebounce();
+            emojiInsertPopup.IsOpen = false;
+        }
+        catch (Exception ex)
+        {
+            ErrorLog.Write(ex, "InsertEmoji");
+        }
     }
 
     private void UpdateButtonForegrounds()
@@ -616,6 +836,19 @@ public partial class NoteWindow : Window
             if (child is Control ctrl)
                 ctrl.Foreground = floatFg;
         }
+
+        // Dynamic separators (bottom toolbar)
+        var sepColor = new SolidColorBrush(dark
+            ? Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x40, 0x3A, 0x3A, 0x3A));
+        if (sep1 != null) sep1.Fill = sepColor;
+        if (sep2 != null) sep2.Fill = sepColor;
+
+        // Dynamic alignment path strokes (same color as other toolbar buttons)
+        if (alignLeftPath != null) alignLeftPath.Stroke = fg;
+        if (alignCenterPath != null) alignCenterPath.Stroke = fg;
+        if (alignRightPath != null) alignRightPath.Stroke = fg;
+        if (alignJustifyPath != null) alignJustifyPath.Stroke = fg;
 
         // Style search bar dynamically
         var searchIconFg = new SolidColorBrush(
@@ -675,9 +908,7 @@ public partial class NoteWindow : Window
     /// </summary>
     public static void ResetToDefaultPosition(NoteWindow win, double dockLeft)
     {
-        win.Left = dockLeft - DefaultWidth - 10;
-        win.Width = DefaultWidth;
-        win.Height = DefaultHeight;
+        win.Left = dockLeft - win.Width - 10;
     }
 
     // ── Auto-pairing ──
@@ -946,6 +1177,9 @@ public partial class NoteWindow : Window
 
     private void NoteWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Track Ctrl key state for grid snap (avoids Keyboard.IsKeyDown in hot path)
+        if (e.Key is Key.LeftCtrl or Key.RightCtrl) _ctrlHeld = true;
+
         // Intercept Ctrl+V for images BEFORE RichTextBox handles it
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.V)
         {
@@ -1348,6 +1582,31 @@ public partial class NoteWindow : Window
         floatHighlightBtn.Background = new SolidColorBrush(_currentHighlightColor);
     }
 
+    // ── Text Alignment ─────────────────────────────────────────────────────
+
+    private void SetTextAlignment(TextAlignment alignment)
+    {
+        try
+        {
+            var sel = noteText.Selection;
+            var para = sel.Start.Paragraph;
+            if (para == null) return;
+
+            para.TextAlignment = alignment;
+            noteText.Focus();
+            MarkDirtyAndDebounce();
+        }
+        catch (Exception ex)
+        {
+            ErrorLog.Write(ex, "SetTextAlignment");
+        }
+    }
+
+    private void AlignLeft_Click(object sender, RoutedEventArgs e) => ToolbarClick(() => SetTextAlignment(TextAlignment.Left));
+    private void AlignCenter_Click(object sender, RoutedEventArgs e) => ToolbarClick(() => SetTextAlignment(TextAlignment.Center));
+    private void AlignRight_Click(object sender, RoutedEventArgs e) => ToolbarClick(() => SetTextAlignment(TextAlignment.Right));
+    private void AlignJustify_Click(object sender, RoutedEventArgs e) => ToolbarClick(() => SetTextAlignment(TextAlignment.Justify));
+
     // ── Floating toolbar button handlers ──
 
     private void FloatBold_Click(object sender, RoutedEventArgs e)
@@ -1370,12 +1629,6 @@ public partial class NoteWindow : Window
         ToggleStrikethrough();
         try { noteText.Focus(); } catch { }
     }
-    private void FloatCheckbox_Click(object sender, RoutedEventArgs e)
-    {
-        InsertCheckbox();
-        try { noteText.Focus(); } catch { }
-    }
-
     private void FloatHighlight_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton == MouseButtonState.Pressed)
@@ -2713,5 +2966,142 @@ public partial class NoteWindow : Window
     {
         if (!string.IsNullOrEmpty(fontFamily))
             noteText.FontFamily = new FontFamily(fontFamily);
+    }
+
+    // ──────────────────────────────────────────────
+        // ──────────────────────────────────────────────
+    // Grid Snap (Ctrl+Resize)
+    // ──────────────────────────────────────────────
+
+            // ──────────────────────────────────────────────
+    // Grid Snap (Ctrl+Resize) — Live via WM_WINDOWPOSCHANGING
+    // ──────────────────────────────────────────────
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int left, top, right, bottom; }
+
+    private const double GridUnit = 72.0;
+    private const int MinGridUnitsW = 3;
+    private const int MinGridUnitsH = 2;
+    private const int WMSZ_LEFT = 1;
+    private const int WMSZ_RIGHT = 2;
+    private const int WMSZ_TOP = 3;
+    private const int WMSZ_TOPLEFT = 4;
+    private const int WMSZ_TOPRIGHT = 5;
+    private const int WMSZ_BOTTOM = 6;
+    private const int WMSZ_BOTTOMLEFT = 7;
+    private const int WMSZ_BOTTOMRIGHT = 8;
+    private Views.GridSizeIndicator? _sizeIndicator;
+    private bool _ctrlHeld;
+
+    /// <summary>
+    /// Snaps a screen-pixel RECT to the grid in-place.
+    /// Called from WndProc (UI thread).
+    /// </summary>
+    private void SnapRect(ref RECT rect, int edge)
+    {
+        var source = PresentationSource.FromVisual(this);
+        if (source?.CompositionTarget == null) return;
+
+        var m = source.CompositionTarget.TransformFromDevice;
+
+        int screenW = rect.right - rect.left;
+        int screenH = rect.bottom - rect.top;
+
+        double dipW = screenW * m.M11;
+        double dipH = screenH * m.M11;
+
+        int unitsW = Math.Max(MinGridUnitsW, (int)Math.Round(dipW / GridUnit));
+        int unitsH = Math.Max(MinGridUnitsH, (int)Math.Round(dipH / GridUnit));
+
+        double snappedDipW = unitsW * GridUnit;
+        double snappedDipH = unitsH * GridUnit;
+
+        int snappedW = (int)(snappedDipW / m.M11);
+        int snappedH = (int)(snappedDipH / m.M11);
+
+        switch (edge)
+        {
+            case WMSZ_RIGHT:
+                rect.right = rect.left + snappedW;
+                break;
+            case WMSZ_BOTTOM:
+                rect.bottom = rect.top + snappedH;
+                break;
+            case WMSZ_BOTTOMRIGHT:
+                rect.right = rect.left + snappedW;
+                rect.bottom = rect.top + snappedH;
+                break;
+            case WMSZ_LEFT:
+            case WMSZ_BOTTOMLEFT:
+                rect.left = rect.right - snappedW;
+                if (edge == WMSZ_BOTTOMLEFT) rect.bottom = rect.top + snappedH;
+                break;
+            case WMSZ_TOP:
+            case WMSZ_TOPRIGHT:
+                rect.top = rect.bottom - snappedH;
+                if (edge == WMSZ_TOPRIGHT) rect.right = rect.left + snappedW;
+                break;
+            case WMSZ_TOPLEFT:
+                rect.left = rect.right - snappedW;
+                rect.top = rect.bottom - snappedH;
+                break;
+        }
+    }
+
+    private void ShowSizeIndicatorFromRect(RECT rect, int edge)
+    {
+        var source = PresentationSource.FromVisual(this);
+        if (source?.CompositionTarget == null) return;
+
+        var m = source.CompositionTarget.TransformFromDevice;
+        double dipW = (rect.right - rect.left) * m.M11;
+        double dipH = (rect.bottom - rect.top) * m.M11;
+
+        int u = Math.Max(MinGridUnitsW, (int)Math.Round(dipW / GridUnit));
+        int v = Math.Max(MinGridUnitsH, (int)Math.Round(dipH / GridUnit));
+
+        if (_sizeIndicator == null)
+        {
+            _sizeIndicator = new Views.GridSizeIndicator();
+            _sizeIndicator.Show();
+        }
+
+        _sizeIndicator.Update(u, v);
+        _sizeIndicator.Left = Left + Width - 100;
+        _sizeIndicator.Top = Top + 8;
+    }
+
+    private void HideSizeIndicator()
+    {
+        if (_sizeIndicator != null)
+        {
+            _sizeIndicator.Close();
+            _sizeIndicator = null;
+        }
+    }
+
+    private bool _wasVisible = true;
+
+    private void FadeInResize()
+    {
+        if (_wasVisible)
+        {
+            _wasVisible = false;
+            rootContentGrid.BeginAnimation(OpacityProperty, null);
+            rootContentGrid.Visibility = Visibility.Visible;
+            rootContentGrid.Opacity = 0;
+        }
+    }
+
+    private void FadeOutResize()
+    {
+        if (!_wasVisible)
+        {
+            _wasVisible = true;
+            rootContentGrid.Visibility = Visibility.Visible;
+            var anim = new DoubleAnimation(0, 1.0, TimeSpan.FromMilliseconds(200));
+            rootContentGrid.BeginAnimation(OpacityProperty, anim);
+        }
     }
 }
