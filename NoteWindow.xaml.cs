@@ -1126,6 +1126,8 @@ public partial class NoteWindow : Window
     public static void ResetToDefaultPosition(NoteWindow win, double dockLeft)
     {
         win.Left = dockLeft - win.Width - 10;
+        var area = Helpers.MonitorHelper.GetMonitorWorkingArea(win);
+        win.Top = area.Top + (area.Height - win.Height) / 2;
     }
 
     // ── Auto-pairing ──

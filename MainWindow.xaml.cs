@@ -1064,6 +1064,12 @@ public partial class MainWindow : Window
         new SettingsWindow(store, this, _currentTheme).ShowDialog();
     }
 
+    private void Stats_Click(object sender, RoutedEventArgs e)
+    {
+        menuPopup.IsOpen = false;
+        new StatsWindow(store).Show();
+    }
+
     public void ApplyTheme(string theme)
     {
         _currentTheme = theme;

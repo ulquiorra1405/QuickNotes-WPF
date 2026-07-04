@@ -244,6 +244,17 @@
                                         <TextBlock Grid.Column="1" Text="Acerca de" FontSize="13"/>
                                     </Grid>
                                 </Button>
+                                <Button Style="{StaticResource MenuItemBtn}" Click="Stats_Click">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="24"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="📊" FontWeight="Normal" FontSize="13"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="Estadísticas" FontSize="13"/>
+                                    </Grid>
+                                </Button>
                                 <Button Style="{StaticResource MenuItemBtn}" Click="Settings_Click">
                                     <Grid>
                                         <Grid.ColumnDefinitions>

@@ -427,7 +427,7 @@ public partial class DockWindow : Window
                 else
                 {
                     existing.Left = Left - existing.Width - 10;
-                    existing.Top = Top;
+                    existing.Top = _monitorBounds.Top + (_monitorBounds.Height - existing.Height) / 2;
                 }
                 existing.Focus();
             }
@@ -440,7 +440,7 @@ public partial class DockWindow : Window
             else
             {
                 win.Left = Left - win.Width - 10;
-                win.Top = Top;
+                win.Top = _monitorBounds.Top + (_monitorBounds.Height - win.Height) / 2;
             }
             win.Show();
             win.Focus();
