@@ -89,10 +89,25 @@ public class NotesStore
                 Id TEXT PRIMARY KEY,
                 NoteId TEXT NOT NULL,
                 Title TEXT NOT NULL DEFAULT '',
+                Description TEXT NOT NULL DEFAULT '',
                 DueAt TEXT NOT NULL,
                 IsCompleted INTEGER NOT NULL DEFAULT 0,
                 CreatedAt TEXT NOT NULL
             );
+            """;
+        cmd.ExecuteNonQuery();
+
+        // Migrate: add Description column if missing (existing databases)
+        try
+        {
+            using var migrateCmd = conn.CreateCommand();
+            migrateCmd.CommandText = "ALTER TABLE reminders ADD COLUMN Description TEXT NOT NULL DEFAULT ''";
+            migrateCmd.ExecuteNonQuery();
+        }
+        catch { } // column already exists
+
+        using var cmdNotebooks = conn.CreateCommand();
+        cmdNotebooks.CommandText = """
             CREATE TABLE IF NOT EXISTS notebooks (
                 Id TEXT PRIMARY KEY,
                 Name TEXT NOT NULL,
@@ -100,7 +115,7 @@ public class NotesStore
                 Icon TEXT NOT NULL DEFAULT '📕'
             );
             """;
-        cmd.ExecuteNonQuery();
+        cmdNotebooks.ExecuteNonQuery();
 
         // Templates table
         using var cmdTemplates = conn.CreateCommand();
@@ -913,6 +928,7 @@ public class NotesStore
                 Id = Guid.Parse(r.GetString(r.GetOrdinal("Id"))),
                 NoteId = Guid.Parse(r.GetString(r.GetOrdinal("NoteId"))),
                 Title = r.IsDBNull(r.GetOrdinal("Title")) ? "" : r.GetString(r.GetOrdinal("Title")),
+                Description = r.IsDBNull(r.GetOrdinal("Description")) ? "" : r.GetString(r.GetOrdinal("Description")),
                 DueAt = DateTime.Parse(r.GetString(r.GetOrdinal("DueAt")), CultureInfo.InvariantCulture),
                 IsCompleted = r.GetInt32(r.GetOrdinal("IsCompleted")) != 0,
                 CreatedAt = DateTime.Parse(r.GetString(r.GetOrdinal("CreatedAt")), CultureInfo.InvariantCulture),
@@ -928,16 +944,29 @@ public class NotesStore
             using var cmd = conn.CreateCommand();
             cmd.CommandText = """
                 INSERT OR REPLACE INTO reminders
-                    (Id, NoteId, Title, DueAt, IsCompleted, CreatedAt)
-                VALUES ($id, $noteId, $title, $dueAt, $completed, $createdAt)
+                    (Id, NoteId, Title, Description, DueAt, IsCompleted, CreatedAt)
+                VALUES ($id, $noteId, $title, $description, $dueAt, $completed, $createdAt)
                 """;
             cmd.Parameters.AddWithValue("$id", reminder.Id.ToString());
             cmd.Parameters.AddWithValue("$noteId", reminder.NoteId.ToString());
             cmd.Parameters.AddWithValue("$title", reminder.Title);
+            cmd.Parameters.AddWithValue("$description", reminder.Description);
             cmd.Parameters.AddWithValue("$dueAt", reminder.DueAt.ToString("O"));
             cmd.Parameters.AddWithValue("$completed", reminder.IsCompleted ? 1 : 0);
             cmd.Parameters.AddWithValue("$createdAt", reminder.CreatedAt.ToString("O"));
             cmd.ExecuteNonQuery();
+
+            // Sync in-memory list: replace if exists, add if new
+            var existing = Reminders.FirstOrDefault(r => r.Id == reminder.Id);
+            if (existing != null)
+            {
+                var idx = Reminders.IndexOf(existing);
+                Reminders[idx] = reminder;
+            }
+            else
+            {
+                Reminders.Add(reminder);
+            }
         }
         catch { }
     }
@@ -951,6 +980,11 @@ public class NotesStore
             cmd.CommandText = "DELETE FROM reminders WHERE Id = $id";
             cmd.Parameters.AddWithValue("$id", id.ToString());
             cmd.ExecuteNonQuery();
+
+            // Remove from in-memory list too
+            for (int i = Reminders.Count - 1; i >= 0; i--)
+                if (Reminders[i].Id == id)
+                    Reminders.RemoveAt(i);
         }
         catch { }
     }

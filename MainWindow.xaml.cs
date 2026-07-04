@@ -14,6 +14,7 @@ using System.Windows.Threading;
 using QuickNotes.Models;
 using QuickNotes.Views;
 using System.Runtime.InteropServices;
+using WinForms = System.Windows.Forms;
 using System.Windows.Interop;
 using System.Text.RegularExpressions;
 
@@ -27,6 +28,9 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _reminderTimer = new();
     private Note? _dragNote;
     private HwndSource? _hwndSource;
+    private ReminderToastWindow? _activeToast;
+    private WinForms.NotifyIcon? _trayIcon;
+    private bool _isExiting;
 
     // P/Invoke for global hotkey
     private const int WM_HOTKEY = 0x0312;
@@ -95,9 +99,9 @@ public partial class MainWindow : Window
             UpdateStats();
         };
 
-        _reminderTimer.Interval = TimeSpan.FromSeconds(30);
-        _reminderTimer.Tick += (_, _) => CheckDueReminders();
-        _reminderTimer.Start();
+        // Reminder timer: fire at second 1-2 of each minute, every 60s
+        AlignReminderTimer();
+        _reminderTimer.Tick += (_, _) => { CheckDueReminders(); };
 
         // Wire NoteCard routed events
         AddHandler(NoteCard.PinToggleEvent, new RoutedEventHandler(NoteCard_PinToggle));
@@ -133,14 +137,18 @@ public partial class MainWindow : Window
             SetActiveSection(_activeSection);
             UpdateCounters();
 
-            // Register global hotkey Win+Shift+N for new note
+            // Register global hotkey Win+Shift+Q for new note
             _hwndSource = PresentationSource.FromVisual(this) as HwndSource;
             if (_hwndSource != null)
             {
                 _hwndSource.AddHook(WndProc);
                 RegisterHotKey(new WindowInteropHelper(this).Handle,
-                    HOTKEY_NEWNOTE, MOD_WIN | MOD_SHIFT | MOD_NOREPEAT, (uint)Key.N);
+                    HOTKEY_NEWNOTE, MOD_WIN | MOD_SHIFT | MOD_NOREPEAT, (uint)Key.Q);
             }
+
+            // Initialize system tray icon
+            InitializeTrayIcon();
+
             // Show overdue reminders on startup
             Dispatcher.BeginInvoke(() => ShowOverdueReminders());
         };
@@ -573,7 +581,7 @@ public partial class MainWindow : Window
 
     private void ClearAll_Click(object sender, RoutedEventArgs e)
     {
-        if (ShowConfirm("¿Borrar todas las notas?", "Esta acción no se puede deshacer."))
+        if (ShowConfirm("ï¿½Borrar todas las notas?", "Esta acciï¿½n no se puede deshacer."))
         {
             store.Notes.Clear();
             store.Save();
@@ -599,6 +607,9 @@ public partial class MainWindow : Window
 
     private void CheckDueReminders()
     {
+        // If a toast is already showing, let it handle it
+        if (_activeToast != null) return;
+
         var due = store.GetOverdueReminders();
         if (due.Count == 0) return;
 
@@ -606,32 +617,21 @@ public partial class MainWindow : Window
         {
             var note = store.Notes.FirstOrDefault(n => n.Id == reminder.NoteId);
             var title = note?.Title ?? reminder.Title;
-            ShowStatus($"?? {title}", false);
+            ShowStatus($"ðŸ”” {title}", false);
         }
 
-        // Try to open the most recent overdue note
-        var latest = due.LastOrDefault();
-        if (latest != null)
-        {
-            Dispatcher.BeginInvoke(() =>
-            {
-                var note = store.Notes.FirstOrDefault(n => n.Id == latest.NoteId);
-                if (note != null)
-                {
-                    var existing = Application.Current.Windows.OfType<NoteWindow>()
-                        .FirstOrDefault(w => w.DataContext is Note n && n.Id == note.Id);
-                    if (existing == null)
-                    {
-                        var win = new NoteWindow(note, store);
-                        win.Show();
-                    }
-                    else
-                    {
-                        existing.Activate();
-                    }
-                }
-            });
-        }
+        // Show first overdue as toast
+        Dispatcher.BeginInvoke(() => ShowToast(due[0]));
+    }
+
+    private void ShowToast(Reminder reminder)
+    {
+        if (_activeToast != null) return;
+
+        _activeToast = new ReminderToastWindow(reminder, store);
+        _activeToast.ReminderSnoozed += _ => { _activeToast = null; };
+        _activeToast.Closed += (_, _) => { _activeToast = null; };
+        _activeToast.Show();
     }
 
     private void ShowOverdueReminders()
@@ -903,20 +903,24 @@ public partial class MainWindow : Window
 
     private void Minimize_Click(object sender, RoutedEventArgs e)
     {
-        if (_dockWindow == null || !_dockWindow.IsVisible)
+        // Close any existing dock (hidden or visible) before creating a fresh one
+        if (_dockWindow != null)
         {
-            var bounds = Helpers.MonitorHelper.GetMonitorWorkingArea(this);
-
-            _dockWindow = new DockWindow(store, bounds, () =>
-            {
-                Show();
-                Focus();
-                RestoreFromDock();
-            });
-            _dockWindow.ApplyTheme(_currentTheme);
-            _dockWindow.RefreshNotes();
-            _dockWindow.Show();
+            _dockWindow.Close();
+            _dockWindow = null;
         }
+
+        var bounds = Helpers.MonitorHelper.GetMonitorWorkingArea(this);
+
+        _dockWindow = new DockWindow(store, bounds, () =>
+        {
+            Show();
+            Focus();
+            _dockWindow = null;
+        });
+        _dockWindow.ApplyTheme(_currentTheme);
+        _dockWindow.RefreshNotes();
+        _dockWindow.Show();
         Hide();
     }
 
@@ -926,6 +930,81 @@ public partial class MainWindow : Window
         Focus();
         _view?.Refresh();
         _dockWindow?.RefreshNotes();
+    }
+
+    private void AlignReminderTimer()
+    {
+        var now = DateTime.Now;
+        // Next tick at second 1 of the next minute
+        var nextTick = now.Date.AddHours(now.Hour).AddMinutes(now.Minute + 1).AddSeconds(1);
+        var delay = (nextTick - now).TotalMilliseconds;
+
+        var oneShot = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(delay) };
+        oneShot.Tick += (_, _) =>
+        {
+            oneShot.Stop();
+            _reminderTimer.Interval = TimeSpan.FromSeconds(60);
+            _reminderTimer.Start();
+            CheckDueReminders();
+        };
+        oneShot.Start();
+    }
+
+    private void RestoreFromTray()
+    {
+        // Close DockWindow if it exists (visible or hidden) â€” they shouldn't coexist
+        if (_dockWindow != null)
+        {
+            _dockWindow.Close();
+            _dockWindow = null;
+        }
+
+        Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        Activate();
+        _view?.Refresh();
+    }
+
+    private void InitializeTrayIcon()
+    {
+        _trayIcon = new WinForms.NotifyIcon
+        {
+            Icon = System.Drawing.Icon.ExtractAssociatedIcon(
+                System.Reflection.Assembly.GetEntryAssembly()!.Location),
+            Text = "QuickNotes",
+            Visible = true,
+            ContextMenuStrip = new WinForms.ContextMenuStrip()
+        };
+
+        _trayIcon.ContextMenuStrip.Items.Add("Mostrar QuickNotes", null, (_, _) =>
+        {
+            RestoreFromTray();
+        });
+
+        _trayIcon.ContextMenuStrip.Items.Add("Nueva Nota", null, (_, _) =>
+        {
+            CreateNoteFromTemplate(null);
+            if (!IsVisible)
+            {
+                RestoreFromTray();
+                return;
+            }
+            Activate();
+        });
+
+        _trayIcon.ContextMenuStrip.Items.Add(new WinForms.ToolStripSeparator());
+        _trayIcon.ContextMenuStrip.Items.Add("Salir", null, (_, _) =>
+        {
+            _trayIcon.Visible = false;
+            _isExiting = true;
+            Close();
+        });
+
+        _trayIcon.DoubleClick += (_, _) =>
+        {
+            RestoreFromTray();
+        };
     }
 
     private void Close_Click(object sender, RoutedEventArgs e)
@@ -1216,6 +1295,7 @@ public partial class MainWindow : Window
     private void MenuExit_Click(object sender, RoutedEventArgs e)
     {
         menuPopup.IsOpen = false;
+        _isExiting = true;
         Close();
     }
 
@@ -1254,7 +1334,7 @@ public partial class MainWindow : Window
 
         var body = new TextBlock
         {
-            Text = $"QuickNotes v1.0{Environment.NewLine}Desarrollado por Felix Bryan Batista{Environment.NewLine}República Dominicana{Environment.NewLine}{Environment.NewLine}App de notas con formato enriquecido,{Environment.NewLine}pestañas laterales y temas oscuros.",
+            Text = $"QuickNotes v1.0{Environment.NewLine}Desarrollado por Felix Bryan Batista{Environment.NewLine}Repï¿½blica Dominicana{Environment.NewLine}{Environment.NewLine}App de notas con formato enriquecido,{Environment.NewLine}pestaï¿½as laterales y temas oscuros.",
             FontSize = 13,
             Foreground = new SolidColorBrush(_currentTheme == "light" ? Color.FromRgb(0x55, 0x55, 0x55) : Color.FromRgb(0x99, 0x99, 0x99)),
             TextWrapping = TextWrapping.Wrap,
@@ -1948,9 +2028,19 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
-        if (store.ConfirmOnExit && !ShowConfirm("¿Salir de QuickNotes?", "Se cerrarán todas las notas y pestañas abiertas."))
+        if (!_isExiting)
+        {
+            // [X] button â†’ minimize to tray instead of closing
+            e.Cancel = true;
+            Hide();
+            return;
+        }
+
+        // Real exit flow
+        if (store.ConfirmOnExit && !ShowConfirm("Â¿Salir de QuickNotes?", "Se cerrarÃ¡n todas las notas y pestaÃ±as abiertas."))
         {
             e.Cancel = true;
+            _isExiting = false;
             return;
         }
 
@@ -1972,7 +2062,7 @@ public partial class MainWindow : Window
         // Close DockWindow if open
         _dockWindow?.Close();
 
-        // Don't reset note positions — app is shutting down
+        // Don't reset note positions â€” app is shutting down
         NoteWindow.IsAppShuttingDown = true;
 
         // Close all NoteWindows except MainWindow
@@ -1986,6 +2076,7 @@ public partial class MainWindow : Window
             if (Application.Current.Windows[i] is not MainWindow)
                 Application.Current.Windows[i].Close();
 
+        _trayIcon?.Dispose();
         base.OnClosing(e);
     }
 

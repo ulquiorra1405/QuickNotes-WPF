@@ -1,0 +1,85 @@
+<Window x:Class="QuickNotes.Views.ReminderToastWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Width="340"
+        Height="140"
+        ResizeMode="NoResize"
+        WindowStartupLocation="Manual"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <Style x:Key="ToastButtonStyle" TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bg"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5"
+                                BorderThickness="0"
+                                Padding="8,0">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"
+                                              TextBlock.FontSize="{TemplateBinding FontSize}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border x:Name="toastBorder"
+            CornerRadius="8"
+            Opacity="0">
+        <Border.Effect>
+            <DropShadowEffect ShadowDepth="4" Color="Black" Opacity="0.6" BlurRadius="12" Direction="270"/>
+        </Border.Effect>
+        <Grid Margin="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header: icon + title -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                <TextBlock x:Name="bellIcon" Text="🔔" FontSize="18" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBlock x:Name="titleText" Text="Recordatorio"
+                           FontSize="14" FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                           MaxWidth="270"/>
+            </StackPanel>
+
+            <!-- Body: note preview -->
+            <TextBlock x:Name="previewText" Grid.Row="1"
+                       FontSize="12"
+                       TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                       MaxHeight="36" Margin="26,0,0,0"
+                       LineHeight="16"/>
+
+            <!-- Buttons -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal"
+                        HorizontalAlignment="Center" Margin="0,10,0,0">
+                <Button x:Name="snoozeBtn" Content="⏰ Posponer"
+                        Width="105" Height="28" FontSize="12"
+                        Cursor="Hand" Style="{StaticResource ToastButtonStyle}"
+                        Click="SnoozeBtn_Click"/>
+                <Button x:Name="dismissBtn" Content="✕ Descartar"
+                        Width="95" Height="28" FontSize="12"
+                        Margin="6,0,0,0"
+                        Cursor="Hand" Style="{StaticResource ToastButtonStyle}"
+                        Click="DismissBtn_Click"/>
+                <Button x:Name="openBtn" Content="Abrir nota"
+                        Width="90" Height="28" FontSize="12"
+                        Margin="6,0,0,0"
+                        Cursor="Hand" Style="{StaticResource ToastButtonStyle}"
+                        Click="OpenBtn_Click"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

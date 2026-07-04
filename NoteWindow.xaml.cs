@@ -162,6 +162,7 @@ public partial class NoteWindow : Window
         Activated += (_, _) =>
         {
             ToggleBars(show: true);
+            UpdateReminderIndicator();
             if (_note.IsMimetized)
                 micaBackdrop.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(micaBackdrop.Opacity, 1, 200));
         };
@@ -670,9 +671,10 @@ public partial class NoteWindow : Window
         if (e.LeftButton != MouseButtonState.Pressed) return;
         if (e.OriginalSource is DependencyObject src)
         {
-            // Don't drag if clicking inside a Popup (they have separate HWND)
-            if (FindParent<Popup>(src) != null) return;
-            // Don't drag if clicking on a button or textbox
+            // Popups live in a separate HWND (PopupRoot), so they're not
+            // descendants of the titleBar. Bail out to let their clicks through.
+            if (!titleBar.IsAncestorOf(src)) return;
+            // Don't drag if clicking interactive controls inside the titleBar
             if (FindParent<Button>(src) != null) return;
             if (FindParent<TextBox>(src) != null) return;
         }
@@ -2408,34 +2410,81 @@ public partial class NoteWindow : Window
         if (existing != null)
         {
             reminderDatePicker.SelectedDate = existing.DueAt.Date;
-            reminderTimeBox.Text = existing.DueAt.ToString("HH:mm");
+            var h = existing.DueAt.Hour;
+            var m = existing.DueAt.Minute;
+            reminderHourBox.Text = (h % 12 == 0 ? 12 : h % 12).ToString();
+            reminderMinuteBox.Text = m.ToString("D2");
+            reminderAmPmText.Text = h < 12 ? "AM" : "PM";
             reminderTitleBox.Text = existing.Title;
+            reminderDescBox.Text = existing.Description;
+            reminderDescBox.Tag = null; // not placeholder
             reminderDeleteBtn.Visibility = Visibility.Visible;
         }
         else
         {
             reminderDatePicker.SelectedDate = DateTime.Now.Date;
-            reminderTimeBox.Text = "12:00";
+            reminderHourBox.Text = "12";
+            reminderMinuteBox.Text = "00";
+            reminderAmPmText.Text = "AM";
             reminderTitleBox.Text = _note.Title ?? "";
+            reminderDescBox.Text = GetNotePreview();
+            reminderDescBox.Tag = "placeholder";
             reminderDeleteBtn.Visibility = Visibility.Collapsed;
         }
         reminderPopup.PlacementTarget = exportMenuBtn;
         reminderPopup.IsOpen = true;
     }
 
+    private string GetNotePreview()
+    {
+        var plain = _note.PlainText;
+        if (string.IsNullOrWhiteSpace(plain)) return "";
+        var lines = plain.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var preview = string.Join("\n", lines.Take(5));
+        if (preview.Length > 300) preview = preview[..297] + "...";
+        return preview.Trim();
+    }
+
+    private void ReminderDescBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (reminderDescBox.Tag is string tag && tag == "placeholder")
+        {
+            reminderDescBox.Text = "";
+            reminderDescBox.Tag = null;
+        }
+    }
+
+    private void ReminderDescBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(reminderDescBox.Text))
+        {
+            reminderDescBox.Text = GetNotePreview();
+            reminderDescBox.Tag = "placeholder";
+        }
+    }
+
     private void ScheduleReminder_Click(object sender, RoutedEventArgs e)
     {
         var date = reminderDatePicker.SelectedDate;
         if (date == null) return;
-        if (!TimeSpan.TryParse(reminderTimeBox.Text, out var time)) return;
+        if (!int.TryParse(reminderHourBox.Text, out var hour12) || hour12 < 1 || hour12 > 12) return;
+        if (!int.TryParse(reminderMinuteBox.Text, out var minute) || minute < 0 || minute > 59) return;
+        var isPm = reminderAmPmText.Text == "PM";
+        var hour24 = isPm ? (hour12 % 12) + 12 : hour12 % 12;
 
-        var dueAt = date.Value.Date + time;
+        var dueAt = date.Value.Date + new TimeSpan(hour24, minute, 0);
         var existing = _store.GetRemindersForNote(_note.Id).FirstOrDefault();
         var reminder = existing ?? new Reminder { NoteId = _note.Id };
         reminder.DueAt = dueAt;
         reminder.Title = reminderTitleBox.Text.Trim();
         if (string.IsNullOrEmpty(reminder.Title))
             reminder.Title = _note.Title ?? "Recordatorio";
+
+        // Save custom description only; empty if it's just the placeholder preview
+        var descText = reminderDescBox.Text?.Trim() ?? "";
+        var preview = GetNotePreview();
+        reminder.Description = (descText == preview || string.IsNullOrEmpty(descText)) ? "" : descText;
+
         reminder.IsCompleted = false;
 
         _store.SaveReminder(reminder);
@@ -2461,6 +2510,52 @@ public partial class NoteWindow : Window
         var hasPending = _store.Reminders.Any(r => r.NoteId == _note.Id && !r.IsCompleted);
         reminderIndicator.Text = hasPending ? "🔔" : "";
         reminderIndicator.Visibility = hasPending ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void NumericOnly_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        e.Handled = !char.IsDigit(e.Text, 0);
+    }
+
+    private void HourUp_Click(object sender, RoutedEventArgs e)
+    {
+        if (int.TryParse(reminderHourBox.Text, out var h))
+        {
+            h = h >= 12 ? 1 : h + 1;
+            reminderHourBox.Text = h.ToString();
+        }
+    }
+
+    private void HourDown_Click(object sender, RoutedEventArgs e)
+    {
+        if (int.TryParse(reminderHourBox.Text, out var h))
+        {
+            h = h <= 1 ? 12 : h - 1;
+            reminderHourBox.Text = h.ToString();
+        }
+    }
+
+    private void MinuteUp_Click(object sender, RoutedEventArgs e)
+    {
+        if (int.TryParse(reminderMinuteBox.Text, out var m))
+        {
+            m = m >= 59 ? 0 : m + 1;
+            reminderMinuteBox.Text = m.ToString("D2");
+        }
+    }
+
+    private void MinuteDown_Click(object sender, RoutedEventArgs e)
+    {
+        if (int.TryParse(reminderMinuteBox.Text, out var m))
+        {
+            m = m <= 0 ? 59 : m - 1;
+            reminderMinuteBox.Text = m.ToString("D2");
+        }
+    }
+
+    private void AmPmToggle_Click(object sender, RoutedEventArgs e)
+    {
+        reminderAmPmText.Text = reminderAmPmText.Text == "AM" ? "PM" : "AM";
     }
 
     private void ExportMarkdown_Click(object sender, MouseButtonEventArgs e)

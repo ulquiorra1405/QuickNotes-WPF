@@ -7,6 +7,7 @@ public class Reminder
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid NoteId { get; set; }
     public string Title { get; set; } = "";
+    public string Description { get; set; } = "";
     public DateTime DueAt { get; set; }
     public bool IsCompleted { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.Now;
@@ -22,6 +23,7 @@ public class Reminder
         Id = Id,
         NoteId = NoteId,
         Title = Title,
+        Description = Description,
         DueAt = DueAt,
         IsCompleted = IsCompleted,
         CreatedAt = CreatedAt,
