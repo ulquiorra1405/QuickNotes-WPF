@@ -3021,7 +3021,7 @@ public partial class NoteWindow : Window
                 {
                     para.Tag = "hidden";
                     para.FontSize = 0.01;
-                    para.LineHeight = 0;
+                    para.LineHeight = 0.01;
                     para.Margin = new Thickness(0);
                     para.Padding = new Thickness(0);
                     para.Foreground = Brushes.Transparent;
