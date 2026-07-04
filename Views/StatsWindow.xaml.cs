@@ -425,6 +425,21 @@ public partial class StatsWindow : Window
         }
     }
 
+    private void CalendarScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        // Redirect mouse wheel to the outer ScrollViewer so it scrolls vertically
+        if (!e.Handled && sender is ScrollViewer sv)
+        {
+            e.Handled = true;
+            var evt = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+            {
+                RoutedEvent = MouseWheelEvent,
+                Source = sv
+            };
+            scrollViewer.RaiseEvent(evt);
+        }
+    }
+
     private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton == MouseButtonState.Pressed)

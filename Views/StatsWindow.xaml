@@ -44,7 +44,7 @@
                 <Grid>
                     <TextBlock Text="📊 Estadísticas" FontSize="14" FontWeight="SemiBold"
                                VerticalAlignment="Center"/>
-                    <Button x:Name="closeBtn" Content="✕" FontSize="12" Width="28" Height="24"
+                    <Button x:Name="closeBtn" Content="✕" FontSize="14" Width="30" Height="26"
                             HorizontalAlignment="Right" VerticalAlignment="Center"
                             Cursor="Hand" Background="Transparent" BorderThickness="0"
                             Click="CloseBtn_Click"/>
@@ -123,7 +123,8 @@
                     <TextBlock Text="Calendario de actividad" Style="{StaticResource SectionTitle}"/>
                     <Border x:Name="calendarBox" CornerRadius="8" Padding="14" Margin="0,0,0,16">
                         <StackPanel>
-                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                            <ScrollViewer x:Name="calendarScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                            PreviewMouseWheel="CalendarScroll_PreviewMouseWheel">
                                 <StackPanel Orientation="Horizontal" x:Name="calendarPanel"/>
                             </ScrollViewer>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
