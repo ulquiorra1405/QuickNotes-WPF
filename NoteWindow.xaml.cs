@@ -98,6 +98,7 @@ public partial class NoteWindow : Window
 
     private string _searchQuery = "";
     private bool _isSearchActive;
+    private bool _hideCompleted;
     private readonly List<(TextPointer start, TextPointer end)> _searchMatchRanges = new();
     private int _currentMatchIndex = -1;
     private int _totalMatches;
@@ -425,6 +426,7 @@ public partial class NoteWindow : Window
         _note.LastModified = DateTime.Now;
         var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is MainWindow) as MainWindow;
         mainWin?.DebounceSave();
+        if (_hideCompleted) ApplyHideCompleted();
     }
 
     private void Title_TextChanged(object sender, TextChangedEventArgs e)
@@ -2948,6 +2950,83 @@ public partial class NoteWindow : Window
 
     private void UndoBtn_Click(object sender, RoutedEventArgs e) => ToolbarClick(Undo);
     private void RedoBtn_Click(object sender, RoutedEventArgs e) => ToolbarClick(Redo);
+
+    private void HideCompletedBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _hideCompleted = !_hideCompleted;
+        hideCompletedBtn.Opacity = _hideCompleted ? 1.0 : 0.5;
+        ApplyHideCompleted();
+    }
+
+    private void ApplyHideCompleted()
+    {
+        var doc = noteText.Document;
+        if (doc == null) return;
+
+        var blocks = new List<Block>(doc.Blocks);
+        foreach (var block in blocks)
+        {
+            if (block is not Paragraph para) continue;
+
+            bool shouldHide = false;
+            var text = new TextRange(para.ContentStart, para.ContentEnd).Text.TrimEnd('\r', '\n');
+
+            if (text.TrimStart().StartsWith("✓ ") || text.TrimStart().StartsWith("☑ ") || text.TrimStart().StartsWith("[x]"))
+                shouldHide = true;
+
+            if (!shouldHide)
+            {
+                foreach (var inline in para.Inlines)
+                {
+                    if (inline is Run run && run.TextDecorations != null)
+                    {
+                        foreach (var deco in run.TextDecorations)
+                        {
+                            if (deco.Location == TextDecorationLocation.Strikethrough)
+                            {
+                                shouldHide = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (shouldHide) break;
+                }
+            }
+
+            if (!shouldHide && para.TextDecorations != null)
+            {
+                foreach (var deco in para.TextDecorations)
+                {
+                    if (deco.Location == TextDecorationLocation.Strikethrough)
+                    {
+                        shouldHide = true;
+                        break;
+                    }
+                }
+            }
+
+            if (_hideCompleted && shouldHide)
+            {
+                para.Tag = "hidden";
+                para.FontSize = 0.01;
+                para.LineHeight = 0;
+                para.Margin = new Thickness(0);
+                para.Padding = new Thickness(0);
+                para.Foreground = Brushes.Transparent;
+                para.BorderThickness = new Thickness(0);
+            }
+            else if (para.Tag as string == "hidden")
+            {
+                para.ClearValue(Paragraph.FontSizeProperty);
+                para.ClearValue(Paragraph.LineHeightProperty);
+                para.ClearValue(Paragraph.MarginProperty);
+                para.ClearValue(Paragraph.PaddingProperty);
+                para.ClearValue(Paragraph.ForegroundProperty);
+                para.ClearValue(Paragraph.BorderThicknessProperty);
+                para.Tag = null;
+            }
+        }
+    }
 
     private void Undo()
     {

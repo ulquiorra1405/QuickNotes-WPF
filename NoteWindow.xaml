@@ -891,6 +891,10 @@
                             Width="24" Height="22" Cursor="Hand" ToolTip="Rehacer (Ctrl+Y)"
                             Style="{StaticResource TitleBtn}"
                             Click="RedoBtn_Click"/>
+                    <Button x:Name="hideCompletedBtn" Content="👻" FontSize="14"
+                            Width="24" Height="22" Cursor="Hand" ToolTip="Ocultar completados"
+                            Style="{StaticResource TitleBtn}"
+                            Click="HideCompletedBtn_Click"/>
                 </StackPanel>
             </Grid>
         </Border>
