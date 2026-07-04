@@ -189,11 +189,35 @@
                            PopupAnimation="Fade">
                         <Border Background="{Binding Color}"
                                 CornerRadius="6" Padding="5"
-                                BorderBrush="#40000000" BorderThickness="1"
-                                MaxHeight="200">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" TextElement.Foreground="{Binding TextForeground}">
-                                <UniformGrid x:Name="emojiPanel" Columns="6"/>
-                            </ScrollViewer>
+                                BorderBrush="#40000000" BorderThickness="1">
+                            <Grid TextElement.Foreground="{Binding TextForeground}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <UniformGrid x:Name="emojiPanel" Grid.Row="0" Columns="6" Rows="4"/>
+                                <Grid Grid.Row="1" Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="emojiIconPrevBtn" Grid.Column="0" Content="◀"
+                                            Width="20" Height="20" FontSize="8"
+                                            Cursor="Hand" ToolTip="Anterior"
+                                            Style="{StaticResource TitleBtn}"
+                                            Click="EmojiIconPrevPage_Click"/>
+                                    <StackPanel x:Name="emojiIconPageDots" Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"/>
+                                    <Button x:Name="emojiIconNextBtn" Grid.Column="2" Content="▶"
+                                            Width="20" Height="20" FontSize="8"
+                                            Cursor="Hand" ToolTip="Siguiente"
+                                            Style="{StaticResource TitleBtn}"
+                                            Click="EmojiIconNextPage_Click"/>
+                                </Grid>
+                            </Grid>
                         </Border>
                     </Popup>
                     <Button x:Name="pinNoteBtn" FontSize="10" Content="📌"

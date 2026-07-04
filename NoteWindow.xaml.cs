@@ -85,6 +85,9 @@ public partial class NoteWindow : Window
     private int _emojiPage;
     private int _emojiTotalPages => (int)Math.Ceiling((double)_editorEmojiPalette.Length / 24);
 
+    private int _emojiIconPage;
+    private int _emojiIconTotalPages => (int)Math.Ceiling((double)Note.EmojiPalette.Length / 24);
+
     private readonly Note _note;
     private readonly NotesStore _store;
 
@@ -200,7 +203,9 @@ public partial class NoteWindow : Window
             {
                 clickedTrigger =
                     (colorPopup.IsOpen && FindParent<Border>(src) == currentColorDot) ||
-                    (emojiPopup.IsOpen && FindParent<Button>(src) == emojiBtn) ||
+                    (emojiPopup.IsOpen && (FindParent<Button>(src) == emojiBtn ||
+                        FindParent<Button>(src) == emojiIconPrevBtn ||
+                        FindParent<Button>(src) == emojiIconNextBtn)) ||
                     (emojiInsertPopup.IsOpen && (FindParent<Button>(src) == emojiInsertBtn ||
                         FindParent<Border>(src) == emojiInsertBorder ||
                         FindParent<Button>(src) == emojiPrevBtn ||
@@ -774,9 +779,23 @@ public partial class NoteWindow : Window
 
     private void BuildEmojiPicker()
     {
+        _emojiIconPage = 0;
+        RenderEmojiIconPage();
+    }
+
+    private void RenderEmojiIconPage()
+    {
         emojiPanel.Children.Clear();
-        foreach (var emoji in Note.EmojiPalette)
+        emojiIconPageDots.Children.Clear();
+
+        int page = _emojiIconPage;
+        int pageSize = 24;
+        int start = page * pageSize;
+        int end = Math.Min(start + pageSize, Note.EmojiPalette.Length);
+
+        for (int i = start; i < end; i++)
         {
+            var emoji = Note.EmojiPalette[i];
             var border = new Border
             {
                 Height = 28,
@@ -788,7 +807,7 @@ public partial class NoteWindow : Window
             var text = new TextBlock
             {
                 Text = emoji,
-                FontSize = 13,
+                FontSize = 15,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             };
@@ -803,6 +822,51 @@ public partial class NoteWindow : Window
             border.MouseLeave += (_, _) =>
                 border.Background = Brushes.Transparent;
             emojiPanel.Children.Add(border);
+        }
+
+        // Fill remaining slots
+        for (int i = end; i < start + pageSize; i++)
+        {
+            emojiPanel.Children.Add(new Border());
+        }
+
+        // Dots indicator
+        bool dotDark = IsDarkColor(_note.Color);
+        var dotActiveBrush = new SolidColorBrush(dotDark ? Colors.White : Color.FromArgb(0xCC, 0x3A, 0x3A, 0x3A));
+        var dotInactiveBrush = new SolidColorBrush(dotDark
+            ? Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x66, 0x3A, 0x3A, 0x3A));
+
+        int totalPages = _emojiIconTotalPages;
+        for (int p = 0; p < totalPages; p++)
+        {
+            var dot = new Ellipse
+            {
+                Width = p == page ? 7 : 5,
+                Height = p == page ? 7 : 5,
+                Fill = p == page ? dotActiveBrush : dotInactiveBrush,
+                Margin = new Thickness(2, 0, 2, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            emojiIconPageDots.Children.Add(dot);
+        }
+    }
+
+    private void EmojiIconPrevPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_emojiIconPage > 0)
+        {
+            _emojiIconPage--;
+            RenderEmojiIconPage();
+        }
+    }
+
+    private void EmojiIconNextPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_emojiIconPage < _emojiIconTotalPages - 1)
+        {
+            _emojiIconPage++;
+            RenderEmojiIconPage();
         }
     }
 
