@@ -119,21 +119,24 @@ public partial class NoteCard : UserControl
         if (Application.Current.MainWindow is MainWindow mw)
         {
             var hasReminder = mw.GetStore().GetRemindersForNote(note.Id).Any(r => !r.IsCompleted);
-            // Find or create the badge TextBlock in the card
-            var badge = FindVisualChild<TextBlock>(this, tb => tb.Name == "reminderBadge");
+            // Find or create the badge Path in the card
+            var badge = FindVisualChild<System.Windows.Shapes.Path>(this, p => p.Name == "reminderBadge");
             if (badge == null)
             {
                 // Create programmatically — attach to the header grid
                 if (FindVisualChild<Ellipse>(this) is Ellipse ellipse && VisualTreeHelper.GetParent(ellipse) is Grid headerGrid)
                 {
-                    badge = new TextBlock
+                    badge = new System.Windows.Shapes.Path
                     {
                         Name = "reminderBadge",
-                        Text = "🔔",
-                        FontSize = 9,
+                        Data = (System.Windows.Media.StreamGeometry)FindResource("IconBell"),
+                        Stretch = System.Windows.Media.Stretch.Uniform,
+                        Width = 10,
+                        Height = 10,
                         VerticalAlignment = VerticalAlignment.Center,
                         Margin = new Thickness(0, 0, 4, 0),
                         IsHitTestVisible = false,
+                        Fill = (System.Windows.Media.Brush)FindResource("SidebarIconBrush"),
                         Visibility = Visibility.Collapsed,
                     };
                     Grid.SetColumn(badge, 1);
@@ -269,8 +272,8 @@ public partial class NoteCard : UserControl
     private void UpdatePinVisual(Button btn, Note note, bool cardHovered)
     {
         var dash = btn.Template.FindName("dashText", btn) as TextBlock;
-        var hover = btn.Template.FindName("pinHoverText", btn) as TextBlock;
-        var pin = btn.Template.FindName("pinText", btn) as TextBlock;
+        var hover = btn.Template.FindName("pinHoverText", btn) as Path;
+        var pin = btn.Template.FindName("pinText", btn) as Path;
         if (dash == null || hover == null || pin == null) return;
 
         double toDash = 0, toHover = 0, toPin = 0;
@@ -384,7 +387,23 @@ public partial class NoteCard : UserControl
                         if (note != null && Application.Current.MainWindow is MainWindow mw)
                         {
                             var hasReminder = mw.GetStore().GetRemindersForNote(note.Id).Any(r => !r.IsCompleted);
-                            mi.Header = hasReminder ? "🔔  Editar recordatorio" : "🔔  Recordatorio";
+                            var headerPanel = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+                            headerPanel.Children.Add(new System.Windows.Shapes.Path
+                            {
+                                Data = (System.Windows.Media.StreamGeometry)Application.Current.FindResource("IconBell"),
+                                Stretch = System.Windows.Media.Stretch.Uniform,
+                                Width = 12,
+                                Height = 12,
+                                Fill = System.Windows.Media.Brushes.White,
+                                VerticalAlignment = VerticalAlignment.Center,
+                                Margin = new Thickness(0, 0, 6, 0)
+                            });
+                            headerPanel.Children.Add(new System.Windows.Controls.TextBlock
+                            {
+                                Text = hasReminder ? "Editar recordatorio" : "Recordatorio",
+                                VerticalAlignment = VerticalAlignment.Center
+                            });
+                            mi.Header = headerPanel;
                         }
                         break;
                 }

@@ -99,6 +99,7 @@ public partial class NoteWindow : Window
     private string _searchQuery = "";
     private bool _isSearchActive;
     private bool _hideCompleted;
+    private TextAlignment _currentAlignment = TextAlignment.Left;
     private bool _isApplyingHideCompleted;
     private readonly List<(TextPointer start, TextPointer end)> _searchMatchRanges = new();
     private int _currentMatchIndex = -1;
@@ -659,17 +660,29 @@ public partial class NoteWindow : Window
     {
         if (_note.IsMimetized)
         {
-            pinNoteBtn.Content = "🔖";
+            // Ghost es contorno (stroke-only)
+            pinIcon.Data = (System.Windows.Media.StreamGeometry)FindResource("IconGhost");
+            pinIcon.Fill = Brushes.Transparent;
+            pinIcon.Stroke = Brushes.Transparent;  // color lo pone UpdateButtonForegrounds
+            pinIcon.StrokeThickness = 1.2;
             Topmost = true;
         }
         else if (_note.IsPinned)
         {
-            pinNoteBtn.Content = "📍";
+            // IconPinned es relleno (fill-only)
+            pinIcon.Data = (System.Windows.Media.StreamGeometry)FindResource("IconPinned");
+            pinIcon.Fill = Brushes.Transparent;  // color lo pone UpdateButtonForegrounds
+            pinIcon.Stroke = Brushes.Transparent;
+            pinIcon.StrokeThickness = 0;
             Topmost = true;
         }
         else
         {
-            pinNoteBtn.Content = "📌";
+            // IconPin es relleno (fill-only)
+            pinIcon.Data = (System.Windows.Media.StreamGeometry)FindResource("IconPin");
+            pinIcon.Fill = Brushes.Transparent;  // color lo pone UpdateButtonForegrounds
+            pinIcon.Stroke = Brushes.Transparent;
+            pinIcon.StrokeThickness = 0;
             Topmost = false;
         }
     }
@@ -713,6 +726,7 @@ public partial class NoteWindow : Window
         }
 
         UpdatePinButtonState();
+        UpdateButtonForegrounds();
         _note.LastModified = DateTime.Now;
         _store.Save();
     }
@@ -1065,10 +1079,52 @@ public partial class NoteWindow : Window
         if (sep2 != null) sep2.Fill = sepColor;
 
         // Dynamic alignment path strokes (same color as other toolbar buttons)
-        if (alignLeftPath != null) alignLeftPath.Stroke = fg;
-        if (alignCenterPath != null) alignCenterPath.Stroke = fg;
-        if (alignRightPath != null) alignRightPath.Stroke = fg;
-        if (alignJustifyPath != null) alignJustifyPath.Stroke = fg;
+        // Align button (fill-based SVG) + popup items
+        if (alignBtnPath != null) alignBtnPath.Fill = fg;
+        if (alignPopupLeftPath != null) alignPopupLeftPath.Fill = fg;
+        if (alignPopupCenterPath != null) alignPopupCenterPath.Fill = fg;
+        if (alignPopupRightPath != null) alignPopupRightPath.Fill = fg;
+        if (alignPopupJustifyPath != null) alignPopupJustifyPath.Fill = fg;
+
+        // Checklist icon (stroke-based SVG)
+        if (checkboxPath != null) checkboxPath.Stroke = fg;
+        // Emoji insert icon (stroke-based SVG)
+        if (emojiInsertBtnPath != null) emojiInsertBtnPath.Stroke = fg;
+        // Undo / Redo icons (stroke-based SVGs)
+        if (undoBtnPath != null) undoBtnPath.Stroke = fg;
+        if (redoBtnPath != null) redoBtnPath.Stroke = fg;
+
+        // Dynamic pin icon (mismo color que botones del title bar)
+        if (_note.IsMimetized)
+            pinIcon.Stroke = fg;
+        else
+            pinIcon.Fill = fg;
+
+        // Dynamic reminder bell
+        if (reminderIndicator != null)
+            reminderIndicator.Fill = fg;
+
+        // Dynamic emoji picker arrow paths (ambos popups)
+        if (emojiIconPrevPath != null) emojiIconPrevPath.Stroke = fg;
+        if (emojiIconNextPath != null) emojiIconNextPath.Stroke = fg;
+        if (emojiPrevPath != null) emojiPrevPath.Stroke = fg;
+        if (emojiNextPath != null) emojiNextPath.Stroke = fg;
+
+        // Dynamic hide-completed eye icon
+        if (hideCompletedIcon != null)
+            hideCompletedIcon.Stroke = fg;
+
+        // Dynamic close button
+        if (closeBtnPath != null)
+            closeBtnPath.Stroke = fg;
+
+        // Dynamic export/menu button
+        if (exportMenuBtnPath != null)
+            exportMenuBtnPath.Stroke = fg;
+
+        // Dynamic minimize button
+        if (minBtnPath != null)
+            minBtnPath.Stroke = fg;
 
         // Style search bar dynamically
         var searchIconFg = new SolidColorBrush(
@@ -1810,6 +1866,7 @@ public partial class NoteWindow : Window
     {
         try
         {
+            _currentAlignment = alignment;
             var sel = noteText.Selection;
             var para = sel.Start.Paragraph;
             if (para == null) return;
@@ -1817,6 +1874,21 @@ public partial class NoteWindow : Window
             para.TextAlignment = alignment;
             noteText.Focus();
             MarkDirtyAndDebounce();
+
+            // Actualizar icono del boton de alineacion
+            var iconKey = alignment switch
+            {
+                TextAlignment.Center => "IconAlignCenter",
+                TextAlignment.Right => "IconAlignRight",
+                TextAlignment.Justify => "IconAlignJustify",
+                _ => "IconAlignLeft"
+            };
+            if (alignBtnPath != null)
+                alignBtnPath.Data = (System.Windows.Media.StreamGeometry)FindResource(iconKey);
+
+            // Cerrar popup si estaba abierto
+            if (alignPopup != null)
+                alignPopup.IsOpen = false;
         }
         catch (Exception ex)
         {
@@ -1828,6 +1900,11 @@ public partial class NoteWindow : Window
     private void AlignCenter_Click(object sender, RoutedEventArgs e) => ToolbarClick(() => SetTextAlignment(TextAlignment.Center));
     private void AlignRight_Click(object sender, RoutedEventArgs e) => ToolbarClick(() => SetTextAlignment(TextAlignment.Right));
     private void AlignJustify_Click(object sender, RoutedEventArgs e) => ToolbarClick(() => SetTextAlignment(TextAlignment.Justify));
+
+    private void AlignBtn_Click(object sender, RoutedEventArgs e)
+    {
+        alignPopup.IsOpen = !alignPopup.IsOpen;
+    }
 
     // ── Floating toolbar button handlers ──
 
@@ -2577,7 +2654,6 @@ public partial class NoteWindow : Window
     private void UpdateReminderIndicator()
     {
         var hasPending = _store.Reminders.Any(r => r.NoteId == _note.Id && !r.IsCompleted);
-        reminderIndicator.Text = hasPending ? "🔔" : "";
         reminderIndicator.Visibility = hasPending ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -2955,8 +3031,14 @@ public partial class NoteWindow : Window
     private void HideCompletedBtn_Click(object sender, RoutedEventArgs e)
     {
         _hideCompleted = !_hideCompleted;
-        hideCompletedBtn.Opacity = _hideCompleted ? 1.0 : 0.5;
+        UpdateHideCompletedIcon();
         ApplyHideCompleted();
+    }
+
+    private void UpdateHideCompletedIcon()
+    {
+        var iconKey = _hideCompleted ? "IconEyeClose" : "IconEye";
+        hideCompletedIcon.Data = (System.Windows.Media.StreamGeometry)FindResource(iconKey);
     }
 
     private void ApplyHideCompleted()

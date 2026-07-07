@@ -120,7 +120,7 @@ public class Note : INotifyPropertyChanged
         }
     }
 
-    private string _icon = "📝";
+    private string _icon = RandomIcon();
     public string Icon
     {
         get => _icon;

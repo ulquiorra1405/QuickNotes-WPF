@@ -221,10 +221,11 @@
                     </Grid.ColumnDefinitions>
                     <Button x:Name="menuBtn" Grid.Column="0"
                             Style="{StaticResource HeaderBtn}"
-                            FontSize="12" FontWeight="SemiBold"
-                            Foreground="#BBFFFFFF"
-                            Content="QN"
-                            Click="MenuBtn_Click"/>
+                            Click="MenuBtn_Click">
+                        <Path Data="{StaticResource IconQN}"
+                              Stretch="Uniform" Width="20" Height="20"
+                              Fill="{DynamicResource SidebarIconBrush}"/>
+                    </Button>
                     <Popup x:Name="menuPopup" Placement="Bottom"
                            PlacementTarget="{Binding ElementName=menuBtn}"
                            StaysOpen="False" AllowsTransparency="True"
@@ -239,8 +240,13 @@
                                             <ColumnDefinition Width="24"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="ℹ" FontWeight="Normal" FontSize="13"
-                                                   HorizontalAlignment="Center"/>
+                                        <Grid Grid.Column="0" Width="16" Height="16" HorizontalAlignment="Center">
+                                        <Path Data="{StaticResource IconInfo}"
+                                              Stroke="{DynamicResource SidebarIconBrush}"
+                                              StrokeThickness="1.5" Stretch="Uniform"/>
+                                        <Path Data="{StaticResource IconInfoDot}"
+                                              Stretch="Uniform"/>
+                                    </Grid>
                                         <TextBlock Grid.Column="1" Text="Acerca de" FontSize="13"/>
                                     </Grid>
                                 </Button>
@@ -250,8 +256,10 @@
                                             <ColumnDefinition Width="24"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="📊" FontWeight="Normal" FontSize="13"
-                                                   HorizontalAlignment="Center"/>
+                                        <Path Grid.Column="0" Data="{StaticResource IconStats}" Stretch="Uniform"
+                                          Stroke="{DynamicResource SidebarIconBrush}"
+                                          StrokeThickness="1.5" Width="16" Height="16"
+                                          HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="1" Text="Estadísticas" FontSize="13"/>
                                     </Grid>
                                 </Button>
@@ -261,8 +269,10 @@
                                             <ColumnDefinition Width="24"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="⚙" FontWeight="Normal" FontSize="13"
-                                                   HorizontalAlignment="Center"/>
+                                        <Path Grid.Column="0" Data="{StaticResource IconSettings}" Stretch="Uniform"
+                                          Stroke="{DynamicResource SidebarIconBrush}"
+                                          StrokeThickness="1.5" Width="16" Height="16"
+                                          HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="1" Text="Ajustes" FontSize="13"/>
                                     </Grid>
                                 </Button>
@@ -272,8 +282,11 @@
                                             <ColumnDefinition Width="24"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="✕" FontWeight="Normal" FontSize="13"
-                                                   HorizontalAlignment="Center"/>
+                                        <Path Grid.Column="0" Data="{StaticResource IconExit}"
+                                              Stretch="Uniform" Width="14" Height="14"
+                                              Stroke="{DynamicResource SidebarIconBrush}"
+                                              StrokeThickness="1.5"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         <TextBlock Grid.Column="1" Text="Salir" FontSize="13"/>
                                     </Grid>
                                 </Button>
@@ -301,41 +314,40 @@
                                  LostFocus="Search_LostFocus"/>
                     </Grid>
                     <ToggleButton x:Name="pinBtn" Grid.Column="2"
-                                  FontSize="12"
                                   IsChecked="True"
                                   Checked="Topmost_Changed"
-                                  Unchecked="Topmost_Changed">
-                        <ToggleButton.Style>
-                            <Style TargetType="ToggleButton" BasedOn="{StaticResource HeaderBtn}">
-                                <Setter Property="Content" Value="📌"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsChecked" Value="True">
-                                        <Setter Property="Content" Value="📍"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </ToggleButton.Style>
+                                  Unchecked="Topmost_Changed"
+                                  Style="{StaticResource HeaderBtn}">
+                        <Path x:Name="pinBtnPath" Data="{StaticResource IconPinned}"
+                              Stretch="Uniform" Width="18" Height="18"
+                              Fill="{DynamicResource SidebarIconBrush}"/>
                     </ToggleButton>
                     <Button x:Name="addBtn" Grid.Column="3"
                             Style="{StaticResource HeaderBtn}"
-                            FontSize="20" FontWeight="Light"
-                            Click="AddNote_Click"
-                            Content="+"/>
+                            Click="AddNote_Click">
+                        <Path Data="{StaticResource IconAdd}"
+                              Stretch="Uniform" Width="18" Height="18"
+                              Stroke="{DynamicResource SidebarIconBrush}"
+                              StrokeThickness="1.5"/>
+                    </Button>
                     <Popup x:Name="templatePopup" Placement="Bottom"
                            PlacementTarget="{Binding ElementName=addBtn}"
                            StaysOpen="False" AllowsTransparency="True"
                            PopupAnimation="Fade"
                            Closed="TemplatePopup_Closed">
                         <Border x:Name="templatePopupBorder" Background="#2A2A2A" CornerRadius="8" Padding="4"
-                                BorderBrush="#40FFFFFF" BorderThickness="1"
+                                BorderBrush="#40FFFFFF" BorderThickness="1.5"
                                 MinWidth="160" MaxWidth="200">
                             <StackPanel x:Name="templatePanel" />
                         </Border>
                     </Popup>
                     <Button x:Name="minBtn" Grid.Column="4"
                             Style="{StaticResource HeaderBtn}"
-                            Click="Minimize_Click"
-                            Content="─"/>
+                            Click="Minimize_Click">
+                    <Path Data="{StaticResource IconMin}" Stretch="Uniform"
+                          Stroke="{DynamicResource SidebarIconBrush}"
+                          StrokeThickness="1.5" Width="18" Height="18"/>
+                </Button>
 
                 </Grid>
             </Border>
@@ -359,7 +371,9 @@
                                     PreviewMouseDown="SidebarToggle_Click"
                                     MouseEnter="SidebarItem_MouseEnter"
                                     MouseLeave="SidebarItem_MouseLeave">
-                                <TextBlock x:Name="sidebarToggleIcon" Text="☰" FontSize="16" Foreground="#BBFFFFFF"
+                                <Path x:Name="sidebarToggleIcon" Data="{StaticResource IconHamb}" Stretch="Uniform"
+                                           Stroke="{DynamicResource SidebarIconBrush}"
+                                           StrokeThickness="1.5" Width="18" Height="18"
                                            HorizontalAlignment="Center"/>
                             </Border>
 
@@ -371,7 +385,10 @@
                                     MouseLeave="SidebarItem_MouseLeave"
                                     Tag="all">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock x:Name="sectAllIcon" Text="✏️" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                    <Path x:Name="sectAllIcon" Data="{StaticResource IconNotebook}" Stretch="Uniform"
+                                           Stroke="{DynamicResource SidebarIconBrush}"
+                                           StrokeThickness="1.5" Width="18" Height="18"
+                                           VerticalAlignment="Center"/>
                                     <TextBlock x:Name="sectAllLabel" Text=" Todas" FontSize="13"
                                                Foreground="#BBFFFFFF" VerticalAlignment="Center"
                                                Opacity="0"/>
@@ -389,7 +406,10 @@
                                     MouseLeave="SidebarItem_MouseLeave"
                                     Tag="archived">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock x:Name="sectArchivedIcon" Text="📁" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                    <Path x:Name="sectArchivedIcon" Data="{StaticResource IconArchive}" Stretch="Uniform"
+                                           Stroke="{DynamicResource SidebarIconBrush}"
+                                           StrokeThickness="1.5" Width="18" Height="18"
+                                           VerticalAlignment="Center"/>
                                     <TextBlock x:Name="sectArchivedLabel" Text=" Archivadas" FontSize="13"
                                                Foreground="#BBFFFFFF" VerticalAlignment="Center"
                                                Opacity="0"/>
@@ -407,7 +427,10 @@
                                     MouseLeave="SidebarItem_MouseLeave"
                                     Tag="trash">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock x:Name="sectTrashIcon" Text="♻️" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                    <Path x:Name="sectTrashIcon" Data="{StaticResource IconTrash}" Stretch="Uniform"
+                                           Stroke="{DynamicResource SidebarIconBrush}"
+                                           StrokeThickness="1.5" Width="18" Height="18"
+                                           VerticalAlignment="Center"/>
                                     <TextBlock x:Name="sectTrashLabel" Text=" Papelera" FontSize="13"
                                                Foreground="#BBFFFFFF" VerticalAlignment="Center"
                                                Opacity="0"/>
@@ -429,7 +452,10 @@
                                         MouseLeave="SidebarItem_MouseLeave"
                                         Tag="notebooks">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="sectNotebooksIcon" Text="📚" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                        <Path x:Name="sectNotebooksIcon" Data="{StaticResource IconBook}" Stretch="Uniform"
+                                           Stroke="{DynamicResource SidebarIconBrush}"
+                                           StrokeThickness="1.5" Width="18" Height="18"
+                                           VerticalAlignment="Center"/>
                                         <TextBlock x:Name="sectNotebooksLabel" Text=" Libretas" FontSize="13"
                                                    Foreground="#BBFFFFFF" VerticalAlignment="Center"
                                                    Opacity="0"/>
@@ -450,7 +476,10 @@
                                         MouseLeave="SidebarItem_MouseLeave"
                                         Tag="tags">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="sectTagsIcon" Text="🏷" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                        <Path x:Name="sectTagsIcon" Data="{StaticResource IconHashtag}" Stretch="Uniform"
+                                           Stroke="{DynamicResource SidebarIconBrush}"
+                                           StrokeThickness="1.5" Width="18" Height="18"
+                                           VerticalAlignment="Center"/>
                                         <TextBlock x:Name="sectTagsLabel" Text=" Tags" FontSize="13"
                                                    Foreground="#BBFFFFFF" VerticalAlignment="Center"
                                                    Opacity="0"/>
@@ -470,7 +499,10 @@
                                     MouseLeave="SidebarItem_MouseLeave"
                                     Tag="timeline">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock x:Name="sectTimelineIcon" Text="🕐" FontSize="16" VerticalAlignment="Center" Foreground="#BBFFFFFF"/>
+                                    <Path x:Name="sectTimelineIcon" Data="{StaticResource IconClock}" Stretch="Uniform"
+                                           Stroke="{DynamicResource SidebarIconBrush}"
+                                           StrokeThickness="1.5" Width="18" Height="18"
+                                           VerticalAlignment="Center"/>
                                     <TextBlock x:Name="sectTimelineLabel" Text=" Timeline" FontSize="13"
                                                Foreground="#BBFFFFFF" VerticalAlignment="Center"
                                                Opacity="0"/>

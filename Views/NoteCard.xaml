@@ -157,18 +157,18 @@
                                                            VerticalAlignment="Center"
                                                            Foreground="{TemplateBinding Foreground}"
                                                            FontSize="{TemplateBinding FontSize}"/>
-                                                <TextBlock x:Name="pinHoverText" Text="📌"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"
-                                                           Foreground="{TemplateBinding Foreground}"
-                                                           FontSize="{TemplateBinding FontSize}"
-                                                           Opacity="0"/>
-                                                <TextBlock x:Name="pinText" Text="📍"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"
-                                                           Foreground="{TemplateBinding Foreground}"
-                                                           FontSize="{TemplateBinding FontSize}"
-                                                           Opacity="0"/>
+                                                <Path x:Name="pinHoverText" Data="{StaticResource IconPin}"
+                                                      Stretch="Uniform" Width="12" Height="12"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"
+                                                      Fill="{TemplateBinding Foreground}"
+                                                      Opacity="0"/>
+                                                <Path x:Name="pinText" Data="{StaticResource IconPinned}"
+                                                      Stretch="Uniform" Width="12" Height="12"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"
+                                                      Fill="{TemplateBinding Foreground}"
+                                                      Opacity="0"/>
                                             </Grid>
                                         </Border>
                                         <ControlTemplate.Triggers>
@@ -304,13 +304,14 @@
 
                     <!-- Attachment indicator -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
-                        <TextBlock Text="📎" FontSize="10"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,4,0"
-                                   Foreground="{Binding TextForeground}"
-                                   ToolTip="Tiene adjuntos">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
+                        <Path Data="{StaticResource IconLink}"
+                              Stretch="Uniform" Width="10" Height="10"
+                              VerticalAlignment="Center"
+                              Margin="0,0,4,0"
+                              Fill="{Binding TextForeground}"
+                              ToolTip="Tiene adjuntos">
+                            <Path.Style>
+                                <Style TargetType="Path">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding HasAttachments}" Value="True">
@@ -318,17 +319,35 @@
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                        <Button Content="↗" Style="{DynamicResource CardBtn}"
-                                FontSize="13" Foreground="{Binding TextForeground}"
-                                Tag="PopOut"/>
-                        <Button Content="⧉" Style="{DynamicResource CardBtn}"
-                                FontSize="11" Foreground="{Binding TextForeground}"
-                                Tag="Copy"/>
-                        <Button Content="✕" Style="{DynamicResource CardBtn}"
-                                FontSize="11" Foreground="{Binding TextForeground}"
-                                Tag="Delete"/>
+                            </Path.Style>
+                        </Path>
+                        <Button Style="{DynamicResource CardBtn}"
+                                Foreground="{Binding TextForeground}"
+                                ToolTip="Abrir nota"
+                                Tag="PopOut">
+                            <Path Data="{StaticResource IconOpen}"
+                                  Stretch="Uniform" Width="14" Height="14"
+                                  Stroke="{Binding TextForeground}"
+                                  StrokeThickness="1.0"/>
+                        </Button>
+                        <Button Style="{DynamicResource CardBtn}"
+                                ToolTip="Duplicar nota"
+                                Foreground="{Binding TextForeground}"
+                                Tag="Copy">
+                            <Path Data="{StaticResource IconCopy}"
+                                  Stretch="Uniform" Width="14" Height="14"
+                                  Stroke="{Binding TextForeground}"
+                                  StrokeThickness="1.0"/>
+                        </Button>
+                        <Button Style="{DynamicResource CardBtn}"
+                                Foreground="{Binding TextForeground}"
+                                ToolTip="Eliminar nota"
+                                Tag="Delete">
+                            <Path Data="{StaticResource IconDel}"
+                                  Stretch="Uniform" Width="14" Height="14"
+                                  Stroke="{Binding TextForeground}"
+                                  StrokeThickness="1.0"/>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Border>

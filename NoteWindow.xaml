@@ -179,10 +179,15 @@
                 <StackPanel x:Name="titleRightPanel" HorizontalAlignment="Right" Orientation="Horizontal">
                     <Button x:Name="emojiBtn" Width="24" Height="24"
                             Style="{StaticResource TitleBtn}"
+                            FontSize="16"
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             ToolTip="Icono para el dock"
-                            Click="EmojiBtn_Click"
-                            Content="📝"/>
+                            Click="EmojiBtn_Click">
+                        <Path Data="{StaticResource IconMask}"
+                              Stretch="Uniform" Width="18" Height="18"
+                              Fill="{DynamicResource TitleIconBrush}"
+                              StrokeThickness="1.5"/>
+                    </Button>
                     <Popup x:Name="emojiPopup" Placement="Bottom"
                            PlacementTarget="{Binding ElementName=emojiBtn}"
                            StaysOpen="True" AllowsTransparency="True"
@@ -202,42 +207,56 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Button x:Name="emojiIconPrevBtn" Grid.Column="0" Content="◀"
-                                            Width="20" Height="20" FontSize="8"
+                                    <Button x:Name="emojiIconPrevBtn" Grid.Column="0"
+                                            Width="20" Height="20"
                                             Cursor="Hand" ToolTip="Anterior"
                                             Style="{StaticResource TitleBtn}"
-                                            Click="EmojiIconPrevPage_Click"/>
+                                            Click="EmojiIconPrevPage_Click">
+                                        <Path x:Name="emojiIconPrevPath" Data="{StaticResource IconLeft}"
+                                              Stretch="Uniform" Width="10" Height="10"/>
+                                    </Button>
                                     <StackPanel x:Name="emojiIconPageDots" Grid.Column="1"
                                                 Orientation="Horizontal"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"/>
-                                    <Button x:Name="emojiIconNextBtn" Grid.Column="2" Content="▶"
-                                            Width="20" Height="20" FontSize="8"
+                                    <Button x:Name="emojiIconNextBtn" Grid.Column="2"
+                                            Width="20" Height="20"
                                             Cursor="Hand" ToolTip="Siguiente"
                                             Style="{StaticResource TitleBtn}"
-                                            Click="EmojiIconNextPage_Click"/>
+                                            Click="EmojiIconNextPage_Click">
+                                        <Path x:Name="emojiIconNextPath" Data="{StaticResource IconRight}"
+                                              Stretch="Uniform" Width="10" Height="10"/>
+                                    </Button>
                                 </Grid>
                             </Grid>
                         </Border>
                     </Popup>
-                    <Button x:Name="pinNoteBtn" FontSize="10" Content="📌"
+                    <Button x:Name="pinNoteBtn"
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             Style="{StaticResource TitleBtn}"
-                            Click="PinNote_Click"/>
-                    <TextBlock x:Name="reminderIndicator" Text="" FontSize="9"
-                               Visibility="Collapsed"
-                               WindowChrome.IsHitTestVisibleInChrome="False"
-                               VerticalAlignment="Center" Margin="2,0"/>
-                    <Button x:Name="exportMenuBtn" Content="⋮" Style="{StaticResource TitleBtn}"
+                            Click="PinNote_Click">
+                        <Path x:Name="pinIcon" Data="{StaticResource IconPin}"
+                              Stretch="Uniform" Width="14" Height="14"/>
+                    </Button>
+                    <Path x:Name="reminderIndicator" Data="{StaticResource IconBell}"
+                          Stretch="Uniform" Width="12" Height="12"
+                          Visibility="Collapsed"
+                          WindowChrome.IsHitTestVisibleInChrome="False"
+                          VerticalAlignment="Center" Margin="2,0"/>
+                    <Button x:Name="exportMenuBtn" Style="{StaticResource TitleBtn}"
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             ToolTip="Exportar / Importar"
-                            Click="ExportMenu_Click" FontSize="14" FontWeight="Bold"/>
+                            Click="ExportMenu_Click">
+                        <Path x:Name="exportMenuBtnPath" Data="{StaticResource IconOptions}"
+                              Stretch="Uniform" Width="14" Height="14"
+                              StrokeThickness="1.0"/>
+                    </Button>
                     <Popup x:Name="exportPopup" Placement="Bottom"
                            PlacementTarget="{Binding ElementName=exportMenuBtn}"
                            StaysOpen="False" AllowsTransparency="True"
                            PopupAnimation="Fade">
                         <Border Background="#2A2A2A" CornerRadius="8" Padding="4"
-                                BorderBrush="#40FFFFFF" BorderThickness="1"
+                                BorderBrush="#40FFFFFF" BorderThickness="0.5"
                                 MinWidth="140">
                             <StackPanel>
                                 <TextBlock Text="Opciones" FontSize="11"
@@ -246,7 +265,14 @@
                                 <Separator Background="#30FFFFFF" Margin="4,0"/>
                                 <Border x:Name="reminderMenuBtn" Style="{StaticResource MenuItemStyle}"
                                         MouseDown="ReminderMenu_Click">
-                                    <TextBlock Text="🔔  Recordatorio..." FontSize="12" Foreground="#EEFFFFFF"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Data="{StaticResource IconBell}"
+                                              Stretch="Uniform" Width="12" Height="12"
+                                              Stroke="{DynamicResource SidebarIconBrush}"
+                                              StrokeThickness="1.5"
+                                              VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Recordatorio..." FontSize="12" Foreground="#EEFFFFFF"/>
+                                    </StackPanel>
                                 </Border>
                                 <Separator Background="#30FFFFFF" Margin="4,0"/>
                                 <TextBlock Text="Exportar como..." FontSize="11"
@@ -631,13 +657,21 @@
                             </Border>
                         </Grid>
                     </Popup>
-                    <Button Content="─" Style="{StaticResource TitleBtn}"
+                    <Button Style="{StaticResource TitleBtn}"
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             ToolTip="Minimizar al dock"
-                            Click="MinimizeNote_Click"/>
-                    <Button Content="✕" Style="{StaticResource CloseBtn}" Margin="0,0,6,0"
+                            Click="MinimizeNote_Click">
+                        <Path x:Name="minBtnPath" Data="{StaticResource IconMin}"
+                              Stretch="Uniform" Width="12" Height="12"
+                              StrokeThickness="1.5"/>
+                    </Button>
+                    <Button Style="{StaticResource CloseBtn}" Margin="0,0,6,0"
                             WindowChrome.IsHitTestVisibleInChrome="True"
-                            Click="Close_Click"/>
+                            Click="Close_Click">
+                        <Path x:Name="closeBtnPath" Data="{StaticResource IconExit}"
+                              Stretch="Uniform" Width="12" Height="12"
+                              StrokeThickness="1.5"/>
+                    </Button>
                 </StackPanel>
 
                 <Border x:Name="noteSearchBorder" Visibility="Collapsed"
@@ -727,10 +761,11 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0"
-                           Text="📎" FontSize="12"
-                           VerticalAlignment="Center" Margin="2,0,4,0"
-                           Foreground="#88DDDDDD"/>
+                <Path Grid.Column="0"
+                      Data="{StaticResource IconPaperclip}"
+                      Stretch="Uniform" Width="12" Height="12"
+                      VerticalAlignment="Center" Margin="2,0,4,0"
+                      Fill="#88DDDDDD"/>
                 <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Hidden"
                               HorizontalScrollBarVisibility="Auto"
                               VerticalAlignment="Center">
@@ -796,14 +831,20 @@
 
                 <StackPanel x:Name="bottomRightPanel" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <Rectangle x:Name="sep1" Width="1" Fill="#40FFFFFF" Margin="3,2"/>
-                    <Button x:Name="checkboxBtn" Content="◻" FontSize="14"
-                            Width="24" Height="22" Cursor="Hand" ToolTip="Checklist"
+                    <Button x:Name="checkboxBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Checklist"
                             Style="{StaticResource TitleBtn}"
-                            Click="CheckboxBtn_Click"/>
-                    <Button x:Name="emojiInsertBtn" Content="😀" FontSize="13"
-                            Width="24" Height="22" Cursor="Hand" ToolTip="Insertar emoji"
+                            Click="CheckboxBtn_Click">
+                        <Path x:Name="checkboxPath" Data="{StaticResource IconCheck}"
+                              Stretch="Uniform" Width="14" Height="14"
+                              StrokeThickness="1.5"/>
+                    </Button>
+                    <Button x:Name="emojiInsertBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Insertar emoji"
                             Style="{StaticResource TitleBtn}"
-                            Click="EmojiInsertBtn_Click"/>
+                            Click="EmojiInsertBtn_Click">
+                        <Path x:Name="emojiInsertBtnPath" Data="{StaticResource IconEmoji}"
+                              Stretch="Uniform" Width="14" Height="14"
+                              StrokeThickness="1.5"/>
+                    </Button>
                     <Popup x:Name="emojiInsertPopup" Placement="Top"
                            PlacementTarget="{Binding ElementName=emojiInsertBtn}"
                            StaysOpen="True" AllowsTransparency="True"
@@ -824,77 +865,97 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Button x:Name="emojiPrevBtn" Grid.Column="0" Content="◀"
-                                            Width="20" Height="20" FontSize="8"
+                                    <Button x:Name="emojiPrevBtn" Grid.Column="0"
+                                            Width="20" Height="20"
                                             Cursor="Hand" ToolTip="Anterior"
                                             Style="{StaticResource TitleBtn}"
-                                            Click="EmojiPrevPage_Click"/>
+                                            Click="EmojiPrevPage_Click">
+                                        <Path x:Name="emojiPrevPath" Data="{StaticResource IconLeft}"
+                                              Stretch="Uniform" Width="10" Height="10"/>
+                                    </Button>
                                     <StackPanel x:Name="emojiPageDots" Grid.Column="1"
                                                 Orientation="Horizontal"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"/>
-                                    <Button x:Name="emojiNextBtn" Grid.Column="2" Content="▶"
-                                            Width="20" Height="20" FontSize="8"
+                                    <Button x:Name="emojiNextBtn" Grid.Column="2"
+                                            Width="20" Height="20"
                                             Cursor="Hand" ToolTip="Siguiente"
                                             Style="{StaticResource TitleBtn}"
-                                            Click="EmojiNextPage_Click"/>
+                                            Click="EmojiNextPage_Click">
+                                        <Path x:Name="emojiNextPath" Data="{StaticResource IconRight}"
+                                              Stretch="Uniform" Width="10" Height="10"/>
+                                    </Button>
                                 </Grid>
                             </Grid>
                         </Border>
                     </Popup>
-                    <Button x:Name="alignLeftBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Alinear izquierda"
+                    <Button x:Name="alignBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Alinear"
                             Style="{StaticResource TitleBtn}"
-                            Click="AlignLeft_Click">
-                        <Grid Width="12" Height="11">
-                            <Path x:Name="alignLeftPath" Data="M0,2 L12,2 M0,6 L8,6 M0,10 L5,10"
-                                  StrokeThickness="1.2"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  StrokeLineJoin="Round"/>
-                        </Grid>
+                            Click="AlignBtn_Click">
+                        <Path x:Name="alignBtnPath" Data="{StaticResource IconAlignLeft}"
+                              Stretch="Uniform" Width="14" Height="14"/>
                     </Button>
-                    <Button x:Name="alignCenterBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Centrar"
-                            Style="{StaticResource TitleBtn}"
-                            Click="AlignCenter_Click">
-                        <Grid Width="12" Height="11">
-                            <Path x:Name="alignCenterPath" Data="M1,2 L11,2 M3,6 L9,6 M5,10 L7,10"
-                                  StrokeThickness="1.2"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  StrokeLineJoin="Round"/>
-                        </Grid>
-                    </Button>
-                    <Button x:Name="alignRightBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Alinear derecha"
-                            Style="{StaticResource TitleBtn}"
-                            Click="AlignRight_Click">
-                        <Grid Width="12" Height="11">
-                            <Path x:Name="alignRightPath" Data="M0,2 L12,2 M4,6 L12,6 M7,10 L12,10"
-                                  StrokeThickness="1.2"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  StrokeLineJoin="Round"/>
-                        </Grid>
-                    </Button>
-                    <Button x:Name="alignJustifyBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Justificar"
-                            Style="{StaticResource TitleBtn}"
-                            Click="AlignJustify_Click">
-                        <Grid Width="12" Height="11">
-                            <Path x:Name="alignJustifyPath" Data="M0,2 L12,2 M0,6 L12,6 M0,10 L12,10"
-                                  StrokeThickness="1.2"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  StrokeLineJoin="Round"/>
-                        </Grid>
-                    </Button>
+                    <Popup x:Name="alignPopup" Placement="Top"
+                           PlacementTarget="{Binding ElementName=alignBtn}"
+                           StaysOpen="False" AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Background="{Binding Color}" CornerRadius="6" Padding="4"
+                                BorderBrush="#40000000" BorderThickness="1">
+                            <StackPanel Orientation="Horizontal" TextElement.Foreground="{Binding TextForeground}">
+                                <Button x:Name="alignPopupLeftBtn" Width="28" Height="28"
+                                        Style="{StaticResource TitleBtn}"
+                                        Click="AlignLeft_Click"
+                                        ToolTip="Izquierda">
+                                    <Path x:Name="alignPopupLeftPath" Data="{StaticResource IconAlignLeft}"
+                                          Stretch="Uniform" Width="16" Height="16"/>
+                                </Button>
+                                <Button x:Name="alignPopupCenterBtn" Width="28" Height="28"
+                                        Style="{StaticResource TitleBtn}"
+                                        Click="AlignCenter_Click"
+                                        ToolTip="Centrado">
+                                    <Path x:Name="alignPopupCenterPath" Data="{StaticResource IconAlignCenter}"
+                                          Stretch="Uniform" Width="16" Height="16"/>
+                                </Button>
+                                <Button x:Name="alignPopupRightBtn" Width="28" Height="28"
+                                        Style="{StaticResource TitleBtn}"
+                                        Click="AlignRight_Click"
+                                        ToolTip="Derecha">
+                                    <Path x:Name="alignPopupRightPath" Data="{StaticResource IconAlignRight}"
+                                          Stretch="Uniform" Width="16" Height="16"/>
+                                </Button>
+                                <Button x:Name="alignPopupJustifyBtn" Width="28" Height="28"
+                                        Style="{StaticResource TitleBtn}"
+                                        Click="AlignJustify_Click"
+                                        ToolTip="Justificado">
+                                    <Path x:Name="alignPopupJustifyPath" Data="{StaticResource IconAlignJustify}"
+                                          Stretch="Uniform" Width="16" Height="16"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
                     <Rectangle x:Name="sep2" Width="1" Fill="#40FFFFFF" Margin="3,2"/>
-                    <Button x:Name="undoBtn" Content="↩" FontSize="13"
-                            Width="24" Height="22" Cursor="Hand" ToolTip="Deshacer (Ctrl+Z)"
+                    <Button x:Name="undoBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Deshacer (Ctrl+Z)"
                             Style="{StaticResource TitleBtn}"
-                            Click="UndoBtn_Click"/>
-                    <Button x:Name="redoBtn" Content="↪" FontSize="13"
-                            Width="24" Height="22" Cursor="Hand" ToolTip="Rehacer (Ctrl+Y)"
+                            Click="UndoBtn_Click">
+                        <Path x:Name="undoBtnPath" Data="{StaticResource IconUndo}"
+                              Stretch="Uniform" Width="14" Height="14"
+                              StrokeThickness="1.5"/>
+                    </Button>
+                    <Button x:Name="redoBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Rehacer (Ctrl+Y)"
                             Style="{StaticResource TitleBtn}"
-                            Click="RedoBtn_Click"/>
-                    <Button x:Name="hideCompletedBtn" Content="👻" FontSize="14"
+                            Click="RedoBtn_Click">
+                        <Path x:Name="redoBtnPath" Data="{StaticResource IconRedo}"
+                              Stretch="Uniform" Width="14" Height="14"
+                              StrokeThickness="1.5"/>
+                    </Button>
+                    <Button x:Name="hideCompletedBtn"
                             Width="24" Height="22" Cursor="Hand" ToolTip="Ocultar completados"
                             Style="{StaticResource TitleBtn}"
-                            Click="HideCompletedBtn_Click"/>
+                            Click="HideCompletedBtn_Click">
+                        <Path x:Name="hideCompletedIcon" Data="{StaticResource IconEye}"
+                              Stretch="Uniform" Width="14" Height="14"
+                              StrokeThickness="1.5"/>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>

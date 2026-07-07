@@ -889,6 +889,12 @@ public partial class MainWindow : Window
     private void Topmost_Changed(object sender, RoutedEventArgs e)
     {
         Topmost = pinBtn.IsChecked == true;
+        if (pinBtnPath != null)
+        {
+            pinBtnPath.Data = pinBtn.IsChecked == true
+                ? (System.Windows.Media.StreamGeometry)FindResource("IconPinned")
+                : (System.Windows.Media.StreamGeometry)FindResource("IconPin");
+        }
     }
 
     private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
@@ -1163,6 +1169,12 @@ public partial class MainWindow : Window
 
         // Update popup item foregrounds (QN menu)
         UpdatePopupItemForegrounds(menuStack, popupText);
+
+        // Sidebar SVG icons via DynamicResource — replace brush instead of mutating frozen resource
+        var iconColor = effective == "light"
+            ? Color.FromArgb(0xBB, 0x33, 0x33, 0x33)
+            : Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF);
+        Resources["SidebarIconBrush"] = new SolidColorBrush(iconColor);
 
         // Dock theme
         _dockWindow?.ApplyTheme(effective);
@@ -1556,22 +1568,22 @@ public partial class MainWindow : Window
         _sidebarActiveBg = activeBg;
         UpdateSidebarHighlight();
 
-        sidebarToggleIcon.Foreground = mutedFg;
-        sectAllIcon.Foreground = mutedFg;
+        sidebarToggleIcon.Stroke = mutedFg;
+        sectAllIcon.Stroke = mutedFg;
         sectAllLabel.Foreground = mutedFg;
         sectAllCount.Foreground = mutedFg;
-        sectArchivedIcon.Foreground = mutedFg;
+        sectArchivedIcon.Stroke = mutedFg;
         sectArchivedLabel.Foreground = mutedFg;
         sectArchivedCount.Foreground = mutedFg;
-        sectTrashIcon.Foreground = mutedFg;
+        sectTrashIcon.Stroke = mutedFg;
         sectTrashLabel.Foreground = mutedFg;
         sectTrashCount.Foreground = mutedFg;
-        sectTimelineIcon.Foreground = mutedFg;
+        sectTimelineIcon.Stroke = mutedFg;
         sectTimelineLabel.Foreground = mutedFg;
-        sectNotebooksIcon.Foreground = mutedFg;
+        sectNotebooksIcon.Stroke = mutedFg;
         sectNotebooksLabel.Foreground = mutedFg;
         sectNotebooksBtnAdd.Foreground = mutedFg;
-        sectTagsIcon.Foreground = mutedFg;
+        sectTagsIcon.Stroke = mutedFg;
         sectTagsLabel.Foreground = mutedFg;
     }
 

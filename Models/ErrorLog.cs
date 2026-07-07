@@ -18,14 +18,23 @@ public static class ErrorLog
             {
                 var dir = Path.GetDirectoryName(logPath);
                 if (dir != null) Directory.CreateDirectory(dir);
-                File.AppendAllText(logPath,
-                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {context}: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n\n");
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {context}: {ex.GetType().Name}: {ex.Message}");
+                var inner = ex.InnerException;
+                while (inner != null)
+                {
+                    sb.AppendLine($"  Inner: {inner.GetType().Name}: {inner.Message}");
+                    inner = inner.InnerException;
+                }
+                sb.AppendLine(ex.StackTrace);
+                sb.AppendLine();
+                File.AppendAllText(logPath, sb.ToString());
             }
         }
         catch { }
     }
 
-    public static void Write(string message)
+    public static void Write(string text)
     {
         try
         {
@@ -33,8 +42,8 @@ public static class ErrorLog
             {
                 var dir = Path.GetDirectoryName(logPath);
                 if (dir != null) Directory.CreateDirectory(dir);
-                File.AppendAllText(logPath,
-                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+                var msg = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {text}\n\n";
+                File.AppendAllText(logPath, msg);
             }
         }
         catch { }
