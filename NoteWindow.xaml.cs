@@ -302,6 +302,9 @@ public partial class NoteWindow : Window
         const int VK_LCONTROL = 0xA2;
         const int VK_RCONTROL = 0xA3;
 
+        // Double-click on the title bar → edit title.
+        // Handled mainly via TitleBar_PreviewMouseDown (ClickCount >= 2), but
+        // keep this as fallback if Windows sends a non-client double-click.
         if (msg == WM_NCLBUTTONDBLCLK && (int)wParam == HTCAPTION)
         {
             handled = true;
@@ -699,6 +702,18 @@ public partial class NoteWindow : Window
             if (FindParent<Button>(src) != null) return;
             if (FindParent<TextBox>(src) != null) return;
         }
+
+        // Double-click on title bar → edit title.
+        // The first click (ClickCount=1) enters a modal move loop via SendMessage.
+        // If the user releases quickly, the loop exits and the second click of the
+        // double-click arrives as a normal PreviewMouseDown with ClickCount=2.
+        if (e.ClickCount >= 2)
+        {
+            EnterEditMode();
+            e.Handled = true;
+            return;
+        }
+
         var hwnd = new WindowInteropHelper(this).Handle;
         ReleaseCapture();
         SendMessage(hwnd, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
