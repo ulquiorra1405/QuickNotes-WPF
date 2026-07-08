@@ -2035,9 +2035,9 @@ public partial class MainWindow : Window
         }
         else
         {
-            // Normal sort: pinned first, then by last modified
-            _view.SortDescriptions.Add(new SortDescription("IsPinned", ListSortDirection.Descending));
-            _view.SortDescriptions.Add(new SortDescription("LastModified", ListSortDirection.Descending));
+            // Normal view: no SortDescriptions — collection order IS the visual order,
+            // which enables manual drag reorder. Pinned-at-top is handled by
+            // MoveNoteToCorrectPosition() on pin toggle.
         }
 
         _view.Refresh();

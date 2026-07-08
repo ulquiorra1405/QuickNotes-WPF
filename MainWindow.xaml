@@ -221,7 +221,8 @@
                     </Grid.ColumnDefinitions>
                     <Button x:Name="menuBtn" Grid.Column="0"
                             Style="{StaticResource HeaderBtn}"
-                            Click="MenuBtn_Click">
+                            Click="MenuBtn_Click"
+                            ToolTip="Menú QN">
                         <Path Data="{StaticResource IconQN}"
                               Stretch="Uniform" Width="20" Height="20"
                               Fill="{DynamicResource SidebarIconBrush}"/>
@@ -317,14 +318,16 @@
                                   IsChecked="True"
                                   Checked="Topmost_Changed"
                                   Unchecked="Topmost_Changed"
-                                  Style="{StaticResource HeaderBtn}">
+                                  Style="{StaticResource HeaderBtn}"
+                                  ToolTip="Siempre visible">
                         <Path x:Name="pinBtnPath" Data="{StaticResource IconPinned}"
                               Stretch="Uniform" Width="18" Height="18"
                               Fill="{DynamicResource SidebarIconBrush}"/>
                     </ToggleButton>
                     <Button x:Name="addBtn" Grid.Column="3"
                             Style="{StaticResource HeaderBtn}"
-                            Click="AddNote_Click">
+                            Click="AddNote_Click"
+                            ToolTip="Nueva nota">
                         <Path Data="{StaticResource IconAdd}"
                               Stretch="Uniform" Width="18" Height="18"
                               Stroke="{DynamicResource SidebarIconBrush}"
@@ -343,7 +346,8 @@
                     </Popup>
                     <Button x:Name="minBtn" Grid.Column="4"
                             Style="{StaticResource HeaderBtn}"
-                            Click="Minimize_Click">
+                            Click="Minimize_Click"
+                            ToolTip="Minimizar al Dock">
                     <Path Data="{StaticResource IconMin}" Stretch="Uniform"
                           Stroke="{DynamicResource SidebarIconBrush}"
                           StrokeThickness="1.5" Width="18" Height="18"/>
@@ -370,7 +374,8 @@
                                     Style="{StaticResource SidebarItem}"
                                     PreviewMouseDown="SidebarToggle_Click"
                                     MouseEnter="SidebarItem_MouseEnter"
-                                    MouseLeave="SidebarItem_MouseLeave">
+                                    MouseLeave="SidebarItem_MouseLeave"
+                                    ToolTip="Mostrar/Ocultar barra lateral">
                                 <Path x:Name="sidebarToggleIcon" Data="{StaticResource IconHamb}" Stretch="Uniform"
                                            Stroke="{DynamicResource SidebarIconBrush}"
                                            StrokeThickness="1.5" Width="18" Height="18"
@@ -383,7 +388,8 @@
                                     PreviewMouseDown="SidebarSection_Click"
                                     MouseEnter="SidebarItem_MouseEnter"
                                     MouseLeave="SidebarItem_MouseLeave"
-                                    Tag="all">
+                                    Tag="all"
+                                    ToolTip="Todas las notas">
                                 <StackPanel Orientation="Horizontal">
                                     <Path x:Name="sectAllIcon" Data="{StaticResource IconNotebook}" Stretch="Uniform"
                                            Stroke="{DynamicResource SidebarIconBrush}"
@@ -404,7 +410,8 @@
                                     PreviewMouseDown="SidebarSection_Click"
                                     MouseEnter="SidebarItem_MouseEnter"
                                     MouseLeave="SidebarItem_MouseLeave"
-                                    Tag="archived">
+                                    Tag="archived"
+                                    ToolTip="Notas archivadas">
                                 <StackPanel Orientation="Horizontal">
                                     <Path x:Name="sectArchivedIcon" Data="{StaticResource IconArchive}" Stretch="Uniform"
                                            Stroke="{DynamicResource SidebarIconBrush}"
@@ -425,7 +432,8 @@
                                     PreviewMouseDown="SidebarSection_Click"
                                     MouseEnter="SidebarItem_MouseEnter"
                                     MouseLeave="SidebarItem_MouseLeave"
-                                    Tag="trash">
+                                    Tag="trash"
+                                    ToolTip="Papelera">
                                 <StackPanel Orientation="Horizontal">
                                     <Path x:Name="sectTrashIcon" Data="{StaticResource IconTrash}" Stretch="Uniform"
                                            Stroke="{DynamicResource SidebarIconBrush}"
@@ -450,7 +458,8 @@
                                         PreviewMouseDown="SidebarAccordion_Click"
                                         MouseEnter="SidebarItem_MouseEnter"
                                         MouseLeave="SidebarItem_MouseLeave"
-                                        Tag="notebooks">
+                                        Tag="notebooks"
+                                        ToolTip="Libretas">
                                     <StackPanel Orientation="Horizontal">
                                         <Path x:Name="sectNotebooksIcon" Data="{StaticResource IconBook}" Stretch="Uniform"
                                            Stroke="{DynamicResource SidebarIconBrush}"
@@ -474,7 +483,8 @@
                                         PreviewMouseDown="SidebarAccordion_Click"
                                         MouseEnter="SidebarItem_MouseEnter"
                                         MouseLeave="SidebarItem_MouseLeave"
-                                        Tag="tags">
+                                        Tag="tags"
+                                        ToolTip="Etiquetas">
                                     <StackPanel Orientation="Horizontal">
                                         <Path x:Name="sectTagsIcon" Data="{StaticResource IconHashtag}" Stretch="Uniform"
                                            Stroke="{DynamicResource SidebarIconBrush}"
@@ -497,7 +507,8 @@
                                     PreviewMouseDown="SidebarSection_Click"
                                     MouseEnter="SidebarItem_MouseEnter"
                                     MouseLeave="SidebarItem_MouseLeave"
-                                    Tag="timeline">
+                                    Tag="timeline"
+                                    ToolTip="Línea de tiempo">
                                 <StackPanel Orientation="Horizontal">
                                     <Path x:Name="sectTimelineIcon" Data="{StaticResource IconClock}" Stretch="Uniform"
                                            Stroke="{DynamicResource SidebarIconBrush}"
