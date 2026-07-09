@@ -443,6 +443,7 @@ public partial class NoteWindow : Window
         var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is MainWindow) as MainWindow;
         mainWin?.DebounceSave();
         if (_hideCompleted && !_isApplyingHideCompleted) ApplyHideCompleted();
+        if (_isZenMode) UpdateZenWordCount();
     }
 
     private void Title_TextChanged(object sender, TextChangedEventArgs e)
@@ -816,18 +817,39 @@ public partial class NoteWindow : Window
         // Maximize
         WindowState = WindowState.Maximized;
 
+        // Card effect: subtle rounded container floating on the note background
+        var noteHex = _note.Color ?? "#F8F9FA";
+        var noteColor = ParseColor(noteHex);
+        var dark = IsDarkColor(noteHex);
+        var cardAlpha = dark ? (byte)0x14 : (byte)0x20;
+        zenWrapper.Background = new SolidColorBrush(Color.FromArgb(cardAlpha, noteColor.R, noteColor.G, noteColor.B));
+        zenWrapper.CornerRadius = new CornerRadius(8);
+
         // Centered content with max width for readability
         zenWrapper.MaxWidth = 760;
         zenWrapper.HorizontalAlignment = HorizontalAlignment.Center;
-        zenWrapper.Padding = new Thickness(24, 16, 24, 16);
+        zenWrapper.Padding = new Thickness(32, 20, 32, 24);
 
         // Larger typography
         noteText.FontSize = 16;
         ApplyZenParagraphStyle();
 
+        // Floating bar adaptive background
+        var barBg = dark
+            ? Color.FromArgb(0xC0, 0x22, 0x22, 0x22)
+            : Color.FromArgb(0xD0, 0x18, 0x18, 0x18);
+        zenFloatBar.Background = new SolidColorBrush(barBg);
+
         // Ensure floating bar starts hidden
         zenFloatBar.Visibility = Visibility.Collapsed;
         _zenFloatBarVisible = false;
+
+        // Update word count
+        UpdateZenWordCount();
+
+        // Fade in the editor area
+        zenWrapper.Opacity = 0;
+        zenWrapper.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(0, 1, 200));
     }
 
     private void ExitZenMode()
@@ -856,6 +878,10 @@ public partial class NoteWindow : Window
         zenWrapper.MaxWidth = double.PositiveInfinity;
         zenWrapper.HorizontalAlignment = HorizontalAlignment.Stretch;
         zenWrapper.Padding = new Thickness(0);
+        zenWrapper.Background = null;
+        zenWrapper.CornerRadius = new CornerRadius(0);
+        zenWrapper.Opacity = 1;
+        zenWrapper.BeginAnimation(OpacityProperty, null);
 
         // Restore font size
         noteText.FontSize = _zenSavedFontSize != 0 ? _zenSavedFontSize : 13;
@@ -875,6 +901,18 @@ public partial class NoteWindow : Window
     {
         ExitZenMode();
         MinimizeNote_Click(sender, e);
+    }
+
+    private void UpdateZenWordCount()
+    {
+        if (!_isZenMode) return;
+        var range = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd);
+        var text = range.Text;
+        var charCount = text.Length;
+        var wordCount = string.IsNullOrWhiteSpace(text)
+            ? 0
+            : text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+        zenWordCount.Text = $"{wordCount} palabras · {charCount} caracteres";
     }
 
     private void NoteWindow_PreviewMouseMove(object sender, MouseEventArgs e)
