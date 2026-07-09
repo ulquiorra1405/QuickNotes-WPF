@@ -107,6 +107,16 @@ public partial class NoteWindow : Window
 
     private Color _currentHighlightColor = Color.FromArgb(0x55, 0xFF, 0xD7, 0x00);
 
+    // Zen mode
+    private bool _isZenMode;
+    private double _zenRestoreLeft;
+    private double _zenRestoreTop;
+    private double _zenRestoreWidth;
+    private double _zenRestoreHeight;
+    private double _zenSavedFontSize;
+    private bool _zenFloatBarVisible;
+    private Style? _savedParaStyle;
+
     private static readonly Color[] HighlightColors =
     [
         Color.FromArgb(0x55, 0xFF, 0xD7, 0x00), // Yellow
@@ -190,6 +200,7 @@ public partial class NoteWindow : Window
             UpdateDwmTheme();
         };
         PreviewKeyDown += NoteWindow_PreviewKeyDown;
+        PreviewMouseMove += NoteWindow_PreviewMouseMove;
         PreviewKeyUp += (_, e) =>
         {
             if (e.Key is Key.LeftCtrl or Key.RightCtrl) _ctrlHeld = false;
@@ -770,6 +781,167 @@ public partial class NoteWindow : Window
         if (!double.IsNaN(_note.WinTop)) Top = _note.WinTop;
         if (!double.IsNaN(_note.WinWidth)) Width = _note.WinWidth;
         if (!double.IsNaN(_note.WinHeight)) Height = _note.WinHeight;
+    }
+
+    // █████████████████████████████████████████████████████████████████████████
+    // Modo Zen
+    // █████████████████████████████████████████████████████████████████████████
+
+    private void ToggleZenMode()
+    {
+        if (_isZenMode)
+            ExitZenMode();
+        else
+            EnterZenMode();
+    }
+
+    private void EnterZenMode()
+    {
+        if (_isZenMode) return;
+        _isZenMode = true;
+
+        // Save current window state for restoration
+        _zenRestoreLeft = Left;
+        _zenRestoreTop = Top;
+        _zenRestoreWidth = Width;
+        _zenRestoreHeight = Height;
+        _zenSavedFontSize = noteText.FontSize;
+
+        // Hide all bars completely
+        titleBar.Visibility = Visibility.Collapsed;
+        colorBar.Visibility = Visibility.Collapsed;
+        attachmentBar.Visibility = Visibility.Collapsed;
+        noteSearchBorder.Visibility = Visibility.Collapsed;
+
+        // Maximize
+        WindowState = WindowState.Maximized;
+
+        // Centered content with max width for readability
+        zenWrapper.MaxWidth = 760;
+        zenWrapper.HorizontalAlignment = HorizontalAlignment.Center;
+        zenWrapper.Padding = new Thickness(24, 16, 24, 16);
+
+        // Larger typography
+        noteText.FontSize = 16;
+        ApplyZenParagraphStyle();
+
+        // Ensure floating bar starts hidden
+        zenFloatBar.Visibility = Visibility.Collapsed;
+        _zenFloatBarVisible = false;
+    }
+
+    private void ExitZenMode()
+    {
+        if (!_isZenMode) return;
+        _isZenMode = false;
+
+        // Restore window state
+        WindowState = WindowState.Normal;
+        Left = _zenRestoreLeft;
+        Top = _zenRestoreTop;
+        Width = _zenRestoreWidth;
+        Height = _zenRestoreHeight;
+
+        // Show all bars
+        titleBar.Visibility = Visibility.Visible;
+        colorBar.Visibility = Visibility.Visible;
+        attachmentBar.Visibility = Visibility.Visible;
+        titleBar.Height = 30;
+        titleRightPanel.Visibility = Visibility.Visible;
+        colorBar.Height = 32;
+        noteText.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        ApplyScrollbarReversal(noteText, _note.Color);
+
+        // Reset zen wrapper to normal layout
+        zenWrapper.MaxWidth = double.PositiveInfinity;
+        zenWrapper.HorizontalAlignment = HorizontalAlignment.Stretch;
+        zenWrapper.Padding = new Thickness(0);
+
+        // Restore font size
+        noteText.FontSize = _zenSavedFontSize != 0 ? _zenSavedFontSize : 13;
+        RestoreParagraphStyle();
+
+        // Hide floating bar
+        zenFloatBar.Visibility = Visibility.Collapsed;
+        _zenFloatBarVisible = false;
+    }
+
+    private void ZenExit_Click(object sender, RoutedEventArgs e)
+    {
+        ExitZenMode();
+    }
+
+    private void ZenMinBtn_Click(object sender, RoutedEventArgs e)
+    {
+        ExitZenMode();
+        MinimizeNote_Click(sender, e);
+    }
+
+    private void NoteWindow_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isZenMode) return;
+
+        var pos = e.GetPosition(this);
+
+        // Show floating bar when mouse is near the top edge
+        if (pos.Y < 40)
+        {
+            if (!_zenFloatBarVisible)
+            {
+                _zenFloatBarVisible = true;
+                zenFloatBar.Visibility = Visibility.Visible;
+                zenFloatBar.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(0, 1, 150));
+            }
+        }
+        // Hide when mouse moves down past the bar
+        else if (pos.Y > 60)
+        {
+            if (_zenFloatBarVisible)
+            {
+                _zenFloatBarVisible = false;
+                var fade = AnimationHelper.MakeAnimation(1, 0, 150);
+                fade.Completed += (_, _) =>
+                {
+                    if (!_zenFloatBarVisible)
+                        zenFloatBar.Visibility = Visibility.Collapsed;
+                };
+                zenFloatBar.BeginAnimation(OpacityProperty, fade);
+            }
+        }
+    }
+
+    private void ApplyZenParagraphStyle()
+    {
+        _savedParaStyle = noteText.Resources[typeof(Paragraph)] as Style;
+        var zenStyle = new Style(typeof(Paragraph));
+        if (_savedParaStyle != null)
+        {
+            foreach (var setter in _savedParaStyle.Setters)
+                zenStyle.Setters.Add(setter);
+        }
+        // Override line height for Zen typography
+        bool hasLineHeight = false;
+        foreach (var setter in zenStyle.Setters)
+        {
+            if (setter is Setter s && s.Property == Paragraph.LineHeightProperty)
+            {
+                s.Value = 26.0;
+                hasLineHeight = true;
+                break;
+            }
+        }
+        if (!hasLineHeight)
+            zenStyle.Setters.Add(new Setter(Paragraph.LineHeightProperty, 26.0));
+        noteText.Resources[typeof(Paragraph)] = zenStyle;
+    }
+
+    private void RestoreParagraphStyle()
+    {
+        if (_savedParaStyle != null)
+            noteText.Resources[typeof(Paragraph)] = _savedParaStyle;
+        else
+            noteText.Resources.Remove(typeof(Paragraph));
+        _savedParaStyle = null;
     }
 
     private void ColorDot_MouseDown(object sender, MouseButtonEventArgs e)
@@ -1470,6 +1642,22 @@ public partial class NoteWindow : Window
 
     private void NoteWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Ctrl+Shift+Z toggles Zen mode
+        if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.Z)
+        {
+            ToggleZenMode();
+            e.Handled = true;
+            return;
+        }
+
+        // Escape exits Zen mode
+        if (_isZenMode && e.Key == Key.Escape)
+        {
+            ExitZenMode();
+            e.Handled = true;
+            return;
+        }
+
         // Track Ctrl key state for grid snap (avoids Keyboard.IsKeyDown in hot path)
         if (e.Key is Key.LeftCtrl or Key.RightCtrl) _ctrlHeld = true;
 

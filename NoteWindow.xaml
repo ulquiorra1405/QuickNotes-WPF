@@ -671,31 +671,58 @@
 
         <!-- Note text -->
         <Grid Grid.Row="1">
-            <local:NoteRichTextBox x:Name="noteText"
-                         Background="Transparent" BorderThickness="0"
-                         Foreground="{Binding TextForeground}" FontFamily="Calibri" FontSize="13"
-                         Padding="10,2,15,6"
-                         VerticalScrollBarVisibility="Auto"
-                         ScrollViewer.CanContentScroll="False"
-                         AcceptsTab="True"
-                         Loaded="NoteText_Loaded"
-                         LostFocus="Text_LostFocus"
-                         TextChanged="NoteText_TextChanged"
-                         PreviewMouseLeftButtonDown="NoteText_PreviewMouseDown"
-                         PreviewMouseMove="NoteText_PreviewMouseMove"
-                         SelectionChanged="NoteText_SelectionChanged"
-                         IsDocumentEnabled="True">
-                <local:NoteRichTextBox.Resources>
-                    <Style TargetType="Paragraph">
-                        <Setter Property="Margin" Value="0"/>
-                        <Setter Property="LineHeight" Value="18"/>
-                        <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
-                    </Style>
-                </local:NoteRichTextBox.Resources>
-            </local:NoteRichTextBox>
-            <!-- Search highlight overlay (no document modification) -->
-            <Canvas x:Name="searchCanvas" IsHitTestVisible="False"
-                    ClipToBounds="True" Visibility="Collapsed"/>
+            <Border x:Name="zenWrapper" HorizontalAlignment="Stretch">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <!-- Zen floating bar (hidden by default) -->
+                    <Border x:Name="zenFloatBar" Grid.Row="0" Height="28"
+                            Background="#40000000" Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="zenExitBtn" Content="←" Width="28" Height="28"
+                                    Style="{StaticResource TitleBtn}" FontSize="14"
+                                    ToolTip="Salir del modo zen"
+                                    Click="ZenExit_Click"/>
+                            <TextBlock Text="{Binding Title}" Foreground="{Binding TextForeground}"
+                                       Opacity="0.6" FontSize="11"
+                                       VerticalAlignment="Center" Padding="6,0,0,0"/>
+                            <Button x:Name="zenMinBtn" Content="─" Width="28" Height="28"
+                                    Style="{StaticResource TitleBtn}" FontSize="14"
+                                    ToolTip="Minimizar al dock"
+                                    Click="ZenMinBtn_Click"/>
+                        </StackPanel>
+                    </Border>
+                    <Grid Grid.Row="1">
+                        <local:NoteRichTextBox x:Name="noteText"
+                                     Background="Transparent" BorderThickness="0"
+                                     Foreground="{Binding TextForeground}" FontFamily="Calibri" FontSize="13"
+                                     Padding="10,2,15,6"
+                                     VerticalScrollBarVisibility="Auto"
+                                     ScrollViewer.CanContentScroll="False"
+                                     AcceptsTab="True"
+                                     Loaded="NoteText_Loaded"
+                                     LostFocus="Text_LostFocus"
+                                     TextChanged="NoteText_TextChanged"
+                                     PreviewMouseLeftButtonDown="NoteText_PreviewMouseDown"
+                                     PreviewMouseMove="NoteText_PreviewMouseMove"
+                                     SelectionChanged="NoteText_SelectionChanged"
+                                     IsDocumentEnabled="True">
+                            <local:NoteRichTextBox.Resources>
+                                <Style TargetType="Paragraph">
+                                    <Setter Property="Margin" Value="0"/>
+                                    <Setter Property="LineHeight" Value="18"/>
+                                    <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
+                                </Style>
+                            </local:NoteRichTextBox.Resources>
+                        </local:NoteRichTextBox>
+                        <!-- Search highlight overlay (no document modification) -->
+                        <Canvas x:Name="searchCanvas" IsHitTestVisible="False"
+                                ClipToBounds="True" Visibility="Collapsed"/>
+                    </Grid>
+                </Grid>
+            </Border>
         </Grid>
 
         <!-- Attachment bar -->
