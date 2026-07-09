@@ -152,6 +152,7 @@ public partial class NoteWindow : Window
     private double _zenRestoreHeight;
     private double _zenSavedFontSize;
     private DispatcherTimer? _zenAuroraTimer;
+    private Rectangle? _zenFrostOverlay;
     private Style? _savedParaStyle;
 
     private static readonly Color[] HighlightColors =
@@ -914,9 +915,7 @@ public partial class NoteWindow : Window
 
     private void StartZenAurora()
     {
-        // Animated gradient backdrop: note color glows subtly behind the card,
-        // shifting position slowly for a living, organic feel.
-        // Wallpaper stays visible through the low-alpha stops.
+        // === Aurora gradient (animated) ===
         var noteHex = _note.Color ?? "#F8F9FA";
         var noteColor = ParseColor(noteHex);
 
@@ -951,13 +950,11 @@ public partial class NoteWindow : Window
             {
                 var elapsed = (Environment.TickCount - startTicks) / 1000.0;
 
-                // Gradient stops drift like slow-moving aurora
                 brush.GradientStops[0].Offset = 0.0;
                 brush.GradientStops[1].Offset = 0.2 + 0.12 * Math.Sin(elapsed * 0.3 + 0.5);
                 brush.GradientStops[2].Offset = 0.4 + 0.15 * Math.Sin(elapsed * 0.4 + 1.2);
                 brush.GradientStops[3].Offset = 0.7 + 0.15 * Math.Sin(elapsed * 0.35 + 2.8);
 
-                // Gradient direction shifts organically
                 brush.StartPoint = new Point(
                     0.3 + 0.2 * Math.Sin(elapsed * 0.2),
                     0.3 + 0.2 * Math.Cos(elapsed * 0.15));
@@ -966,6 +963,42 @@ public partial class NoteWindow : Window
                     0.7 + 0.2 * Math.Cos(elapsed * 0.14 + 1.5));
             },
             Dispatcher);
+
+        // === Frosted glass stippled overlay ===
+        // Tiny white dots in a tiled pattern, very low opacity.
+        // Combined with the aurora gradient it mimics frosted/textured glass.
+        var dotGroup = new GeometryGroup();
+        // Organic cluster of dots within a 6×6 tile
+        dotGroup.Children.Add(new EllipseGeometry(new Point(1.5, 1.5), 0.6, 0.6));
+        dotGroup.Children.Add(new EllipseGeometry(new Point(4.2, 2.0), 0.5, 0.5));
+        dotGroup.Children.Add(new EllipseGeometry(new Point(2.8, 4.5), 0.4, 0.4));
+        dotGroup.Children.Add(new EllipseGeometry(new Point(5.0, 4.8), 0.7, 0.7));
+        dotGroup.Children.Add(new EllipseGeometry(new Point(0.8, 3.8), 0.3, 0.3));
+        dotGroup.Children.Add(new EllipseGeometry(new Point(3.5, 1.0), 0.3, 0.3));
+
+        var dotDrawing = new GeometryDrawing
+        {
+            Geometry = dotGroup,
+            Brush = new SolidColorBrush(Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF)) // ~8% white
+        };
+
+        var dotBrush = new DrawingBrush
+        {
+            Drawing = dotDrawing,
+            TileMode = TileMode.Tile,
+            Viewport = new Rect(0, 0, 6, 6),
+            ViewportUnits = BrushMappingMode.Absolute,
+            Viewbox = new Rect(0, 0, 6, 6),
+            ViewboxUnits = BrushMappingMode.Absolute
+        };
+
+        _zenFrostOverlay = new Rectangle
+        {
+            IsHitTestVisible = false,
+            Fill = dotBrush
+        };
+        Grid.SetRowSpan(_zenFrostOverlay, rootContentGrid.RowDefinitions.Count);
+        rootContentGrid.Children.Insert(0, _zenFrostOverlay);
     }
 
     private void StopZenAurora()
@@ -974,6 +1007,12 @@ public partial class NoteWindow : Window
         {
             _zenAuroraTimer.Stop();
             _zenAuroraTimer = null;
+        }
+
+        if (_zenFrostOverlay != null)
+        {
+            rootContentGrid.Children.Remove(_zenFrostOverlay);
+            _zenFrostOverlay = null;
         }
     }
 
