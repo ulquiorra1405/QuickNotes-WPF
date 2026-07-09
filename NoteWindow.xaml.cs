@@ -916,22 +916,19 @@ public partial class NoteWindow : Window
         var zenStyle = new Style(typeof(Paragraph));
         if (_savedParaStyle != null)
         {
+            // Create new Setter instances to avoid modifying sealed originals
             foreach (var setter in _savedParaStyle.Setters)
-                zenStyle.Setters.Add(setter);
-        }
-        // Override line height for Zen typography
-        bool hasLineHeight = false;
-        foreach (var setter in zenStyle.Setters)
-        {
-            if (setter is Setter s && s.Property == Paragraph.LineHeightProperty)
             {
-                s.Value = 26.0;
-                hasLineHeight = true;
-                break;
+                if (setter is Setter s)
+                {
+                    // Skip LineHeight — we'll add our own below
+                    if (s.Property == Paragraph.LineHeightProperty) continue;
+                    zenStyle.Setters.Add(new Setter(s.Property, s.Value));
+                }
             }
         }
-        if (!hasLineHeight)
-            zenStyle.Setters.Add(new Setter(Paragraph.LineHeightProperty, 26.0));
+        // Zen line height
+        zenStyle.Setters.Add(new Setter(Paragraph.LineHeightProperty, 26.0));
         noteText.Resources[typeof(Paragraph)] = zenStyle;
     }
 
