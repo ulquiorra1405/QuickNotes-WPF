@@ -151,7 +151,6 @@ public partial class NoteWindow : Window
     private double _zenRestoreWidth;
     private double _zenRestoreHeight;
     private double _zenSavedFontSize;
-    private bool _zenAcrylicActive;
     private Style? _savedParaStyle;
 
     private static readonly Color[] HighlightColors =
@@ -866,8 +865,7 @@ public partial class NoteWindow : Window
         // Set the glass backdrop (dark semi-transparent — wallpaper shows through)
         SetZenBackdrop();
 
-        // Try to enable real DWM acrylic blur (optional — may or may not work)
-        TryEnableAcrylic();
+
 
         // Maximize
         WindowState = WindowState.Maximized;
@@ -881,9 +879,6 @@ public partial class NoteWindow : Window
     {
         if (!_isZenMode) return;
         _isZenMode = false;
-
-        // Disable DWM acrylic (if active)
-        TryDisableAcrylic();
 
         // Restore normal backdrop (note color with alpha)
         ApplyMicaBackground();
@@ -917,60 +912,10 @@ public partial class NoteWindow : Window
 
     private void SetZenBackdrop()
     {
-        // Dark glass tint: wallpaper shows through the alpha, giving
-        // a translucent look around the opaque card.
-        // ~55% opaque near-black → wallpaper visible through the tint,
-        // enough to feel like glass without relying on native acrylic.
-        micaBackdrop.Background = new SolidColorBrush(Color.FromArgb(0x8C, 0x11, 0x11, 0x11));
-    }
-
-    private void TryEnableAcrylic()
-    {
-        if (_zenAcrylicActive) return;
-        try
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            var accent = new AccentPolicy
-            {
-                AccentState = AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND,
-                GradientColor = 0x66111111 // subtle dark tint — the main tint comes from wpf
-            };
-            var data = new WindowCompositionAttributeData
-            {
-                Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
-                Data = Marshal.AllocHGlobal(Marshal.SizeOf<AccentPolicy>()),
-                SizeOfData = Marshal.SizeOf<AccentPolicy>()
-            };
-            Marshal.StructureToPtr(accent, data.Data, false);
-            SetWindowCompositionAttribute(hwnd, ref data);
-            Marshal.FreeHGlobal(data.Data);
-            _zenAcrylicActive = true;
-        }
-        catch
-        {
-            _zenAcrylicActive = false;
-        }
-    }
-
-    private void TryDisableAcrylic()
-    {
-        if (!_zenAcrylicActive) return;
-        try
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            var accent = new AccentPolicy { AccentState = AccentState.ACCENT_DISABLED };
-            var data = new WindowCompositionAttributeData
-            {
-                Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
-                Data = Marshal.AllocHGlobal(Marshal.SizeOf<AccentPolicy>()),
-                SizeOfData = Marshal.SizeOf<AccentPolicy>()
-            };
-            Marshal.StructureToPtr(accent, data.Data, false);
-            SetWindowCompositionAttribute(hwnd, ref data);
-            Marshal.FreeHGlobal(data.Data);
-        }
-        catch { }
-        _zenAcrylicActive = false;
+        // Subtle transparent overlay: ~27% opaque black
+        // Wallpaper dominates (73% visible) — just enough dim
+        // to make the card pop without blocking the background.
+        micaBackdrop.Background = new SolidColorBrush(Color.FromArgb(0x44, 0x00, 0x00, 0x00));
     }
 
     private void NoteWindow_PreviewMouseMove(object sender, MouseEventArgs e)
