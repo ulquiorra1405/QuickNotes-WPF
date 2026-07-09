@@ -926,7 +926,7 @@ public partial class NoteWindow : Window
         };
 
         // Base dark tint (wallpaper shows through)
-        var dark = Color.FromArgb(0x44, 0x00, 0x00, 0x00);
+        var dark = Color.FromArgb(0x60, 0x00, 0x00, 0x00);
         // Note color — very low alpha, just a whisper of the note's hue
         var tint1 = Color.FromArgb(0x28, noteColor.R, noteColor.G, noteColor.B);
         // Shifted hue for variety (slightly brighter, shifted in channel)
