@@ -900,7 +900,8 @@ public partial class NoteWindow : Window
         _isZenMode = false;
 
         // Hide acrylic backdrop window
-        _zenBackdropWindow?.HideBackdrop();
+        if (_zenBackdropWindow != null)
+            _zenBackdropWindow.Hide();
 
         // Restore normal backdrop
         ApplyMicaBackground();

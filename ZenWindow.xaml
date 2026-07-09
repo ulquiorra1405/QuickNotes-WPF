@@ -4,8 +4,8 @@
         WindowStyle="None"
         AllowsTransparency="False"
         ShowInTaskbar="False"
+        ShowActivated="False"
         Topmost="False"
         ResizeMode="NoResize"
-        Background="#000000"
-        Width="100" Height="100">
+        Background="#000000">
 </Window>
