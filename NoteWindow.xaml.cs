@@ -2949,6 +2949,12 @@ public partial class NoteWindow : Window
         return string.IsNullOrEmpty(sanitized) ? "untitled" : sanitized.Length > 100 ? sanitized[..100] : sanitized;
     }
 
+    private void ToggleZenFromMenu_Click(object sender, MouseButtonEventArgs e)
+    {
+        exportPopup.IsOpen = false;
+        ToggleZenMode();
+    }
+
     private void ImportFile_Click(object sender, MouseButtonEventArgs e)
     {
         var dlg = new Microsoft.Win32.OpenFileDialog

@@ -237,6 +237,10 @@
                                 <Border Style="{StaticResource MenuItemStyle}" MouseDown="ImportFile_Click">
                                     <TextBlock Text="📥  Importar archivo..." FontSize="12" Foreground="#EEFFFFFF"/>
                                 </Border>
+                                <Separator Background="#30FFFFFF" Margin="4,0"/>
+                                <Border Style="{StaticResource MenuItemStyle}" MouseDown="ToggleZenFromMenu_Click">
+                                    <TextBlock Text="🧘  Modo Zen" FontSize="12" Foreground="#EEFFFFFF"/>
+                                </Border>
                             </StackPanel>
                         </Border>
                     </Popup>
