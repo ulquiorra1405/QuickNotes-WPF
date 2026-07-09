@@ -76,11 +76,6 @@ public partial class NoteWindow : Window
     private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hwnd, ref RECT lpRect);
-    [DllImport("user32.dll")]
-    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-    private const uint SWP_NOMOVE = 0x0002;
-    private const uint SWP_NOSIZE = 0x0001;
-    private const uint SWP_NOACTIVATE = 0x0010;
     private const int WM_NCLBUTTONDOWN = 0x00A1;
     private const int HTCAPTION = 2;
     private const int HTCLIENT = 1;
@@ -877,28 +872,19 @@ public partial class NoteWindow : Window
         zenWrapper.Padding = new Thickness(24, 12, 24, 12);
         zenWrapper.Margin = new Thickness(0);
 
-        // Show the acrylic backdrop window behind NoteWindow
+        // Show the acrylic backdrop window behind NoteWindow, on the same monitor
+        var noteHandle = new WindowInteropHelper(this).Handle;
         if (_zenBackdropWindow == null)
         {
-            _zenBackdropWindow = new ZenWindow();
-            _zenBackdropWindow.Show();
+            _zenBackdropWindow = new ZenWindow(noteHandle);
         }
-        else
-        {
-            _zenBackdropWindow.Show();
-        }
+        _zenBackdropWindow.ShowBehindNote();
 
-        // Bring focus back to NoteWindow (Show() activates ZenWindow since ShowActivated is removed)
+        // Bring focus back to NoteWindow (Show() activates ZenWindow)
         this.Activate();
 
-        // Put ZenWindow behind NoteWindow in z-order
-        var zenHandle = new WindowInteropHelper(_zenBackdropWindow).Handle;
-        var noteHandle = new WindowInteropHelper(this).Handle;
-        SetWindowPos(zenHandle, noteHandle, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-
-        // Make backdrop nearly transparent → acrylic shows through
-        // Alpha=1 (not 0) to preserve click handling on the NoteWindow area
-        micaBackdrop.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
+        // Make backdrop fully transparent → ZenWindow's acrylic shows through
+        micaBackdrop.Background = Brushes.Transparent;
 
         // Maximize
         WindowState = WindowState.Maximized;

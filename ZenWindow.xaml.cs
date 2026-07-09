@@ -7,12 +7,12 @@ namespace QuickNotes;
 
 /// <summary>
 /// Maximized backdrop window used in Zen mode.
-/// Renders the native Windows acrylic effect and sits behind NoteWindow.
+/// Renders the native Windows acrylic/blur effect and sits behind NoteWindow.
 /// NoteWindow's transparent areas reveal this window's blurred content.
 /// </summary>
 public partial class ZenWindow : Window
 {
-    // --- Acrylic P/Invoke ---
+    // --- SetWindowCompositionAttribute (acrylic/blur) ---
     [DllImport("user32.dll")]
     private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
 
@@ -24,10 +24,7 @@ public partial class ZenWindow : Window
         public int SizeOfData;
     }
 
-    private enum WindowCompositionAttribute
-    {
-        WCA_ACCENT_POLICY = 19
-    }
+    private enum WindowCompositionAttribute { WCA_ACCENT_POLICY = 19 }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct AccentPolicy
@@ -48,20 +45,81 @@ public partial class ZenWindow : Window
         ACCENT_ENABLE_HOSTBACKDROP = 5
     }
 
-    public ZenWindow()
+    // --- Monitor helpers for multi-monitor ---
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct MONITORINFO
     {
+        public uint cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    // --- Custom helper for DWM blur behind (alternative on some builds) ---
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmEnableBlurBehindWindow(IntPtr hwnd, ref DWM_BLURBEHIND blurBehind);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DWM_BLURBEHIND
+    {
+        public uint dwFlags;
+        public bool fEnable;
+        public IntPtr hRgnBlur;
+        public bool fTransitionOnMaximized;
+    }
+    private const uint DWM_BB_ENABLE = 1;
+
+    private bool _allowClose;
+    private readonly IntPtr _noteHandle;
+
+    public ZenWindow(IntPtr noteWindowHandle)
+    {
+        _noteHandle = noteWindowHandle;
         InitializeComponent();
         SourceInitialized += OnSourceInitialized;
     }
 
-    private bool _allowClose;
-
-    private void OnSourceInitialized(object? sender, EventArgs e)
+    /// <summary>
+    /// Shows ZenWindow on the same monitor as NoteWindow, applies native blur,
+    /// and places it behind NoteWindow in z-order.
+    /// </summary>
+    public void ShowBehindNote()
     {
-        EnableAcrylic();
+        // Move to the correct monitor before showing
+        var mi = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
+        var monitor = MonitorFromWindow(_noteHandle, MONITOR_DEFAULTTONEAREST);
+        bool gotMonitor = GetMonitorInfo(monitor, ref mi);
+        if (gotMonitor)
+        {
+            Left = mi.rcWork.Left;
+            Top = mi.rcWork.Top;
+            Width = mi.rcWork.Right - mi.rcWork.Left;
+            Height = mi.rcWork.Bottom - mi.rcWork.Top;
+        }
 
-        // Maximize after the window is shown — WPF rejects ShowActivated=False + Maximized in XAML
-        WindowState = WindowState.Maximized;
+        Show();
+
+        // Place directly behind NoteWindow in z-order
+        var zenHandle = new WindowInteropHelper(this).Handle;
+        SetWindowPos(zenHandle, _noteHandle, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
     /// <summary>
@@ -73,22 +131,34 @@ public partial class ZenWindow : Window
         Close();
     }
 
-    /// <summary>
-    /// Applies the native acrylic blur + dark tint to this window.
-    /// Uses a 38% dark tint so NoteWindow's card content pops clearly.
-    /// </summary>
-    private void EnableAcrylic()
+    private void OnSourceInitialized(object? sender, EventArgs e)
     {
         var handle = new WindowInteropHelper(this).Handle;
-        if (handle == IntPtr.Zero) return;
 
-        // GradientColor format: 0xAARRGGBB  (alpha, red, green, blue)
-        // 0x66111111 ≈ 40% black tint — dark enough for contrast, blur shows through
+        // Try accent states in order: 4→5→3→(DwmEnableBlurBehind)
+        if (!TrySetAccent(handle, AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x66111111) &&
+            !TrySetAccent(handle, AccentState.ACCENT_ENABLE_HOSTBACKDROP, 0x66111111) &&
+            !TrySetAccent(handle, AccentState.ACCENT_ENABLE_BLURBEHIND, 0))
+        {
+            // Last resort: DWM blur behind (no tint, just blur)
+            var bb = new DWM_BLURBEHIND
+            {
+                dwFlags = DWM_BB_ENABLE,
+                fEnable = true,
+                hRgnBlur = IntPtr.Zero,
+                fTransitionOnMaximized = true
+            };
+            DwmEnableBlurBehindWindow(handle, ref bb);
+        }
+    }
+
+    private bool TrySetAccent(IntPtr handle, AccentState state, uint gradientColor)
+    {
         var accent = new AccentPolicy
         {
-            AccentState = AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND,
+            AccentState = state,
             AccentFlags = 0,
-            GradientColor = 0x66111111,
+            GradientColor = gradientColor,
             AnimationId = 0
         };
 
@@ -102,7 +172,12 @@ public partial class ZenWindow : Window
         try
         {
             Marshal.StructureToPtr(accent, data.Data, false);
-            SetWindowCompositionAttribute(handle, ref data);
+            int result = SetWindowCompositionAttribute(handle, ref data);
+            return result == 0; // 0 = success
+        }
+        catch
+        {
+            return false;
         }
         finally
         {
@@ -110,9 +185,6 @@ public partial class ZenWindow : Window
         }
     }
 
-    /// <summary>
-    /// Prevents accidental close (e.g. Alt+F4). Use Hide() instead.
-    /// </summary>
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         if (!_allowClose)
