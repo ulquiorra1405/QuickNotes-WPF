@@ -844,15 +844,10 @@ public partial class NoteWindow : Window
         _zenRestoreHeight = Height;
         _zenSavedFontSize = noteText.FontSize;
 
-        // Maximize (bars stay visible — same UI as normal NoteWindow)
-        WindowState = WindowState.Maximized;
-
-        // Enable acrylic glass backdrop (dark blur)
-        EnableZenAcrylic();
-
-        // zenWrapper becomes an opaque card that floats on the glass
+        // Set up zenWrapper as an opaque card BEFORE maximize
         var noteHex = _note.Color ?? "#F8F9FA";
         var noteColor = ParseColor(noteHex);
+
         zenWrapper.Background = new SolidColorBrush(noteColor); // fully opaque
         zenWrapper.CornerRadius = new CornerRadius(8);
         zenWrapper.Effect = new DropShadowEffect
@@ -863,20 +858,23 @@ public partial class NoteWindow : Window
             Color = Colors.Black,
             Direction = 270
         };
-
-        // Centered content with max width for readability
         zenWrapper.MaxWidth = 760;
         zenWrapper.HorizontalAlignment = HorizontalAlignment.Center;
         zenWrapper.Padding = new Thickness(24, 12, 24, 12);
         zenWrapper.Margin = new Thickness(0);
 
+        // Set the glass backdrop (dark semi-transparent — wallpaper shows through)
+        SetZenBackdrop();
+
+        // Try to enable real DWM acrylic blur (optional — may or may not work)
+        TryEnableAcrylic();
+
+        // Maximize
+        WindowState = WindowState.Maximized;
+
         // Larger typography
         noteText.FontSize = 16;
         ApplyZenParagraphStyle();
-
-        // Fade in the entire window
-        Opacity = 0;
-        BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(0, 1, 200));
     }
 
     private void ExitZenMode()
@@ -884,91 +882,94 @@ public partial class NoteWindow : Window
         if (!_isZenMode) return;
         _isZenMode = false;
 
-        // Fade out before resetting
-        var fadeOut = AnimationHelper.MakeAnimation(1, 0, 150);
-        fadeOut.Completed += (_, _) =>
-        {
-            // Disable acrylic backdrop, restore Mica
-            DisableZenAcrylic();
+        // Disable DWM acrylic (if active)
+        TryDisableAcrylic();
 
-            // Reset zen wrapper to normal layout
-            zenWrapper.MaxWidth = double.PositiveInfinity;
-            zenWrapper.HorizontalAlignment = HorizontalAlignment.Stretch;
-            zenWrapper.Padding = new Thickness(0);
-            zenWrapper.Margin = new Thickness(0);
-            zenWrapper.Background = null;
-            zenWrapper.CornerRadius = new CornerRadius(0);
-            zenWrapper.Effect = null;
+        // Restore normal backdrop (note color with alpha)
+        ApplyMicaBackground();
 
-            // Restore window state
-            WindowState = WindowState.Normal;
-            Left = _zenRestoreLeft;
-            Top = _zenRestoreTop;
-            Width = _zenRestoreWidth;
-            Height = _zenRestoreHeight;
+        // Reset zen wrapper to normal layout
+        zenWrapper.MaxWidth = double.PositiveInfinity;
+        zenWrapper.HorizontalAlignment = HorizontalAlignment.Stretch;
+        zenWrapper.Padding = new Thickness(0);
+        zenWrapper.Margin = new Thickness(0);
+        zenWrapper.Background = null;
+        zenWrapper.CornerRadius = new CornerRadius(0);
+        zenWrapper.Effect = null;
 
-            titleBar.Height = 30;
-            titleRightPanel.Visibility = Visibility.Visible;
-            colorBar.Height = 32;
-            noteText.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            ApplyScrollbarReversal(noteText, _note.Color);
+        // Restore window state BEFORE adjusting bars
+        WindowState = WindowState.Normal;
+        Left = _zenRestoreLeft;
+        Top = _zenRestoreTop;
+        Width = _zenRestoreWidth;
+        Height = _zenRestoreHeight;
 
-            // Restore font size
-            noteText.FontSize = _zenSavedFontSize != 0 ? _zenSavedFontSize : 13;
-            RestoreParagraphStyle();
+        titleBar.Height = 30;
+        titleRightPanel.Visibility = Visibility.Visible;
+        colorBar.Height = 32;
+        noteText.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        ApplyScrollbarReversal(noteText, _note.Color);
 
-            // Ensure opacity is normal
-            Opacity = 1;
-        };
-        BeginAnimation(OpacityProperty, fadeOut);
+        // Restore font size
+        noteText.FontSize = _zenSavedFontSize != 0 ? _zenSavedFontSize : 13;
+        RestoreParagraphStyle();
     }
 
-    private void EnableZenAcrylic()
+    private void SetZenBackdrop()
+    {
+        // Dark glass tint: wallpaper shows through the alpha, giving
+        // a translucent look around the opaque card.
+        // ~55% opaque near-black → wallpaper visible through the tint,
+        // enough to feel like glass without relying on native acrylic.
+        micaBackdrop.Background = new SolidColorBrush(Color.FromArgb(0x8C, 0x11, 0x11, 0x11));
+    }
+
+    private void TryEnableAcrylic()
     {
         if (_zenAcrylicActive) return;
-        var hwnd = new WindowInteropHelper(this).Handle;
-
-        var accent = new AccentPolicy
+        try
         {
-            AccentState = AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND,
-            GradientColor = 0xBB111111 // dark glass tint
-        };
-        var data = new WindowCompositionAttributeData
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var accent = new AccentPolicy
+            {
+                AccentState = AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND,
+                GradientColor = 0x66111111 // subtle dark tint — the main tint comes from wpf
+            };
+            var data = new WindowCompositionAttributeData
+            {
+                Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
+                Data = Marshal.AllocHGlobal(Marshal.SizeOf<AccentPolicy>()),
+                SizeOfData = Marshal.SizeOf<AccentPolicy>()
+            };
+            Marshal.StructureToPtr(accent, data.Data, false);
+            SetWindowCompositionAttribute(hwnd, ref data);
+            Marshal.FreeHGlobal(data.Data);
+            _zenAcrylicActive = true;
+        }
+        catch
         {
-            Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
-            Data = Marshal.AllocHGlobal(Marshal.SizeOf<AccentPolicy>()),
-            SizeOfData = Marshal.SizeOf<AccentPolicy>()
-        };
-        Marshal.StructureToPtr(accent, data.Data, false);
-        SetWindowCompositionAttribute(hwnd, ref data);
-        Marshal.FreeHGlobal(data.Data);
-
-        // Make the backdrop very dark + transparent so acrylic shows through
-        micaBackdrop.Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x05, 0x05, 0x05));
-        _zenAcrylicActive = true;
+            _zenAcrylicActive = false;
+        }
     }
 
-    private void DisableZenAcrylic()
+    private void TryDisableAcrylic()
     {
         if (!_zenAcrylicActive) return;
-        var hwnd = new WindowInteropHelper(this).Handle;
-
-        var accent = new AccentPolicy
+        try
         {
-            AccentState = AccentState.ACCENT_DISABLED
-        };
-        var data = new WindowCompositionAttributeData
-        {
-            Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
-            Data = Marshal.AllocHGlobal(Marshal.SizeOf<AccentPolicy>()),
-            SizeOfData = Marshal.SizeOf<AccentPolicy>()
-        };
-        Marshal.StructureToPtr(accent, data.Data, false);
-        SetWindowCompositionAttribute(hwnd, ref data);
-        Marshal.FreeHGlobal(data.Data);
-
-        // Restore normal Mica background
-        ApplyMicaBackground();
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var accent = new AccentPolicy { AccentState = AccentState.ACCENT_DISABLED };
+            var data = new WindowCompositionAttributeData
+            {
+                Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
+                Data = Marshal.AllocHGlobal(Marshal.SizeOf<AccentPolicy>()),
+                SizeOfData = Marshal.SizeOf<AccentPolicy>()
+            };
+            Marshal.StructureToPtr(accent, data.Data, false);
+            SetWindowCompositionAttribute(hwnd, ref data);
+            Marshal.FreeHGlobal(data.Data);
+        }
+        catch { }
         _zenAcrylicActive = false;
     }
 
