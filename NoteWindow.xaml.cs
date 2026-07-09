@@ -14,6 +14,7 @@ using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using QuickNotes.Models;
@@ -31,6 +32,42 @@ public partial class NoteWindow : Window
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     private const int DWMWCP_ROUND = 2;
+
+    // Acrylic backdrop (Win10+ via SetWindowCompositionAttribute)
+    [DllImport("user32.dll")]
+    private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowCompositionAttributeData
+    {
+        public WindowCompositionAttribute Attribute;
+        public IntPtr Data;
+        public int SizeOfData;
+    }
+
+    private enum WindowCompositionAttribute
+    {
+        WCA_ACCENT_POLICY = 19
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct AccentPolicy
+    {
+        public AccentState AccentState;
+        public int AccentFlags;
+        public uint GradientColor;
+        public int AnimationId;
+    }
+
+    private enum AccentState
+    {
+        ACCENT_DISABLED = 0,
+        ACCENT_ENABLE_GRADIENT = 1,
+        ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
+        ACCENT_ENABLE_BLURBEHIND = 3,
+        ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
+        ACCENT_ENABLE_HOSTBACKDROP = 5
+    }
 
     // Drag support for WindowStyle=None + AllowsTransparency=True
     [DllImport("user32.dll")]
@@ -114,7 +151,7 @@ public partial class NoteWindow : Window
     private double _zenRestoreWidth;
     private double _zenRestoreHeight;
     private double _zenSavedFontSize;
-    private bool _zenFloatBarVisible;
+    private bool _zenAcrylicActive;
     private Style? _savedParaStyle;
 
     private static readonly Color[] HighlightColors =
@@ -443,7 +480,6 @@ public partial class NoteWindow : Window
         var mainWin = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is MainWindow) as MainWindow;
         mainWin?.DebounceSave();
         if (_hideCompleted && !_isApplyingHideCompleted) ApplyHideCompleted();
-        if (_isZenMode) UpdateZenWordCount();
     }
 
     private void Title_TextChanged(object sender, TextChangedEventArgs e)
@@ -808,48 +844,39 @@ public partial class NoteWindow : Window
         _zenRestoreHeight = Height;
         _zenSavedFontSize = noteText.FontSize;
 
-        // Hide all bars completely
-        titleBar.Visibility = Visibility.Collapsed;
-        colorBar.Visibility = Visibility.Collapsed;
-        attachmentBar.Visibility = Visibility.Collapsed;
-        noteSearchBorder.Visibility = Visibility.Collapsed;
-
-        // Maximize
+        // Maximize (bars stay visible — same UI as normal NoteWindow)
         WindowState = WindowState.Maximized;
 
-        // Card effect: subtle rounded container floating on the note background
+        // Enable acrylic glass backdrop (dark blur)
+        EnableZenAcrylic();
+
+        // zenWrapper becomes an opaque card that floats on the glass
         var noteHex = _note.Color ?? "#F8F9FA";
         var noteColor = ParseColor(noteHex);
-        var dark = IsDarkColor(noteHex);
-        var cardAlpha = dark ? (byte)0x14 : (byte)0x20;
-        zenWrapper.Background = new SolidColorBrush(Color.FromArgb(cardAlpha, noteColor.R, noteColor.G, noteColor.B));
+        zenWrapper.Background = new SolidColorBrush(noteColor); // fully opaque
         zenWrapper.CornerRadius = new CornerRadius(8);
+        zenWrapper.Effect = new DropShadowEffect
+        {
+            BlurRadius = 20,
+            ShadowDepth = 4,
+            Opacity = 0.35,
+            Color = Colors.Black,
+            Direction = 270
+        };
 
         // Centered content with max width for readability
         zenWrapper.MaxWidth = 760;
         zenWrapper.HorizontalAlignment = HorizontalAlignment.Center;
-        zenWrapper.Padding = new Thickness(32, 20, 32, 24);
+        zenWrapper.Padding = new Thickness(24, 12, 24, 12);
+        zenWrapper.Margin = new Thickness(0);
 
         // Larger typography
         noteText.FontSize = 16;
         ApplyZenParagraphStyle();
 
-        // Floating bar adaptive background
-        var barBg = dark
-            ? Color.FromArgb(0xC0, 0x22, 0x22, 0x22)
-            : Color.FromArgb(0xD0, 0x18, 0x18, 0x18);
-        zenFloatBar.Background = new SolidColorBrush(barBg);
-
-        // Ensure floating bar starts hidden
-        zenFloatBar.Visibility = Visibility.Collapsed;
-        _zenFloatBarVisible = false;
-
-        // Update word count
-        UpdateZenWordCount();
-
-        // Fade in the editor area
-        zenWrapper.Opacity = 0;
-        zenWrapper.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(0, 1, 200));
+        // Fade in the entire window
+        Opacity = 0;
+        BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(0, 1, 200));
     }
 
     private void ExitZenMode()
@@ -857,95 +884,97 @@ public partial class NoteWindow : Window
         if (!_isZenMode) return;
         _isZenMode = false;
 
-        // Restore window state
-        WindowState = WindowState.Normal;
-        Left = _zenRestoreLeft;
-        Top = _zenRestoreTop;
-        Width = _zenRestoreWidth;
-        Height = _zenRestoreHeight;
+        // Fade out before resetting
+        var fadeOut = AnimationHelper.MakeAnimation(1, 0, 150);
+        fadeOut.Completed += (_, _) =>
+        {
+            // Disable acrylic backdrop, restore Mica
+            DisableZenAcrylic();
 
-        // Show all bars
-        titleBar.Visibility = Visibility.Visible;
-        colorBar.Visibility = Visibility.Visible;
-        attachmentBar.Visibility = Visibility.Visible;
-        titleBar.Height = 30;
-        titleRightPanel.Visibility = Visibility.Visible;
-        colorBar.Height = 32;
-        noteText.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-        ApplyScrollbarReversal(noteText, _note.Color);
+            // Reset zen wrapper to normal layout
+            zenWrapper.MaxWidth = double.PositiveInfinity;
+            zenWrapper.HorizontalAlignment = HorizontalAlignment.Stretch;
+            zenWrapper.Padding = new Thickness(0);
+            zenWrapper.Margin = new Thickness(0);
+            zenWrapper.Background = null;
+            zenWrapper.CornerRadius = new CornerRadius(0);
+            zenWrapper.Effect = null;
 
-        // Reset zen wrapper to normal layout
-        zenWrapper.MaxWidth = double.PositiveInfinity;
-        zenWrapper.HorizontalAlignment = HorizontalAlignment.Stretch;
-        zenWrapper.Padding = new Thickness(0);
-        zenWrapper.Background = null;
-        zenWrapper.CornerRadius = new CornerRadius(0);
-        zenWrapper.Opacity = 1;
-        zenWrapper.BeginAnimation(OpacityProperty, null);
+            // Restore window state
+            WindowState = WindowState.Normal;
+            Left = _zenRestoreLeft;
+            Top = _zenRestoreTop;
+            Width = _zenRestoreWidth;
+            Height = _zenRestoreHeight;
 
-        // Restore font size
-        noteText.FontSize = _zenSavedFontSize != 0 ? _zenSavedFontSize : 13;
-        RestoreParagraphStyle();
+            titleBar.Height = 30;
+            titleRightPanel.Visibility = Visibility.Visible;
+            colorBar.Height = 32;
+            noteText.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            ApplyScrollbarReversal(noteText, _note.Color);
 
-        // Hide floating bar
-        zenFloatBar.Visibility = Visibility.Collapsed;
-        _zenFloatBarVisible = false;
+            // Restore font size
+            noteText.FontSize = _zenSavedFontSize != 0 ? _zenSavedFontSize : 13;
+            RestoreParagraphStyle();
+
+            // Ensure opacity is normal
+            Opacity = 1;
+        };
+        BeginAnimation(OpacityProperty, fadeOut);
     }
 
-    private void ZenExit_Click(object sender, RoutedEventArgs e)
+    private void EnableZenAcrylic()
     {
-        ExitZenMode();
+        if (_zenAcrylicActive) return;
+        var hwnd = new WindowInteropHelper(this).Handle;
+
+        var accent = new AccentPolicy
+        {
+            AccentState = AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND,
+            GradientColor = 0xBB111111 // dark glass tint
+        };
+        var data = new WindowCompositionAttributeData
+        {
+            Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
+            Data = Marshal.AllocHGlobal(Marshal.SizeOf<AccentPolicy>()),
+            SizeOfData = Marshal.SizeOf<AccentPolicy>()
+        };
+        Marshal.StructureToPtr(accent, data.Data, false);
+        SetWindowCompositionAttribute(hwnd, ref data);
+        Marshal.FreeHGlobal(data.Data);
+
+        // Make the backdrop very dark + transparent so acrylic shows through
+        micaBackdrop.Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x05, 0x05, 0x05));
+        _zenAcrylicActive = true;
     }
 
-    private void ZenMinBtn_Click(object sender, RoutedEventArgs e)
+    private void DisableZenAcrylic()
     {
-        ExitZenMode();
-        MinimizeNote_Click(sender, e);
-    }
+        if (!_zenAcrylicActive) return;
+        var hwnd = new WindowInteropHelper(this).Handle;
 
-    private void UpdateZenWordCount()
-    {
-        if (!_isZenMode) return;
-        var range = new TextRange(noteText.Document.ContentStart, noteText.Document.ContentEnd);
-        var text = range.Text;
-        var charCount = text.Length;
-        var wordCount = string.IsNullOrWhiteSpace(text)
-            ? 0
-            : text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
-        zenWordCount.Text = $"{wordCount} palabras · {charCount} caracteres";
+        var accent = new AccentPolicy
+        {
+            AccentState = AccentState.ACCENT_DISABLED
+        };
+        var data = new WindowCompositionAttributeData
+        {
+            Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
+            Data = Marshal.AllocHGlobal(Marshal.SizeOf<AccentPolicy>()),
+            SizeOfData = Marshal.SizeOf<AccentPolicy>()
+        };
+        Marshal.StructureToPtr(accent, data.Data, false);
+        SetWindowCompositionAttribute(hwnd, ref data);
+        Marshal.FreeHGlobal(data.Data);
+
+        // Restore normal Mica background
+        ApplyMicaBackground();
+        _zenAcrylicActive = false;
     }
 
     private void NoteWindow_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (!_isZenMode) return;
-
-        var pos = e.GetPosition(this);
-
-        // Show floating bar when mouse is near the top edge
-        if (pos.Y < 40)
-        {
-            if (!_zenFloatBarVisible)
-            {
-                _zenFloatBarVisible = true;
-                zenFloatBar.Visibility = Visibility.Visible;
-                zenFloatBar.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(0, 1, 150));
-            }
-        }
-        // Hide when mouse moves down past the bar
-        else if (pos.Y > 60)
-        {
-            if (_zenFloatBarVisible)
-            {
-                _zenFloatBarVisible = false;
-                var fade = AnimationHelper.MakeAnimation(1, 0, 150);
-                fade.Completed += (_, _) =>
-                {
-                    if (!_zenFloatBarVisible)
-                        zenFloatBar.Visibility = Visibility.Collapsed;
-                };
-                zenFloatBar.BeginAnimation(OpacityProperty, fade);
-            }
-        }
+        // No floating bar needed in Zen mode — all bars stay visible
     }
 
     private void ApplyZenParagraphStyle()

@@ -677,47 +677,7 @@
         <Grid Grid.Row="1">
             <Border x:Name="zenWrapper" HorizontalAlignment="Stretch">
                 <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    <!-- Zen floating bar (hidden by default) -->
-                    <Border x:Name="zenFloatBar" Grid.Row="0" Height="36"
-                            Visibility="Collapsed"
-                            BorderThickness="0,0,0,1" BorderBrush="#25FFFFFF">
-                        <Border.Effect>
-                            <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.35" Color="Black"/>
-                        </Border.Effect>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <!-- Exit button -->
-                            <Button x:Name="zenExitBtn" Content="←" Width="32" Height="32"
-                                    Style="{StaticResource TitleBtn}" FontSize="15"
-                                    ToolTip="Salir del modo zen (Esc)" Click="ZenExit_Click"/>
-                            <!-- Centered note title -->
-                            <TextBlock Grid.Column="1" Text="{Binding Title}"
-                                       Foreground="{Binding TextForeground}"
-                                       Opacity="0.5" FontSize="11" FontWeight="SemiBold"
-                                       VerticalAlignment="Center" HorizontalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis" Padding="8,0"/>
-                            <!-- Word count + minimize -->
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock x:Name="zenWordCount"
-                                           Foreground="{Binding TextForeground}"
-                                           Opacity="0.35" FontSize="10"
-                                           VerticalAlignment="Center" Margin="0,0,2,0"/>
-                                <Button x:Name="zenMinBtn" Content="─" Width="32" Height="32"
-                                        Style="{StaticResource TitleBtn}" FontSize="15"
-                                        ToolTip="Minimizar al dock"
-                                        Click="ZenMinBtn_Click"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-                    <Grid Grid.Row="1">
+                    <Grid>
                         <local:NoteRichTextBox x:Name="noteText"
                                      Background="Transparent" BorderThickness="0"
                                      Foreground="{Binding TextForeground}" FontFamily="Calibri" FontSize="13"
