@@ -671,7 +671,7 @@ public partial class NoteWindow : Window
         // Close the backdrop window if Zen mode created one
         if (_zenBackdropWindow != null)
         {
-            _zenBackdropWindow.Close();
+            _zenBackdropWindow.ForceClose();
             _zenBackdropWindow = null;
         }
 

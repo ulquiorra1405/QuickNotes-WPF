@@ -54,9 +54,20 @@ public partial class ZenWindow : Window
         SourceInitialized += OnSourceInitialized;
     }
 
+    private bool _allowClose;
+
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         EnableAcrylic();
+    }
+
+    /// <summary>
+    /// Force-close without cancellation (called by NoteWindow during app shutdown).
+    /// </summary>
+    public void ForceClose()
+    {
+        _allowClose = true;
+        Close();
     }
 
     /// <summary>
@@ -101,8 +112,11 @@ public partial class ZenWindow : Window
     /// </summary>
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
-        e.Cancel = true;
-        Hide();
+        if (!_allowClose)
+        {
+            e.Cancel = true;
+            Hide();
+        }
         base.OnClosing(e);
     }
 }
