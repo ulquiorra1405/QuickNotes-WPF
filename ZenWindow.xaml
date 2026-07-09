@@ -6,7 +6,5 @@
         ShowInTaskbar="False"
         Topmost="False"
         ResizeMode="NoResize"
-        WindowState="Maximized"
-        ShowActivated="False"
         Background="#191919">
 </Window>

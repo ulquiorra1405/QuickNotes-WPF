@@ -59,6 +59,9 @@ public partial class ZenWindow : Window
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         EnableAcrylic();
+
+        // Maximize after the window is shown — WPF rejects ShowActivated=False + Maximized in XAML
+        WindowState = WindowState.Maximized;
     }
 
     /// <summary>
