@@ -2,50 +2,26 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace QuickNotes;
 
 /// <summary>
 /// Maximized backdrop window used in Zen mode.
-/// Renders the native Windows acrylic/blur effect and sits behind NoteWindow.
-/// NoteWindow's transparent areas reveal this window's blurred content.
+/// Uses the modern DWM SystemBackdrop API (Win11 22H2+ build 22621+)
+/// to render native acrylic behind NoteWindow.
 /// </summary>
 public partial class ZenWindow : Window
 {
-    // --- SetWindowCompositionAttribute (acrylic/blur) ---
-    [DllImport("user32.dll")]
-    private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+    // --- Modern DWM backdrop API (Win11 22H2+) ---
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowCompositionAttributeData
-    {
-        public WindowCompositionAttribute Attribute;
-        public IntPtr Data;
-        public int SizeOfData;
-    }
+    private const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
+    private const int DWMSBT_TABBEDWINDOW = 4;  // Acrylic blur + tint
+    private const int DWMSBT_MAINWINDOW = 2;    // Mica (fallback)
 
-    private enum WindowCompositionAttribute { WCA_ACCENT_POLICY = 19 }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct AccentPolicy
-    {
-        public AccentState AccentState;
-        public int AccentFlags;
-        public uint GradientColor;
-        public int AnimationId;
-    }
-
-    private enum AccentState
-    {
-        ACCENT_DISABLED = 0,
-        ACCENT_ENABLE_GRADIENT = 1,
-        ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
-        ACCENT_ENABLE_BLURBEHIND = 3,
-        ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
-        ACCENT_ENABLE_HOSTBACKDROP = 5
-    }
-
-    // --- Monitor helpers for multi-monitor ---
+    // --- Monitor DPI helpers ---
     [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
     private const uint MONITOR_DEFAULTTONEAREST = 2;
@@ -53,11 +29,16 @@ public partial class ZenWindow : Window
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
+    private const int MDT_EFFECTIVE_DPI = 0;
+
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-    private const uint SWP_NOMOVE = 0x0002;
-    private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
     private struct MONITORINFO
     {
@@ -73,20 +54,6 @@ public partial class ZenWindow : Window
         public int Left, Top, Right, Bottom;
     }
 
-    // --- Custom helper for DWM blur behind (alternative on some builds) ---
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmEnableBlurBehindWindow(IntPtr hwnd, ref DWM_BLURBEHIND blurBehind);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct DWM_BLURBEHIND
-    {
-        public uint dwFlags;
-        public bool fEnable;
-        public IntPtr hRgnBlur;
-        public bool fTransitionOnMaximized;
-    }
-    private const uint DWM_BB_ENABLE = 1;
-
     private bool _allowClose;
     private readonly IntPtr _noteHandle;
 
@@ -98,21 +65,32 @@ public partial class ZenWindow : Window
     }
 
     /// <summary>
-    /// Shows ZenWindow on the same monitor as NoteWindow, applies native blur,
+    /// Shows ZenWindow on the same monitor as NoteWindow, applies native acrylic,
     /// and places it behind NoteWindow in z-order.
     /// </summary>
     public void ShowBehindNote()
     {
-        // Move to the correct monitor before showing
+        // Position and size to the correct monitor before showing
         var mi = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
-        var monitor = MonitorFromWindow(_noteHandle, MONITOR_DEFAULTTONEAREST);
-        bool gotMonitor = GetMonitorInfo(monitor, ref mi);
-        if (gotMonitor)
+        var hMonitor = MonitorFromWindow(_noteHandle, MONITOR_DEFAULTTONEAREST);
+
+        if (GetMonitorInfo(hMonitor, ref mi))
         {
-            Left = mi.rcWork.Left;
-            Top = mi.rcWork.Top;
-            Width = mi.rcWork.Right - mi.rcWork.Left;
-            Height = mi.rcWork.Bottom - mi.rcWork.Top;
+            // Get DPI for this specific monitor
+            uint dpiX = 96, dpiY = 96;
+            if (GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, out dpiX, out dpiY) != 0)
+            {
+                dpiX = 96; dpiY = 96; // fallback
+            }
+
+            // Convert physical pixels → WPF device-independent pixels
+            double scaleX = 96.0 / dpiX;
+            double scaleY = 96.0 / dpiY;
+
+            Left   = mi.rcWork.Left   * scaleX;
+            Top    = mi.rcWork.Top    * scaleY;
+            Width  = (mi.rcWork.Right - mi.rcWork.Left)   * scaleX;
+            Height = (mi.rcWork.Bottom - mi.rcWork.Top)   * scaleY;
         }
 
         Show();
@@ -135,54 +113,21 @@ public partial class ZenWindow : Window
     {
         var handle = new WindowInteropHelper(this).Handle;
 
-        // Try accent states in order: 4→5→3→(DwmEnableBlurBehind)
-        if (!TrySetAccent(handle, AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x66111111) &&
-            !TrySetAccent(handle, AccentState.ACCENT_ENABLE_HOSTBACKDROP, 0x66111111) &&
-            !TrySetAccent(handle, AccentState.ACCENT_ENABLE_BLURBEHIND, 0))
-        {
-            // Last resort: DWM blur behind (no tint, just blur)
-            var bb = new DWM_BLURBEHIND
-            {
-                dwFlags = DWM_BB_ENABLE,
-                fEnable = true,
-                hRgnBlur = IntPtr.Zero,
-                fTransitionOnMaximized = true
-            };
-            DwmEnableBlurBehindWindow(handle, ref bb);
-        }
-    }
+        // ---- Modern approach: DWM SystemBackdrop (Win11 22H2+) ----
+        // Try acrylic first (tabbed = blurred + tinted), fall back to mica
+        int backdropType = DWMSBT_TABBEDWINDOW;
+        int hr = DwmSetWindowAttribute(handle, DWMWA_SYSTEMBACKDROP_TYPE, ref backdropType, sizeof(int));
 
-    private bool TrySetAccent(IntPtr handle, AccentState state, uint gradientColor)
-    {
-        var accent = new AccentPolicy
+        if (hr != 0)
         {
-            AccentState = state,
-            AccentFlags = 0,
-            GradientColor = gradientColor,
-            AnimationId = 0
-        };
+            // Fallback to Mica
+            backdropType = DWMSBT_MAINWINDOW;
+            DwmSetWindowAttribute(handle, DWMWA_SYSTEMBACKDROP_TYPE, ref backdropType, sizeof(int));
+        }
 
-        var data = new WindowCompositionAttributeData
-        {
-            Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
-            Data = Marshal.AllocHGlobal(Marshal.SizeOf(accent)),
-            SizeOfData = Marshal.SizeOf(accent)
-        };
-
-        try
-        {
-            Marshal.StructureToPtr(accent, data.Data, false);
-            int result = SetWindowCompositionAttribute(handle, ref data);
-            return result == 0; // 0 = success
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(data.Data);
-        }
+        // ---- Dark mode for the backdrop ----
+        int darkMode = 1;
+        DwmSetWindowAttribute(handle, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, ref darkMode, sizeof(int));
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

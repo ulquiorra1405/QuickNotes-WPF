@@ -6,5 +6,6 @@
         ShowInTaskbar="False"
         Topmost="False"
         ResizeMode="NoResize"
-        Background="#191919">
+        Background="Transparent">
+    <Rectangle Name="TintOverlay" Fill="#66000000" />
 </Window>
