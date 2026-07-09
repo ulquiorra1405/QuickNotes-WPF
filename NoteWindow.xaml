@@ -177,60 +177,6 @@
                          TextChanged="Title_TextChanged"/>
 
                 <StackPanel x:Name="titleRightPanel" HorizontalAlignment="Right" Orientation="Horizontal">
-                    <Button x:Name="emojiBtn" Width="24" Height="24"
-                            Style="{StaticResource TitleBtn}"
-                            FontSize="16"
-                            WindowChrome.IsHitTestVisibleInChrome="True"
-                            ToolTip="Icono para el dock"
-                            Click="EmojiBtn_Click">
-                        <Path Data="{StaticResource IconMask}"
-                              Stretch="Uniform" Width="18" Height="18"
-                              Fill="{DynamicResource TitleIconBrush}"
-                              StrokeThickness="1.5"/>
-                    </Button>
-                    <Popup x:Name="emojiPopup" Placement="Bottom"
-                           PlacementTarget="{Binding ElementName=emojiBtn}"
-                           StaysOpen="True" AllowsTransparency="True"
-                           PopupAnimation="Fade">
-                        <Border Background="{Binding Color}"
-                                CornerRadius="6" Padding="5"
-                                BorderBrush="#40000000" BorderThickness="1">
-                            <Grid TextElement.Foreground="{Binding TextForeground}">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-                                <UniformGrid x:Name="emojiPanel" Grid.Row="0" Columns="6" Rows="4"/>
-                                <Grid Grid.Row="1" Margin="0,4,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Button x:Name="emojiIconPrevBtn" Grid.Column="0"
-                                            Width="20" Height="20"
-                                            Cursor="Hand" ToolTip="Anterior"
-                                            Style="{StaticResource TitleBtn}"
-                                            Click="EmojiIconPrevPage_Click">
-                                        <Path x:Name="emojiIconPrevPath" Data="{StaticResource IconLeft}"
-                                              Stretch="Uniform" Width="10" Height="10"/>
-                                    </Button>
-                                    <StackPanel x:Name="emojiIconPageDots" Grid.Column="1"
-                                                Orientation="Horizontal"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"/>
-                                    <Button x:Name="emojiIconNextBtn" Grid.Column="2"
-                                            Width="20" Height="20"
-                                            Cursor="Hand" ToolTip="Siguiente"
-                                            Style="{StaticResource TitleBtn}"
-                                            Click="EmojiIconNextPage_Click">
-                                        <Path x:Name="emojiIconNextPath" Data="{StaticResource IconRight}"
-                                              Stretch="Uniform" Width="10" Height="10"/>
-                                    </Button>
-                                </Grid>
-                            </Grid>
-                        </Border>
-                    </Popup>
                     <Button x:Name="pinNoteBtn"
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             Style="{StaticResource TitleBtn}"
@@ -827,10 +773,74 @@
                              </StackPanel>
                         </Border>
                     </Popup>
+                    <Rectangle Width="1" Fill="{Binding TextForeground}" Opacity="0.25" Margin="3,2"/>
+                    <Button x:Name="emojiBtn" Width="24" Height="24"
+                            Style="{StaticResource TitleBtn}"
+                            FontSize="16"
+                            Foreground="{Binding TextForeground}"
+                            ToolTip="Icono para el dock"
+                            Click="EmojiBtn_Click">
+                        <Path Data="{StaticResource IconMask}"
+                              Stretch="Uniform" Width="18" Height="18"
+                              Fill="{Binding TextForeground}"/>
+                    </Button>
+                    <Popup x:Name="emojiPopup" Placement="Top"
+                           PlacementTarget="{Binding ElementName=emojiBtn}"
+                           StaysOpen="True" AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Background="{Binding Color}"
+                                CornerRadius="6" Padding="5"
+                                BorderBrush="#40000000" BorderThickness="1">
+                            <Grid TextElement.Foreground="{Binding TextForeground}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <UniformGrid x:Name="emojiPanel" Grid.Row="0" Columns="6" Rows="4"/>
+                                <Grid Grid.Row="1" Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="emojiIconPrevBtn" Grid.Column="0"
+                                            Width="20" Height="20"
+                                            Cursor="Hand" ToolTip="Anterior"
+                                            Style="{StaticResource TitleBtn}"
+                                            Click="EmojiIconPrevPage_Click">
+                                        <Path x:Name="emojiIconPrevPath" Data="{StaticResource IconLeft}"
+                                              Stretch="Uniform" Width="10" Height="10"
+                                              Fill="{Binding TextForeground}"/>
+                                    </Button>
+                                    <StackPanel x:Name="emojiIconPageDots" Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"/>
+                                    <Button x:Name="emojiIconNextBtn" Grid.Column="2"
+                                            Width="20" Height="20"
+                                            Cursor="Hand" ToolTip="Siguiente"
+                                            Style="{StaticResource TitleBtn}"
+                                            Click="EmojiIconNextPage_Click">
+                                        <Path x:Name="emojiIconNextPath" Data="{StaticResource IconRight}"
+                                              Stretch="Uniform" Width="10" Height="10"
+                                              Fill="{Binding TextForeground}"/>
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Popup>
+                    <Button x:Name="hideCompletedBtn"
+                            Width="24" Height="22" Cursor="Hand" ToolTip="Ocultar completados"
+                            Style="{StaticResource TitleBtn}"
+                            Click="HideCompletedBtn_Click">
+                        <Path x:Name="hideCompletedIcon" Data="{StaticResource IconEye}"
+                              Stretch="Uniform" Width="14" Height="14"
+                              StrokeThickness="1.5"/>
+                    </Button>
                 </StackPanel>
 
                 <StackPanel x:Name="bottomRightPanel" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <Rectangle x:Name="sep1" Width="1" Fill="#40FFFFFF" Margin="3,2"/>
+                    <Rectangle x:Name="sep1" Width="1" Fill="{Binding TextForeground}" Opacity="0.25" Margin="3,2"/>
                     <Button x:Name="checkboxBtn" Width="24" Height="22" Cursor="Hand" ToolTip="Checklist"
                             Style="{StaticResource TitleBtn}"
                             Click="CheckboxBtn_Click">
@@ -871,7 +881,8 @@
                                             Style="{StaticResource TitleBtn}"
                                             Click="EmojiPrevPage_Click">
                                         <Path x:Name="emojiPrevPath" Data="{StaticResource IconLeft}"
-                                              Stretch="Uniform" Width="10" Height="10"/>
+                                              Stretch="Uniform" Width="10" Height="10"
+                                              Fill="{Binding TextForeground}"/>
                                     </Button>
                                     <StackPanel x:Name="emojiPageDots" Grid.Column="1"
                                                 Orientation="Horizontal"
@@ -883,7 +894,8 @@
                                             Style="{StaticResource TitleBtn}"
                                             Click="EmojiNextPage_Click">
                                         <Path x:Name="emojiNextPath" Data="{StaticResource IconRight}"
-                                              Stretch="Uniform" Width="10" Height="10"/>
+                                              Stretch="Uniform" Width="10" Height="10"
+                                              Fill="{Binding TextForeground}"/>
                                     </Button>
                                 </Grid>
                             </Grid>
@@ -945,14 +957,6 @@
                             Style="{StaticResource TitleBtn}"
                             Click="RedoBtn_Click">
                         <Path x:Name="redoBtnPath" Data="{StaticResource IconRedo}"
-                              Stretch="Uniform" Width="14" Height="14"
-                              StrokeThickness="1.5"/>
-                    </Button>
-                    <Button x:Name="hideCompletedBtn"
-                            Width="24" Height="22" Cursor="Hand" ToolTip="Ocultar completados"
-                            Style="{StaticResource TitleBtn}"
-                            Click="HideCompletedBtn_Click">
-                        <Path x:Name="hideCompletedIcon" Data="{StaticResource IconEye}"
                               Stretch="Uniform" Width="14" Height="14"
                               StrokeThickness="1.5"/>
                     </Button>
