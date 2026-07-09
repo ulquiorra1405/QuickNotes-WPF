@@ -76,6 +76,11 @@ public partial class NoteWindow : Window
     private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hwnd, ref RECT lpRect);
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOACTIVATE = 0x0010;
     private const int WM_NCLBUTTONDOWN = 0x00A1;
     private const int HTCAPTION = 2;
     private const int HTCLIENT = 1;
@@ -154,6 +159,7 @@ public partial class NoteWindow : Window
     private DispatcherTimer? _zenAuroraTimer;
     private Rectangle? _zenFrostOverlay;
     private Style? _savedParaStyle;
+    private ZenWindow? _zenBackdropWindow;
 
     private static readonly Color[] HighlightColors =
     [
@@ -662,6 +668,13 @@ public partial class NoteWindow : Window
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
+        // Close the backdrop window if Zen mode created one
+        if (_zenBackdropWindow != null)
+        {
+            _zenBackdropWindow.Close();
+            _zenBackdropWindow = null;
+        }
+
         SaveRichText();
         _note.IsDirty = false;
 
@@ -864,10 +877,25 @@ public partial class NoteWindow : Window
         zenWrapper.Padding = new Thickness(24, 12, 24, 12);
         zenWrapper.Margin = new Thickness(0);
 
-        // Start the aurora backdrop (animated gradient)
-        StartZenAurora();
+        // Show the acrylic backdrop window behind NoteWindow
+        if (_zenBackdropWindow == null)
+        {
+            _zenBackdropWindow = new ZenWindow();
+            _zenBackdropWindow.Show();
+        }
+        else
+        {
+            _zenBackdropWindow.Show();
+        }
 
+        // Put ZenWindow behind NoteWindow in z-order
+        var zenHandle = new WindowInteropHelper(_zenBackdropWindow).Handle;
+        var noteHandle = new WindowInteropHelper(this).Handle;
+        SetWindowPos(zenHandle, noteHandle, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
+        // Make backdrop nearly transparent → acrylic shows through
+        // Alpha=1 (not 0) to preserve click handling on the NoteWindow area
+        micaBackdrop.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
 
         // Maximize
         WindowState = WindowState.Maximized;
@@ -882,8 +910,11 @@ public partial class NoteWindow : Window
         if (!_isZenMode) return;
         _isZenMode = false;
 
-        // Stop aurora animation and restore normal backdrop
-        StopZenAurora();
+        // Hide acrylic backdrop window
+        if (_zenBackdropWindow != null && _zenBackdropWindow.IsVisible)
+            _zenBackdropWindow.Hide();
+
+        // Restore normal backdrop
         ApplyMicaBackground();
 
         // Reset zen wrapper to normal layout
