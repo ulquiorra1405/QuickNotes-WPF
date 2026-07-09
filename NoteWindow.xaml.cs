@@ -151,6 +151,7 @@ public partial class NoteWindow : Window
     private double _zenRestoreWidth;
     private double _zenRestoreHeight;
     private double _zenSavedFontSize;
+    private DispatcherTimer? _zenAuroraTimer;
     private Style? _savedParaStyle;
 
     private static readonly Color[] HighlightColors =
@@ -862,8 +863,8 @@ public partial class NoteWindow : Window
         zenWrapper.Padding = new Thickness(24, 12, 24, 12);
         zenWrapper.Margin = new Thickness(0);
 
-        // Set the glass backdrop (dark semi-transparent — wallpaper shows through)
-        SetZenBackdrop();
+        // Start the aurora backdrop (animated gradient)
+        StartZenAurora();
 
 
 
@@ -880,7 +881,8 @@ public partial class NoteWindow : Window
         if (!_isZenMode) return;
         _isZenMode = false;
 
-        // Restore normal backdrop (note color with alpha)
+        // Stop aurora animation and restore normal backdrop
+        StopZenAurora();
         ApplyMicaBackground();
 
         // Reset zen wrapper to normal layout
@@ -910,12 +912,69 @@ public partial class NoteWindow : Window
         RestoreParagraphStyle();
     }
 
-    private void SetZenBackdrop()
+    private void StartZenAurora()
     {
-        // Subtle transparent overlay: ~27% opaque black
-        // Wallpaper dominates (73% visible) — just enough dim
-        // to make the card pop without blocking the background.
-        micaBackdrop.Background = new SolidColorBrush(Color.FromArgb(0x44, 0x00, 0x00, 0x00));
+        // Animated gradient backdrop: note color glows subtly behind the card,
+        // shifting position slowly for a living, organic feel.
+        // Wallpaper stays visible through the low-alpha stops.
+        var noteHex = _note.Color ?? "#F8F9FA";
+        var noteColor = ParseColor(noteHex);
+
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = new Point(0.3, 0.2),
+            EndPoint = new Point(0.7, 0.8)
+        };
+
+        // Base dark tint (wallpaper shows through)
+        var dark = Color.FromArgb(0x44, 0x00, 0x00, 0x00);
+        // Note color — very low alpha, just a whisper of the note's hue
+        var tint1 = Color.FromArgb(0x28, noteColor.R, noteColor.G, noteColor.B);
+        // Shifted hue for variety (slightly brighter, shifted in channel)
+        var tint2 = Color.FromArgb(0x1C,
+            (byte)Math.Clamp(noteColor.R + 40, 0, 255),
+            (byte)Math.Clamp(noteColor.G - 10, 0, 255),
+            (byte)Math.Clamp(noteColor.B + 20, 0, 255));
+
+        brush.GradientStops.Add(new GradientStop(dark, 0.0));
+        brush.GradientStops.Add(new GradientStop(tint1, 0.3));
+        brush.GradientStops.Add(new GradientStop(tint2, 0.6));
+        brush.GradientStops.Add(new GradientStop(dark, 1.0));
+
+        micaBackdrop.Background = brush;
+
+        var startTicks = Environment.TickCount;
+        _zenAuroraTimer = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(33),
+            DispatcherPriority.Render,
+            (_, _) =>
+            {
+                var elapsed = (Environment.TickCount - startTicks) / 1000.0;
+
+                // Gradient stops drift like slow-moving aurora
+                brush.GradientStops[0].Offset = 0.0;
+                brush.GradientStops[1].Offset = 0.2 + 0.12 * Math.Sin(elapsed * 0.3 + 0.5);
+                brush.GradientStops[2].Offset = 0.4 + 0.15 * Math.Sin(elapsed * 0.4 + 1.2);
+                brush.GradientStops[3].Offset = 0.7 + 0.15 * Math.Sin(elapsed * 0.35 + 2.8);
+
+                // Gradient direction shifts organically
+                brush.StartPoint = new Point(
+                    0.3 + 0.2 * Math.Sin(elapsed * 0.2),
+                    0.3 + 0.2 * Math.Cos(elapsed * 0.15));
+                brush.EndPoint = new Point(
+                    0.7 + 0.2 * Math.Sin(elapsed * 0.18 + 1.5),
+                    0.7 + 0.2 * Math.Cos(elapsed * 0.14 + 1.5));
+            },
+            Dispatcher);
+    }
+
+    private void StopZenAurora()
+    {
+        if (_zenAuroraTimer != null)
+        {
+            _zenAuroraTimer.Stop();
+            _zenAuroraTimer = null;
+        }
     }
 
     private void NoteWindow_PreviewMouseMove(object sender, MouseEventArgs e)
