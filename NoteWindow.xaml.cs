@@ -888,6 +888,9 @@ public partial class NoteWindow : Window
             _zenBackdropWindow.Show();
         }
 
+        // Bring focus back to NoteWindow (Show() activates ZenWindow since ShowActivated is removed)
+        this.Activate();
+
         // Put ZenWindow behind NoteWindow in z-order
         var zenHandle = new WindowInteropHelper(_zenBackdropWindow).Handle;
         var noteHandle = new WindowInteropHelper(this).Handle;
