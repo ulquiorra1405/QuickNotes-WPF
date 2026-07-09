@@ -6,9 +6,6 @@
         ShowInTaskbar="False"
         Topmost="False"
         ResizeMode="NoResize"
-        Background="#1E1E1E">
-    <Grid>
-        <!-- Dark tint overlay: blends with DWM backdrop to create frosted look -->
-        <Rectangle Name="TintOverlay" Fill="#88000000" />
-    </Grid>
+        Background="#000000"
+        Width="100" Height="100">
 </Window>

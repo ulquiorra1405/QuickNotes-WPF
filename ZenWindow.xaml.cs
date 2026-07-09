@@ -1,151 +1,297 @@
 using System;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Interop;
 
 namespace QuickNotes;
 
 /// <summary>
-/// Maximized backdrop window used in Zen mode.
-/// Uses the modern DWM backdrop API for glass/Mica effect on Win11.
-/// Positioned behind NoteWindow on the same monitor.
+/// Pure Win32 backdrop window for Zen mode.
+/// No WPF rendering — uses SetWindowCompositionAttribute for native acrylic blur.
 /// </summary>
 public partial class ZenWindow : Window
 {
-    // --- DWM backdrop API (Win11 22H2+) ---
+    // --- Acrylic P/Invoke ---
+    [DllImport("user32.dll")]
+    private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowCompositionAttributeData
+    {
+        public WindowCompositionAttribute Attribute;
+        public IntPtr Data;
+        public int SizeOfData;
+    }
+    private enum WindowCompositionAttribute { WCA_ACCENT_POLICY = 19 }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct AccentPolicy
+    {
+        public AccentState AccentState;
+        public int AccentFlags;
+        public uint GradientColor;
+        public int AnimationId;
+    }
+    private enum AccentState
+    {
+        ACCENT_DISABLED,
+        ACCENT_ENABLE_GRADIENT,
+        ACCENT_ENABLE_TRANSPARENTGRADIENT,
+        ACCENT_ENABLE_BLURBEHIND,
+        ACCENT_ENABLE_ACRYLICBLURBEHIND,
+        ACCENT_ENABLE_HOSTBACKDROP
+    }
+
+    // --- Win32 helpers ---
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    [DllImport("user32.dll")]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
+    private const int MDT_EFFECTIVE_DPI = 0;
+
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
-    private const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
-    private const int DWMSBT_MAINWINDOW = 2;    // Mica (subtle desktop tint)
-    private const int DWMSBT_TABBEDWINDOW = 4;  // Acrylic (blur + tint)
-
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-    private const int DWMWA_MICA_ALT_DISABLED = 34;
 
-    private bool _allowClose;
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr CreateWindowEx(
+        uint dwExStyle, IntPtr lpClassName, IntPtr lpWindowName,
+        uint dwStyle, int x, int y, int nWidth, int nHeight,
+        IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private const int SW_HIDE = 0;
+    private const int SW_SHOWNOACTIVATE = 4;
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_SHOWWINDOW = 0x0040;
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MONITORINFO
+    {
+        public uint cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+
+    private IntPtr _hWnd = IntPtr.Zero;
+    private bool _shown;
     private readonly IntPtr _noteHandle;
 
     public ZenWindow(IntPtr noteWindowHandle)
     {
         _noteHandle = noteWindowHandle;
         InitializeComponent();
-        SourceInitialized += OnSourceInitialized;
     }
 
     /// <summary>
-    /// Shows ZenWindow on the same monitor as NoteWindow with the backdrop effect.
+    /// Creates (if needed) and shows the acrylic backdrop on the same monitor as NoteWindow.
     /// </summary>
     public void ShowBehindNote()
     {
-        // Show the window first (small, anywhere)
-        Show();
+        if (_hWnd == IntPtr.Zero)
+            CreateBackdrop();
 
-        // Move to the correct monitor, then maximize
-        // WPF's window manager handles per-monitor DPI when maximizing
+        // Get NoteWindow's monitor
         var hMonitor = MonitorFromWindow(_noteHandle, MONITOR_DEFAULTTONEAREST);
-        var mi = new MONITORINFOEX();
-        mi.cbSize = (uint)Marshal.SizeOf<MONITORINFOEX>();
+        var mi = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
+        GetMonitorInfo(hMonitor, ref mi);
 
-        if (GetMonitorInfo(hMonitor, ref mi))
+        // Position and show behind NoteWindow in one call
+        SetWindowPos(_hWnd, _noteHandle,
+            mi.rcMonitor.Left, mi.rcMonitor.Top,
+            mi.rcMonitor.Right - mi.rcMonitor.Left,
+            mi.rcMonitor.Bottom - mi.rcMonitor.Top,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+        _shown = true;
+    }
+
+    /// <summary>
+    /// Hides the backdrop window (can be re-shown later).
+    /// </summary>
+    public void HideBackdrop()
+    {
+        if (_hWnd != IntPtr.Zero && _shown)
         {
-            // Convert physical pixels to WPF DIPs
-            uint dpiX = 96, dpiY = 96;
-            if (GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, out dpiX, out dpiY) != 0)
-            {
-                dpiX = 96; dpiY = 96;
-            }
-            double sx = 96.0 / dpiX;
-            double sy = 96.0 / dpiY;
-
-            // Position to the correct monitor's FULL area (including taskbar) for immersion
-            Left   = mi.rcMonitor.Left   * sx;
-            Top    = mi.rcMonitor.Top    * sy;
-            Width  = (mi.rcMonitor.Right - mi.rcMonitor.Left)   * sx;
-            Height = (mi.rcMonitor.Bottom - mi.rcMonitor.Top)   * sy;
-
-            // Place behind NoteWindow in z-order
-            var zenHandle = new WindowInteropHelper(this).Handle;
-            SetWindowPos(zenHandle, _noteHandle, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        }
-        else
-        {
-            // Fallback: just maximize (will go to primary monitor)
-            WindowState = WindowState.Maximized;
+            ShowWindow(_hWnd, SW_HIDE);
+            _shown = false;
         }
     }
 
     /// <summary>
-    /// Force-close without cancellation.
+    /// Destroys the window permanently (called when NoteWindow closes).
     /// </summary>
     public void ForceClose()
     {
-        _allowClose = true;
-        Close();
+        if (_hWnd != IntPtr.Zero)
+        {
+            ShowWindow(_hWnd, SW_HIDE);
+            DestroyWindow(_hWnd);
+            _hWnd = IntPtr.Zero;
+            _shown = false;
+        }
     }
 
-    private void OnSourceInitialized(object? sender, EventArgs e)
+    private void CreateBackdrop()
     {
-        var handle = new WindowInteropHelper(this).Handle;
+        // Register a minimal window class (no background → DWM acrylic visible)
+        var hInst = GetModuleHandle(null);
+        var className = "QuickNotes_ZenWindow_v2";
 
-        // Try acrylic first (Win11 22H2+ tabbed backdrop = blur + tint)
-        int backdrop = DWMSBT_TABBEDWINDOW;
-        int hr = DwmSetWindowAttribute(handle, DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int));
-
-        if (hr != 0)
+        var wndClass = new WNDCLASSEX
         {
-            // Fallback to Mica (tint only, no blur)
-            backdrop = DWMSBT_MAINWINDOW;
-            DwmSetWindowAttribute(handle, DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int));
+            cbSize = (uint)Marshal.SizeOf<WNDCLASSEX>(),
+            style = 0,
+            lpfnWndProc = Marshal.GetFunctionPointerForDelegate<WndProcDelegate>(WndProc),
+            hInstance = hInst,
+            hbrBackground = IntPtr.Zero, // NO background brush → acrylic shows through
+            lpszClassName = className,
+            lpszMenuName = null
+        };
+
+        ushort atom = RegisterClassEx(ref wndClass);
+        if (atom == 0)
+        {
+            // If already registered, that's fine — get the atom
+            atom = (ushort)GetClassInfoEx(hInst, className, ref wndClass);
         }
 
-        // Dark mode for the backdrop tint
+        // Create the window: POPUP style, NO layered extensions → acrylic works
+        const uint WS_POPUP = 0x80000000u;
+        // No WS_EX_LAYERED → SetWindowCompositionAttribute works
+        // No WS_EX_TRANSPARENT → we want the window to accept clicks (not through to NoteWindow)
+        const uint WS_EX_NOACTIVATE = 0x08000000u;
+
+        _hWnd = CreateWindowEx(
+            WS_EX_NOACTIVATE,
+            new IntPtr(atom), IntPtr.Zero,
+            WS_POPUP,
+            0, 0, 0, 0,
+            IntPtr.Zero, IntPtr.Zero, hInst, IntPtr.Zero);
+
+        if (_hWnd == IntPtr.Zero)
+        {
+            int err = Marshal.GetLastWin32Error();
+            throw new Win32Exception(err, $"CreateWindowEx failed (0x{err:X8})");
+        }
+
+        // Set dark mode for the window frame (affects the acrylic tint)
         int darkMode = 1;
-        DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+        DwmSetWindowAttribute(_hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+
+        // Apply acrylic blur
+        ApplyAcrylic();
     }
 
-    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    private void ApplyAcrylic()
     {
-        if (!_allowClose)
+        if (_hWnd == IntPtr.Zero) return;
+
+        // GradientColor: 0xAABBGGRR — dark tint for frosted look
+        // 0x66111111 ≈ 40% dark (alpha=102, R=17, G=17, B=17)
+        var accent = new AccentPolicy
         {
-            e.Cancel = true;
-            Hide();
+            AccentState = AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND,
+            AccentFlags = 0,
+            GradientColor = 0x66111111,
+            AnimationId = 0
+        };
+
+        int result = TryApplyAccent(accent);
+        if (result != 0)
+        {
+            // Fallback to blur behind (no tint)
+            accent.AccentState = AccentState.ACCENT_ENABLE_BLURBEHIND;
+            accent.GradientColor = 0;
+            result = TryApplyAccent(accent);
+        }
+        if (result != 0)
+        {
+            // Fallback to transparent gradient (just tint, no blur)
+            accent.AccentState = AccentState.ACCENT_ENABLE_TRANSPARENTGRADIENT;
+            accent.GradientColor = 0x66111111;
+            TryApplyAccent(accent);
+        }
+    }
+
+    private int TryApplyAccent(AccentPolicy accent)
+    {
+        var data = new WindowCompositionAttributeData
+        {
+            Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
+            Data = Marshal.AllocHGlobal(Marshal.SizeOf(accent)),
+            SizeOfData = Marshal.SizeOf(accent)
+        };
+
+        try
+        {
+            Marshal.StructureToPtr(accent, data.Data, false);
+            return SetWindowCompositionAttribute(_hWnd, ref data);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(data.Data);
+        }
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (_hWnd != IntPtr.Zero)
+        {
+            if (_shown) ShowWindow(_hWnd, SW_HIDE);
+            DestroyWindow(_hWnd);
+            _hWnd = IntPtr.Zero;
         }
         base.OnClosing(e);
     }
 
-    // --- Monitor and Win32 helpers ---
+    // --- Window procedure (minimal — just passes to DefWindowProc) ---
+    private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
     [DllImport("user32.dll")]
-    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
-    private const uint MONITOR_DEFAULTTONEAREST = 2;
+    private static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+    private static extern ushort RegisterClassEx([In] ref WNDCLASSEX lpWndClass);
 
-    [DllImport("shcore.dll")]
-    private static extern int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
-    private const int MDT_EFFECTIVE_DPI = 0;
-
-    [DllImport("user32.dll")]
-    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-    private const uint SWP_NOACTIVATE = 0x0010;
-    private const uint SWP_NOSIZE = 0x0001;
-    private const uint SWP_NOMOVE = 0x0002;
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern int GetClassInfoEx(IntPtr hInstance, string lpClassName, ref WNDCLASSEX lpWndClass);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-    private struct MONITORINFOEX
+    private struct WNDCLASSEX
     {
         public uint cbSize;
-        public RECT rcMonitor;
-        public RECT rcWork;
-        public uint dwFlags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-        public string szDevice;
+        public uint style;
+        public IntPtr lpfnWndProc;
+        public int cbClsExtra;
+        public int cbWndExtra;
+        public IntPtr hInstance;
+        public IntPtr hIcon;
+        public IntPtr hCursor;
+        public IntPtr hbrBackground;
+        public string lpszMenuName;
+        public string lpszClassName;
+        public IntPtr hIconSm;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT
-    {
-        public int Left, Top, Right, Bottom;
-    }
+    private static readonly WndProcDelegate WndProc = DefWindowProc;
 }
