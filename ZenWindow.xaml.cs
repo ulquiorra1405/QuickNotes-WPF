@@ -3,22 +3,19 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Interop;
-using System.Windows.Media;
 
 namespace QuickNotes;
 
 /// <summary>
-/// WPF backdrop window for Zen mode.
+/// Pure Win32 layered backdrop window for Zen mode.
 ///
 /// Architecture:
-///   - WPF Window with AllowsTransparency=True → WS_EX_LAYERED (per-pixel alpha)
-///   - ACCENT_ENABLE_BLURBEHIND via SetWindowCompositionAttribute → system blur
-///   - WPF Rectangle TintOverlay (#80000000) → dark tint on top of blur
-///   - Z-order set behind NoteWindow via SetWindowPos
-///   - ShowActivated=False → no focus steal
+///   1. Win32 POPUP + WS_EX_LAYERED window (no WPF)
+///   2. Calls SetWindowCompositionAttribute with ALL accent states to test
+///   3. Falls back to DWM SystemBackdrop if SWCA fails
+///   4. Transparent to mouse/focus
 /// </summary>
-public partial class ZenWindow : Window
+public class ZenWindow
 {
     // ======================== SWCA ========================
     [DllImport("user32.dll")]
@@ -52,17 +49,75 @@ public partial class ZenWindow : Window
         ACCENT_ENABLE_HOSTBACKDROP = 5,
     }
 
+    // ======================== DWM ========================
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS pMarInset);
+
+    private const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
+    private const int DWMWA_NCRENDERING_POLICY = 2;
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMNCRP_ENABLED = 2;
+    private const int DWMNCRP_DISABLED = 1;
+    private const int DWMSBT_TABBEDWINDOW = 3;
+    private const int DWMSBT_FLOATING = 4;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MARGINS { public int leftWidth, rightWidth, topHeight, bottomHeight; }
+
     // ======================== User32 ========================
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern IntPtr CreateWindowEx(
+        uint dwExStyle, string lpClassName,
+        IntPtr lpWindowName, uint dwStyle,
+        int x, int y, int nWidth, int nHeight,
+        IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private const int SW_HIDE = 0;
+    private const int SW_SHOWNA = 8;
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyWindow(IntPtr hWnd);
+
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
         int X, int Y, int cx, int cy, uint uFlags);
     private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_SHOWWINDOW = 0x0040;
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
 
     [DllImport("user32.dll")]
+    private static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+    private static extern IntPtr GetModuleHandle(string? lpModuleName);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern ushort RegisterClassEx([In] ref WNDCLASSEX lpwcx);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern int GetClassInfoEx(IntPtr hInstance, string lpszClass, ref WNDCLASSEX lpwcx);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    private const int GWL_EXSTYLE = -20;
+    private const int GWL_STYLE = -16;
+    private const uint WS_EX_LAYERED = 0x00080000;
+
+    // ======================== Monitor/DPI ========================
+    [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
     private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
     private struct MONITORINFO
@@ -72,8 +127,6 @@ public partial class ZenWindow : Window
         public RECT rcWork;
         public uint dwFlags;
     }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT { public int Left, Top, Right, Bottom; }
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
@@ -82,116 +135,150 @@ public partial class ZenWindow : Window
     private static extern int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
     private const int MDT_EFFECTIVE_DPI = 0;
 
+    // ======================== Structs ========================
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct WNDCLASSEX
+    {
+        public uint cbSize;
+        public uint style;
+        public IntPtr lpfnWndProc;
+        public int cbClsExtra;
+        public int cbWndExtra;
+        public IntPtr hInstance;
+        public IntPtr hIcon;
+        public IntPtr hCursor;
+        public IntPtr hbrBackground;
+        public string? lpszMenuName;
+        public string? lpszClassName;
+        public IntPtr hIconSm;
+    }
+
     // ======================== Fields ========================
-    private readonly IntPtr _noteHandle;
+    private IntPtr _hWnd = IntPtr.Zero;
     private bool _shown;
+    private bool _dwmConfigured;
+    private readonly IntPtr _noteHandle;
+    private static bool _classRegistered;
+    private static readonly WndProcDelegate WndProcCallback = WndProc;
 
     public ZenWindow(IntPtr noteWindowHandle)
     {
-        InitializeComponent();
         _noteHandle = noteWindowHandle;
     }
 
     public void ShowBehindNote()
     {
-        Debug.WriteLine("[ZenWindow] === ShowBehindNote ===");
+        Debug.WriteLine("[ZenWindow] === ShowBehindNote (Win32 layered) ===");
 
-        if (_shown)
+        if (_hWnd == IntPtr.Zero)
         {
-            // Already visible — bring it back behind note
-            RepositionZOrder();
-            return;
+            CreateLayeredHwnd();
+            ApplyBlur();
         }
 
-        // ---------- Position on NoteWindow's monitor ----------
+        // Position on NoteWindow's monitor
         var hMonitor = MonitorFromWindow(_noteHandle, MONITOR_DEFAULTTONEAREST);
         var mi = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
         if (!GetMonitorInfo(hMonitor, ref mi))
             Debug.WriteLine("[ZenWindow] GetMonitorInfo FAILED");
 
-        // Get monitor DPI
-        GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, out uint dpiX, out uint dpiY);
-        if (dpiX == 0) dpiX = 96;
-        if (dpiY == 0) dpiY = 96;
+        Debug.WriteLine($"[ZenWindow] Placing at ({mi.rcMonitor.Left},{mi.rcMonitor.Top}) size={mi.rcMonitor.Right - mi.rcMonitor.Left}x{mi.rcMonitor.Bottom - mi.rcMonitor.Top}");
 
-        // Convert monitor rect to WPF (device-independent) pixels
-        double dpiScaleX = dpiX / 96.0;
-        double dpiScaleY = dpiY / 96.0;
+        SetWindowPos(_hWnd, _noteHandle,
+            mi.rcMonitor.Left, mi.rcMonitor.Top,
+            mi.rcMonitor.Right - mi.rcMonitor.Left,
+            mi.rcMonitor.Bottom - mi.rcMonitor.Top,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
-        double left = mi.rcMonitor.Left / dpiScaleX;
-        double top = mi.rcMonitor.Top / dpiScaleY;
-        double width = (mi.rcMonitor.Right - mi.rcMonitor.Left) / dpiScaleX;
-        double height = (mi.rcMonitor.Bottom - mi.rcMonitor.Top) / dpiScaleY;
-
-        this.Left = left;
-        this.Top = top;
-        this.Width = width;
-        this.Height = height;
-
-        Debug.WriteLine($"[ZenWindow] WPF size: left={left:F1} top={top:F1} {width:F1}x{height:F1} @ dpi={dpiX}x{dpiY}");
-
-        // ---------- Show the window ----------
-        // WPF uses SW_SHOWNOACTIVATE internally because ShowActivated=False
-        this.Show();
-
-        // ---------- Apply blur via SWCA ----------
-        ApplySystemBlur();
-
-        // ---------- Position z-order behind NoteWindow ----------
-        RepositionZOrder();
-
+        ShowWindow(_hWnd, SW_SHOWNA);
         _shown = true;
         Debug.WriteLine("[ZenWindow] Window shown");
     }
 
     public void Hide()
     {
-        if (_shown)
+        if (_hWnd != IntPtr.Zero && _shown)
         {
-            this.Visibility = Visibility.Hidden;
+            ShowWindow(_hWnd, SW_HIDE);
             _shown = false;
         }
     }
 
     public void ForceClose()
     {
-        if (this.IsLoaded)
+        if (_hWnd != IntPtr.Zero)
         {
-            this.Close();
+            ShowWindow(_hWnd, SW_HIDE);
+            DestroyWindow(_hWnd);
+            _hWnd = IntPtr.Zero;
+            _shown = false;
+            _classRegistered = false;
         }
-        _shown = false;
     }
 
-    private void RepositionZOrder()
+    private void CreateLayeredHwnd()
     {
-        var helper = new WindowInteropHelper(this);
-        SetWindowPos(helper.Handle, _noteHandle, 0, 0, 0, 0,
-            SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+        var hInst = GetModuleHandle(null);
+        const string className = "QuickNotes_Zen_LAYERED";
+
+        if (!_classRegistered)
+        {
+            var wc = new WNDCLASSEX
+            {
+                cbSize = (uint)Marshal.SizeOf<WNDCLASSEX>(),
+                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(WndProcCallback),
+                hInstance = hInst,
+                hbrBackground = IntPtr.Zero,
+                lpszClassName = className,
+            };
+
+            ushort atom = RegisterClassEx(ref wc);
+            if (atom == 0)
+            {
+                var check = new WNDCLASSEX { cbSize = (uint)Marshal.SizeOf<WNDCLASSEX>() };
+                if (GetClassInfoEx(hInst, className, ref check) != 0)
+                    atom = 1;
+                else
+                    Debug.WriteLine($"[ZenWindow] RegisterClassEx failed: 0x{Marshal.GetLastWin32Error():X8}");
+            }
+            _classRegistered = true;
+        }
+
+        // ---- Window styles ----
+        // LAYERED + NOACTIVATE + TRANSPARENT + TOOLWINDOW
+        // POPUP (no regular frame)
+        const uint WS_POPUP = 0x80000000u;
+        const uint WS_CLIPCHILDREN = 0x02000000u;
+
+        const uint EX_LAYERED = 0x00080000u;
+        const uint EX_NOACTIVATE = 0x08000000u;
+        const uint EX_TRANSPARENT = 0x00000020u;
+        const uint EX_TOOLWINDOW = 0x00000080u;
+
+        _hWnd = CreateWindowEx(
+            EX_LAYERED | EX_NOACTIVATE | EX_TRANSPARENT | EX_TOOLWINDOW,
+            className, IntPtr.Zero,
+            WS_POPUP | WS_CLIPCHILDREN,
+            0, 0, 100, 100,
+            IntPtr.Zero, IntPtr.Zero, hInst, IntPtr.Zero);
+
+        if (_hWnd == IntPtr.Zero)
+        {
+            int err = Marshal.GetLastWin32Error();
+            Debug.WriteLine($"[ZenWindow] CreateWindowEx FAILED: 0x{err:X8}");
+            throw new Win32Exception(err, $"CreateWindowEx failed: 0x{err:X8}");
+        }
+
+        Debug.WriteLine($"[ZenWindow] hWnd = 0x{_hWnd.ToString("X8")}");
+        Debug.WriteLine($"[ZenWindow] EXSTYLE = 0x{GetWindowLong(_hWnd, GWL_EXSTYLE):X8}");
     }
 
-    private void ApplySystemBlur()
+    private void ApplyBlur()
     {
-        var helper = new WindowInteropHelper(this);
-        IntPtr hwnd = helper.Handle;
-
-        Debug.WriteLine("[ZenWindow] === DIAGNOSTIC: ALL accent states ===");
-
-        // Try all 6 states (1-5 are effects, 0=disabled)
-        // with different flag combos:
-        //   0x00 = no flags
-        //   0x20 = DrawAllBorders
-        //   0x40 = PostNotBottom
-        //   0x20|0x40 = both
-        int[][] flagSets = new[] {
-            new[] { 0 },
-            new[] { 0x20 | 0x40 },
-            new[] { 0x20 },
-            new[] { 0x40 },
-        };
+        Debug.WriteLine("[ZenWindow] === ApplyBlur ===");
 
         var stateNames = new Dictionary<int, string>
         {
-            { 0, "DISABLED" },
             { 1, "GRADIENT" },
             { 2, "TRANSPARENTGRADIENT" },
             { 3, "BLURBEHIND" },
@@ -199,51 +286,110 @@ public partial class ZenWindow : Window
             { 5, "HOSTBACKDROP" },
         };
 
+        int[] flagSets = { 0x00, 0x20, 0x40, 0x20 | 0x40 };
+
+        // ---------- SWCA: test ALL accent states ----------
+        Debug.WriteLine("[ZenWindow] --- SWCA sweep on pure Win32 layered ---");
+        bool anySwcaOk = false;
         foreach (int state in new[] { 1, 2, 3, 4, 5 })
         {
-            foreach (var flags in flagSets)
+            foreach (int flags in flagSets)
             {
-                int flagVal = flags[0];
-                uint gradColor = (state == 4) ? 0x55111111u : 0u;
-                int hr = TryAccent(hwnd, state, flagVal, gradColor);
+                uint grad = (state == 4) ? 0x55111111u : 0u;
+                int swcaHr = TrySwca(state, flags, grad);
                 string name = stateNames[state];
-                Debug.WriteLine($"[ZenWindow] SWCA {name,-25} flags=0x{flagVal:X2} grad=0x{gradColor:X8} → 0x{hr:X8} {(hr == 0 ? "✓" : "✗")}");
+                Debug.WriteLine($"[ZenWindow] SWCA {name,-25} flags=0x{flags:X2} → 0x{swcaHr:X8} {(swcaHr == 0 ? "✓" : "✗")}");
+                if (swcaHr == 0) anySwcaOk = true;
             }
         }
 
-        // Now try the BEST working one, in order of preference:
-        // BLURBEHIND > ACRYLICBLURBEHIND > HOSTBACKDROP > TRANSPARENTGRADIENT
-        foreach (int prefState in new[] { 3, 4, 5, 2 })
+        if (anySwcaOk)
         {
-            int bestFlags = FlagComboThatWorks(hwnd, prefState);
-            if (bestFlags >= 0)
+            // Apply the best: BLURBEHIND > ACRYLIC > HOSTBACKDROP > TRANSPARENT
+            foreach (int prefState in new[] { 3, 4, 5, 2 })
             {
-                uint gc = (prefState == 4) ? 0x55111111u : 0u;
-                TryAccent(hwnd, prefState, bestFlags, gc);
-                Debug.WriteLine($"[ZenWindow] ✓ APPLIED: {stateNames[prefState]} with flags=0x{bestFlags:X2}");
-                return;
+                int bestFlags = -1;
+                foreach (int f in flagSets)
+                {
+                    uint gc = (prefState == 4) ? 0x55111111u : 0u;
+                    if (TrySwca(prefState, f, gc) == 0)
+                    {
+                        bestFlags = f;
+                        break;
+                    }
+                }
+                if (bestFlags >= 0)
+                {
+                    uint gc2 = (prefState == 4) ? 0x55111111u : 0u;
+                    TrySwca(prefState, bestFlags, gc2);
+                    Debug.WriteLine($"[ZenWindow] ✓ Applied SWCA: {stateNames[prefState]} flags=0x{bestFlags:X2}");
+                    _dwmConfigured = false; // SWCA in use, not DWM
+                    return;
+                }
             }
         }
 
-        Debug.WriteLine("[ZenWindow] ✗ NO working accent state found");
-    }
+        Debug.WriteLine("[ZenWindow] SWCA completely failed on pure Win32 layered");
 
-    private static int FlagComboThatWorks(IntPtr hwnd, int state)
-    {
-        foreach (int flags in new[] { 0, 0x20, 0x40, 0x20 | 0x40 })
+        // ---------- FALLBACK: DWM SystemBackdrop ----------
+        Debug.WriteLine("[ZenWindow] --- DWM fallback ---");
+
+        // Need a NON-layered window for DWM backdrop.
+        // Remove WS_EX_LAYERED
+        int curEx = GetWindowLong(_hWnd, GWL_EXSTYLE);
+        SetWindowLong(_hWnd, GWL_EXSTYLE, curEx & ~(int)WS_EX_LAYERED);
+        Debug.WriteLine($"[ZenWindow] Removed WS_EX_LAYERED → EXSTYLE=0x{GetWindowLong(_hWnd, GWL_EXSTYLE):X8}");
+
+        // Add THICKFRAME for DWM frame
+        int curStyle = GetWindowLong(_hWnd, GWL_STYLE);
+        const int WS_THICKFRAME = 0x00040000;
+        SetWindowLong(_hWnd, GWL_STYLE, curStyle | WS_THICKFRAME);
+        Debug.WriteLine($"[ZenWindow] Added WS_THICKFRAME → STYLE=0x{GetWindowLong(_hWnd, GWL_STYLE):X8}");
+
+        // Re-apply window with new styles
+        SetWindowPos(_hWnd, IntPtr.Zero, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | 0x0200u); // SWP_FRAMECHANGED
+        Debug.WriteLine("[ZenWindow] Frame changed");
+
+        // DWM NCRENDERING
+        int ncr = DWMNCRP_ENABLED;
+        int hr = DwmSetWindowAttribute(_hWnd, DWMWA_NCRENDERING_POLICY, ref ncr, sizeof(int));
+        Debug.WriteLine($"[ZenWindow] NCRENDERING={ncr} → 0x{hr:X8}");
+
+        // DWM backdrop - try FLOATING then TABBED
+        int[] dwmTypes = { DWMSBT_FLOATING, DWMSBT_TABBEDWINDOW };
+        string[] dwmNames = { "FLOATING (4)", "TABBED (3)" };
+        for (int i = 0; i < dwmTypes.Length; i++)
         {
-            uint gc = (state == 4) ? 0x55111111u : 0u;
-            if (TryAccent(hwnd, state, flags, gc) == 0)
-                return flags;
+            int t = dwmTypes[i];
+            hr = DwmSetWindowAttribute(_hWnd, DWMWA_SYSTEMBACKDROP_TYPE, ref t, sizeof(int));
+            Debug.WriteLine($"[ZenWindow]  DWM {dwmNames[i]} → 0x{hr:X8}");
+            if (hr == 0)
+            {
+                Debug.WriteLine($"[ZenWindow] ✓ Using DWM: {dwmNames[i]}");
+                break;
+            }
         }
-        return -1;
+
+        // Dark mode
+        int dark = 1;
+        hr = DwmSetWindowAttribute(_hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+        Debug.WriteLine($"[ZenWindow] DARK_MODE → 0x{hr:X8}");
+
+        // EXTEND FRAME
+        var margins = new MARGINS { leftWidth = -1, rightWidth = -1, topHeight = -1, bottomHeight = -1 };
+        hr = DwmExtendFrameIntoClientArea(_hWnd, ref margins);
+        Debug.WriteLine($"[ZenWindow] EXTEND_FRAME(-1) → 0x{hr:X8}");
+
+        _dwmConfigured = true;
+        Debug.WriteLine("[ZenWindow] ✓ DWM fallback configured");
     }
 
-    private static int TryAccent(IntPtr hwnd, int stateInt, int accentFlags, uint gradientColor)
+    private int TrySwca(int state, int accentFlags, uint gradientColor)
     {
         var accent = new AccentPolicy
         {
-            AccentState = (AccentState)stateInt,
+            AccentState = (AccentState)state,
             AccentFlags = accentFlags,
             GradientColor = gradientColor,
             AnimationId = 0,
@@ -259,7 +405,7 @@ public partial class ZenWindow : Window
         try
         {
             Marshal.StructureToPtr(accent, data.Data, false);
-            return SetWindowCompositionAttribute(hwnd, ref data);
+            return SetWindowCompositionAttribute(_hWnd, ref data);
         }
         catch (Exception ex)
         {
@@ -270,5 +416,20 @@ public partial class ZenWindow : Window
         {
             Marshal.FreeHGlobal(data.Data);
         }
+    }
+
+    // ======================== Window Procedure ========================
+    private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    private const uint WM_ERASEBKGND = 0x0014;
+
+    private static IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    {
+        switch (msg)
+        {
+            case WM_ERASEBKGND:
+                return IntPtr.Zero; // FALSE → don't erase background
+        }
+        return DefWindowProc(hWnd, msg, wParam, lParam);
     }
 }
