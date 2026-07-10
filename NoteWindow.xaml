@@ -625,7 +625,7 @@
                             </Border>
                         </Grid>
                     </Popup>
-                    <Button Style="{StaticResource TitleBtn}"
+                    <Button x:Name="minimizeBtn" Style="{StaticResource TitleBtn}"
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             ToolTip="Minimizar al dock"
                             Click="MinimizeNote_Click">

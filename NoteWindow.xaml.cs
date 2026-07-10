@@ -617,6 +617,12 @@ public partial class NoteWindow : Window
 
     private void Close_Click(object sender, RoutedEventArgs e)
     {
+        // In Zen mode, close just exits Zen instead of closing the window
+        if (_isZenMode)
+        {
+            ExitZenMode();
+            return;
+        }
         SaveRichText();
         _note.LastModified = DateTime.Now;
         _note.IsDirty = false;
@@ -885,6 +891,9 @@ public partial class NoteWindow : Window
         // Show the backdrop layer (captured desktop + blur + tint)
         zenBackdropLayer.Visibility = Visibility.Visible;
 
+        // Hide minimize button (not useful in Zen)
+        minimizeBtn.Visibility = Visibility.Collapsed;
+
         // Maximize
         WindowState = WindowState.Maximized;
 
@@ -936,6 +945,9 @@ public partial class NoteWindow : Window
         // Restore font size
         noteText.FontSize = _zenSavedFontSize != 0 ? _zenSavedFontSize : 13;
         RestoreParagraphStyle();
+
+        // Show minimize button again
+        minimizeBtn.Visibility = Visibility.Visible;
     }
 
     private void StartZenAurora()
@@ -1090,6 +1102,13 @@ public partial class NoteWindow : Window
             UpdateButtonForegrounds();
             ApplyMicaBackground();
             UpdateDwmTheme();
+
+            // In Zen mode, update the card background to match the new color
+            if (_isZenMode)
+            {
+                var noteHex = _note.Color ?? "#F8F9FA";
+                zenCard.Background = new SolidColorBrush(ParseColor(noteHex));
+            }
         }
     }
 
