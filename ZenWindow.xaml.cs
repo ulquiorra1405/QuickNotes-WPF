@@ -20,12 +20,10 @@ public class ZenWindow
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
     private const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
-    private const int DWMSBT_AUTO = 0;
     private const int DWMSBT_MAINWINDOW = 2;      // Mica
     private const int DWMSBT_TABBEDWINDOW = 3;    // Acrylic (Tabbed)
     private const int DWMSBT_FLOATING = 4;         // Acrylic (Floating, more pronounced)
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-    private const int DWMWA_MICA_ALT_COMPAT_MODE = 34;
 
     // ======================== Win32 Window ========================
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
@@ -86,20 +84,7 @@ public class ZenWindow
     private static extern int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
     private const int MDT_EFFECTIVE_DPI = 0;
 
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetDC(IntPtr hWnd);
 
-    [DllImport("user32.dll")]
-    private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
-
-    [DllImport("gdi32.dll")]
-    private static extern int FillRect(IntPtr hDC, ref RECT lprc, IntPtr hbr);
-
-    [DllImport("gdi32.dll")]
-    private static extern IntPtr CreateSolidBrush(int color);
-
-    [DllImport("gdi32.dll")]
-    private static extern bool DeleteObject(IntPtr hObject);
 
     // ======================== Structs ========================
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
@@ -125,8 +110,6 @@ public class ZenWindow
     private readonly IntPtr _noteHandle;
     private static bool _classRegistered;
     private static readonly WndProcDelegate WndProcCallback = WndProc;
-    private static bool _useCustomTint; // set if DWM backdrop doesn't provide enough tint
-    private static AccentState _fallbackTint; // if DWMSBT fails entirely, try SWCA
 
     // ======================== SWCA fallback ========================
     [DllImport("user32.dll")]
