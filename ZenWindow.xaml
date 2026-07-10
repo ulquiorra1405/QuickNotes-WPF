@@ -4,6 +4,7 @@
         WindowStyle="None"
         ShowInTaskbar="False"
         Topmost="False"
+        ResizeMode="NoResize"
         Background="#FF000000"
         WindowStartupLocation="Manual">
     <Grid>
