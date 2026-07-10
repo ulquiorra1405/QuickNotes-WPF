@@ -854,7 +854,7 @@ public partial class NoteWindow : Window
         var noteHex = _note.Color ?? "#F8F9FA";
         var noteColor = ParseColor(noteHex);
 
-        zenCard.Background = new SolidColorBrush(noteColor); // fully opaque
+        zenCard.Background = new SolidColorBrush(noteColor);
         zenCard.CornerRadius = new CornerRadius(8);
         zenCard.Effect = new DropShadowEffect
         {
@@ -866,6 +866,7 @@ public partial class NoteWindow : Window
         };
         zenCard.MaxWidth = 760;
         zenCard.HorizontalAlignment = HorizontalAlignment.Center;
+        zenCard.Margin = new Thickness(0, 48, 0, 48);
 
         // Capture the desktop BEFORE showing backdrop to avoid capturing ourselves
         var (monLeft, monTop, monWidth, monHeight) = Helpers.MonitorHelper.GetMonitorPhysicalRect(this);
@@ -874,12 +875,12 @@ public partial class NoteWindow : Window
         // Make content transparent so the backdrop shows through
         micaBackdrop.Background = Brushes.Transparent;
 
-        // Clip content to card's rounded corners
-        zenCard.ClipToBounds = true;
-
         // Restyle top/bottom bars to sit on the card background
         titleBar.Background = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
         colorBar.Background = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
+
+        // Clip content to card's rounded corners
+        zenCard.ClipToBounds = true;
 
         // Show the backdrop layer (captured desktop + blur + tint)
         zenBackdropLayer.Visibility = Visibility.Visible;
@@ -907,9 +908,11 @@ public partial class NoteWindow : Window
         // Reset zen card to normal layout
         zenCard.Background = null;
         zenCard.CornerRadius = new CornerRadius(0);
+        zenCard.ClipToBounds = false;
         zenCard.Effect = null;
         zenCard.MaxWidth = double.PositiveInfinity;
         zenCard.HorizontalAlignment = HorizontalAlignment.Stretch;
+        zenCard.Margin = new Thickness(0);
         titleBar.Background = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
         colorBar.Background = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
 

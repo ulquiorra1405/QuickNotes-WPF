@@ -29,12 +29,24 @@ internal static class MonitorHelper
 
     /// <summary>
     /// Gets the raw physical pixel bounds of the monitor that contains the given window.
-    /// Used by GDI CopyFromScreen (which requires physical pixel coordinates).
+    /// Uses GetWindowRect + MonitorFromPoint (more reliable for AllowsTransparency windows
+    /// on multi-monitor setups than MonitorFromWindow).
     /// </summary>
     public static (int Left, int Top, int Width, int Height) GetMonitorPhysicalRect(Window window)
     {
         var hwnd = new WindowInteropHelper(window).Handle;
-        var hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+
+        // Get the window's actual physical screen rect
+        RECT winRect;
+        GetWindowRect(hwnd, out winRect);
+
+        // Find the monitor containing the center of the window rect
+        var center = new POINT
+        {
+            x = (winRect.Left + winRect.Right) / 2,
+            y = (winRect.Top + winRect.Bottom) / 2
+        };
+        var hMonitor = MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST);
 
         var info = new MONITORINFOEX();
         info.cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
@@ -53,6 +65,12 @@ internal static class MonitorHelper
     [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
 
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hwnd, out RECT lpRect);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
 
@@ -63,6 +81,12 @@ internal static class MonitorHelper
     private struct RECT
     {
         public int Left, Top, Right, Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int x, y;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
