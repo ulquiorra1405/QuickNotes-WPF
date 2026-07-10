@@ -30,8 +30,8 @@ public class ZenWindow
     // ======================== Win32 Window ========================
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     private static extern IntPtr CreateWindowEx(
-        uint dwExStyle, [MarshalAs(UnmanagedType.LPStr)] string lpClassName,
-        [MarshalAs(UnmanagedType.LPStr)] string? lpWindowName,
+        uint dwExStyle, string lpClassName,
+        IntPtr lpWindowName,
         uint dwStyle, int x, int y, int nWidth, int nHeight,
         IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
 
@@ -57,7 +57,7 @@ public class ZenWindow
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     private static extern int GetClassInfoEx(IntPtr hInstance,
-        [MarshalAs(UnmanagedType.LPStr)] string lpszClass, ref WNDCLASSEX lpwcx);
+        string lpszClass, ref WNDCLASSEX lpwcx);
 
     [DllImport("user32.dll")]
     private static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -266,7 +266,7 @@ public class ZenWindow
         // NOT WS_EX_APPWINDOW: no taskbar entry
         _hWnd = CreateWindowEx(
             WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
-            className, null,
+            className, IntPtr.Zero,
             WS_POPUP,
             0, 0, 100, 100,
             IntPtr.Zero, IntPtr.Zero, hInst, IntPtr.Zero);
