@@ -874,6 +874,13 @@ public partial class NoteWindow : Window
         // Make content transparent so the backdrop shows through
         micaBackdrop.Background = Brushes.Transparent;
 
+        // Disable corner clipping so bars span full width on the backdrop
+        micaBackdrop.ClipToBounds = false;
+
+        // Restyle top/bottom bars for backdrop appearance
+        titleBar.Background = new SolidColorBrush(Color.FromArgb(0x30, 0, 0, 0));
+        colorBar.Background = new SolidColorBrush(Color.FromArgb(0x30, 0, 0, 0));
+
         // Show the backdrop layer (captured desktop + blur + tint)
         zenBackdropLayer.Visibility = Visibility.Visible;
 
@@ -893,6 +900,11 @@ public partial class NoteWindow : Window
         // Hide the backdrop layer
         zenBackdropLayer.Visibility = Visibility.Collapsed;
         zenDesktopImage.Source = null;
+
+        // Restore corner clipping and bar appearance
+        micaBackdrop.ClipToBounds = true;
+        titleBar.Background = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
+        colorBar.Background = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
 
         // Restore normal backdrop
         ApplyMicaBackground();
