@@ -174,33 +174,77 @@ public partial class ZenWindow : Window
         var helper = new WindowInteropHelper(this);
         IntPtr hwnd = helper.Handle;
 
-        // ============ PRIMARY: ACCENT_ENABLE_BLURBEHIND (3) ============
-        // Pure blur, no tint. The WPF TintOverlay Rectangle provides the dark tint.
-        bool ok = TryAccent(hwnd, AccentState.ACCENT_ENABLE_BLURBEHIND, gradientColor: 0);
-        if (ok)
+        Debug.WriteLine("[ZenWindow] === DIAGNOSTIC: ALL accent states ===");
+
+        // Try all 6 states (1-5 are effects, 0=disabled)
+        // with different flag combos:
+        //   0x00 = no flags
+        //   0x20 = DrawAllBorders
+        //   0x40 = PostNotBottom
+        //   0x20|0x40 = both
+        int[][] flagSets = new[] {
+            new[] { 0 },
+            new[] { 0x20 | 0x40 },
+            new[] { 0x20 },
+            new[] { 0x40 },
+        };
+
+        var stateNames = new Dictionary<int, string>
         {
-            Debug.WriteLine("[ZenWindow] ✓ BLURBEHIND applied");
-            return;
+            { 0, "DISABLED" },
+            { 1, "GRADIENT" },
+            { 2, "TRANSPARENTGRADIENT" },
+            { 3, "BLURBEHIND" },
+            { 4, "ACRYLICBLURBEHIND" },
+            { 5, "HOSTBACKDROP" },
+        };
+
+        foreach (int state in new[] { 1, 2, 3, 4, 5 })
+        {
+            foreach (var flags in flagSets)
+            {
+                int flagVal = flags[0];
+                uint gradColor = (state == 4) ? 0x55111111u : 0u;
+                int hr = TryAccent(hwnd, state, flagVal, gradColor);
+                string name = stateNames[state];
+                Debug.WriteLine($"[ZenWindow] SWCA {name,-25} flags=0x{flagVal:X2} grad=0x{gradColor:X8} → 0x{hr:X8} {(hr == 0 ? "✓" : "✗")}");
+            }
         }
 
-        // ============ FALLBACK: ACCENT_ENABLE_TRANSPARENTGRADIENT (2) ============
-        // Minimal transparency gradient as last resort
-        ok = TryAccent(hwnd, AccentState.ACCENT_ENABLE_TRANSPARENTGRADIENT, gradientColor: 0x55111111);
-        if (ok)
+        // Now try the BEST working one, in order of preference:
+        // BLURBEHIND > ACRYLICBLURBEHIND > HOSTBACKDROP > TRANSPARENTGRADIENT
+        foreach (int prefState in new[] { 3, 4, 5, 2 })
         {
-            Debug.WriteLine("[ZenWindow] ✓ TRANSPARENTGRADIENT (fallback)");
-            return;
+            int bestFlags = FlagComboThatWorks(hwnd, prefState);
+            if (bestFlags >= 0)
+            {
+                uint gc = (prefState == 4) ? 0x55111111u : 0u;
+                TryAccent(hwnd, prefState, bestFlags, gc);
+                Debug.WriteLine($"[ZenWindow] ✓ APPLIED: {stateNames[prefState]} with flags=0x{bestFlags:X2}");
+                return;
+            }
         }
 
-        Debug.WriteLine("[ZenWindow] ✗ ALL accent states failed");
+        Debug.WriteLine("[ZenWindow] ✗ NO working accent state found");
     }
 
-    private static bool TryAccent(IntPtr hwnd, AccentState state, uint gradientColor)
+    private static int FlagComboThatWorks(IntPtr hwnd, int state)
+    {
+        foreach (int flags in new[] { 0, 0x20, 0x40, 0x20 | 0x40 })
+        {
+            uint gc = (state == 4) ? 0x55111111u : 0u;
+            if (TryAccent(hwnd, state, flags, gc) == 0)
+                return flags;
+        }
+        return -1;
+    }
+
+    private static int TryAccent(IntPtr hwnd, int stateInt, int accentFlags, uint gradientColor)
     {
         var accent = new AccentPolicy
         {
-            AccentState = state,
-            AccentFlags = 0x20 | 0x40, // DrawAllBorders | PostNotBottom
+            AccentState = (AccentState)stateInt,
+            AccentFlags = accentFlags,
             GradientColor = gradientColor,
             AnimationId = 0,
         };
@@ -215,14 +259,12 @@ public partial class ZenWindow : Window
         try
         {
             Marshal.StructureToPtr(accent, data.Data, false);
-            int hr = SetWindowCompositionAttribute(hwnd, ref data);
-            Debug.WriteLine($"[ZenWindow] SWCA {state} → 0x{hr:X8}");
-            return hr == 0;
+            return SetWindowCompositionAttribute(hwnd, ref data);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[ZenWindow] SWCA exception: {ex.Message}");
-            return false;
+            return -1;
         }
         finally
         {
