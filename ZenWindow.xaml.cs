@@ -3,61 +3,56 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Interop;
-using System.Windows.Media;
 
 namespace QuickNotes;
 
 /// <summary>
-/// WPF layered backdrop window for Zen mode.
+/// Pure Win32 backdrop window for Zen mode using DwmEnableBlurBehindWindow.
 ///
 /// Architecture:
-///   1. WPF Window with AllowsTransparency=True → WS_EX_LAYERED with per-pixel alpha
-///   2. TintOverlay Rectangle (semi-transparent black) fills the entire window,
-///      providing alpha pixels so DWM renders the SWCA blur effect on them
-///   3. ACCENT_ENABLE_BLURBEHIND applied via SWCA in SourceInitialized
-///   4. Positioned behind NoteWindow on the same monitor
+///   1. Win32 overlapped window (WS_OVERLAPPEDWINDOW) – non-layered, proper non-client area
+///   2. DwmEnableBlurBehindWindow → legacy DWM API that blurs the desktop content
+///      behind the window into the client area (Vista/7-era API, works on 24H2?)
+///   3. Dark tint overlay via layered secondary approach or fallback
+///   4. Positioned behind NoteWindow on same monitor
 ///   5. No focus stealing
 /// </summary>
-public partial class ZenWindow : Window
+public class ZenWindow
 {
-    // ======================== SWCA ========================
-    [DllImport("user32.dll")]
-    private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+    // ======================== DWM BlurBehind ========================
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmEnableBlurBehindWindow(IntPtr hwnd, ref DWM_BLURBEHIND pBlurBehind);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct WindowCompositionAttributeData
+    private struct DWM_BLURBEHIND
     {
-        public WindowCompositionAttribute Attribute;
-        public IntPtr Data;
-        public int SizeOfData;
-    }
-    private enum WindowCompositionAttribute { WCA_ACCENT_POLICY = 19 }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct AccentPolicy
-    {
-        public AccentState AccentState;
-        public int AccentFlags;
-        public uint GradientColor;
-        public int AnimationId;
+        public uint dwFlags;
+        public bool fEnable;
+        public IntPtr hRgnBlur;
+        public bool fTransitionOnMaximized;
     }
 
-    private enum AccentState
-    {
-        ACCENT_DISABLED = 0,
-        ACCENT_ENABLE_GRADIENT = 1,
-        ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
-        ACCENT_ENABLE_BLURBEHIND = 3,
-        ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
-        ACCENT_ENABLE_HOSTBACKDROP = 5,
-    }
+    private const uint DWM_BB_ENABLE = 1;
 
-    // ======================== Win32 ========================
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+    // ======================== User32 ========================
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern IntPtr CreateWindowEx(
+        uint dwExStyle, string lpClassName,
+        IntPtr lpWindowName, uint dwStyle,
+        int x, int y, int nWidth, int nHeight,
+        IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
+
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     private const int SW_HIDE = 0;
     private const int SW_SHOWNA = 8;
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
@@ -67,6 +62,23 @@ public partial class ZenWindow : Window
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_FRAMECHANGED = 0x0020;
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+    private static extern IntPtr GetModuleHandle(string? lpModuleName);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern ushort RegisterClassEx([In] ref WNDCLASSEX lpwcx);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern int GetClassInfoEx(IntPtr hInstance, string lpszClass, ref WNDCLASSEX lpwcx);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr GetStockObject(int fnObject);
+    private const int NULL_BRUSH = 5;
+
+    // ======================== Monitor/DPI ========================
     [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
     private const uint MONITOR_DEFAULTTONEAREST = 2;
@@ -86,189 +98,173 @@ public partial class ZenWindow : Window
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
-    [DllImport("shcore.dll")]
-    private static extern int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
-    private const int MDT_EFFECTIVE_DPI = 0;
-
-    // ======================== DWM ========================
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
-    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    // ======================== Structs ========================
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct WNDCLASSEX
+    {
+        public uint cbSize;
+        public uint style;
+        public IntPtr lpfnWndProc;
+        public int cbClsExtra;
+        public int cbWndExtra;
+        public IntPtr hInstance;
+        public IntPtr hIcon;
+        public IntPtr hCursor;
+        public IntPtr hbrBackground;
+        public string? lpszMenuName;
+        public string? lpszClassName;
+        public IntPtr hIconSm;
+    }
 
     // ======================== Fields ========================
+    private IntPtr _hWnd = IntPtr.Zero;
+    private bool _shown;
     private readonly IntPtr _noteHandle;
-    private bool _swcaApplied;
-    private bool _hasBeenShown;
+    private static bool _classRegistered;
+    private static readonly WndProcDelegate WndProcCallback = WndProc;
 
     public ZenWindow(IntPtr noteWindowHandle)
     {
         _noteHandle = noteWindowHandle;
-        InitializeComponent();
-
-        // Subscribe early — before anything touches the HWND
-        SourceInitialized += OnSourceInitialized;
-
-        // Force HWND creation now while we control the flow
-        _ = new WindowInteropHelper(this).Handle;
-        Debug.WriteLine("[ZenWindow] Constructor: HWND created");
     }
 
     public void ShowBehindNote()
     {
-        Debug.WriteLine("[ZenWindow] === ShowBehindNote ===");
+        Debug.WriteLine("[ZenWindow] === ShowBehindNote (DwmBlurBehind) ===");
 
-        if (_hasBeenShown)
+        if (_hWnd == IntPtr.Zero)
         {
-            // Already created — just reposition and show
-            var hwnd = new WindowInteropHelper(this).Handle;
-            ShowWindow(hwnd, SW_SHOWNA);
-            SetWindowPos(hwnd, _noteHandle, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            Debug.WriteLine("[ZenWindow] Shown again");
-            return;
+            CreateOverlappedHwnd();
+            ApplyBlurBehind();
         }
 
-        // First time: position via Win32 before WPF measures, then show
-        var helper = new WindowInteropHelper(this);
-
-        // Set the WPF window position for the SourceInitialized callback
+        // Position on NoteWindow's monitor
         var hMonitor = MonitorFromWindow(_noteHandle, MONITOR_DEFAULTTONEAREST);
         var mi = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
-        GetMonitorInfo(hMonitor, ref mi);
+        if (!GetMonitorInfo(hMonitor, ref mi))
+            Debug.WriteLine("[ZenWindow] GetMonitorInfo FAILED");
 
-        int width = mi.rcMonitor.Right - mi.rcMonitor.Left;
-        int height = mi.rcMonitor.Bottom - mi.rcMonitor.Top;
-        Debug.WriteLine($"[ZenWindow] Placing at ({mi.rcMonitor.Left},{mi.rcMonitor.Top}) size={width}x{height}");
+        Debug.WriteLine($"[ZenWindow] Placing at ({mi.rcMonitor.Left},{mi.rcMonitor.Top}) size={mi.rcMonitor.Right - mi.rcMonitor.Left}x{mi.rcMonitor.Bottom - mi.rcMonitor.Top}");
 
-        // Set WPF properties so the initial layout uses correct size
-        Left = mi.rcMonitor.Left;
-        Top = mi.rcMonitor.Top;
-        Width = width;
-        Height = height;
+        SetWindowPos(_hWnd, _noteHandle,
+            mi.rcMonitor.Left, mi.rcMonitor.Top,
+            mi.rcMonitor.Right - mi.rcMonitor.Left,
+            mi.rcMonitor.Bottom - mi.rcMonitor.Top,
+            SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
-        // Show the window
-        ShowWindow(helper.Handle, SW_SHOWNA);
-
-        // Position behind NoteWindow (z-order)
-        SetWindowPos(helper.Handle, _noteHandle, 0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-
-        // Apply blur AFTER WPF has rendered the tint overlay
-        // (Dispatcher.Background priority = after layout/render)
-        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
-            new Action(() =>
-            {
-                Debug.WriteLine("[ZenWindow] Dispatcher callback: applying blur");
-                ApplyBlur(helper.Handle);
-            }));
-
-        _hasBeenShown = true;
+        ShowWindow(_hWnd, SW_SHOWNA);
+        _shown = true;
         Debug.WriteLine("[ZenWindow] Window shown");
-    }
-
-    private void OnSourceInitialized(object? sender, EventArgs e)
-    {
-        Debug.WriteLine("[ZenWindow] SourceInitialized");
-
-        if (_swcaApplied) return;
-
-        var hwnd = new WindowInteropHelper(this).Handle;
-
-        // Apply DWM dark mode early
-        int dark = 1;
-        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
-        Debug.WriteLine($"[ZenWindow] DARK_MODE set early");
-
-        // Store HWND for later use
     }
 
     public void Hide()
     {
-        Debug.WriteLine("[ZenWindow] Hide");
-        var helper = new WindowInteropHelper(this);
-        ShowWindow(helper.Handle, SW_HIDE);
+        if (_hWnd != IntPtr.Zero && _shown)
+        {
+            ShowWindow(_hWnd, SW_HIDE);
+            _shown = false;
+        }
     }
 
     public void ForceClose()
     {
-        Debug.WriteLine("[ZenWindow] ForceClose");
-        Close();
+        if (_hWnd != IntPtr.Zero)
+        {
+            ShowWindow(_hWnd, SW_HIDE);
+            DestroyWindow(_hWnd);
+            _hWnd = IntPtr.Zero;
+            _shown = false;
+            _classRegistered = false;
+        }
     }
 
-    private void ApplyBlur(IntPtr hwnd)
+    private void CreateOverlappedHwnd()
     {
-        Debug.WriteLine("[ZenWindow] === ApplyBlur (WPF layered, with content) ===");
+        var hInst = GetModuleHandle(null);
+        const string className = "QuickNotes_Zen_BlurBehind";
 
-        var stateNames = new Dictionary<int, string>
+        if (!_classRegistered)
         {
-            {1, "GRADIENT"}, {2, "TRANSPARENTGRADIENT"}, {3, "BLURBEHIND"},
-            {4, "ACRYLICBLURBEHIND"}, {5, "HOSTBACKDROP"},
-        };
-        int[] flagSets = { 0x00, 0x20, 0x40, 0x20 | 0x40 };
-
-        // Try all state+flag combos
-        foreach (int state in new[] { 1, 2, 3, 4, 5 })
-        {
-            foreach (int flags in flagSets)
+            var wc = new WNDCLASSEX
             {
-                uint grad = (state == 4) ? 0x55111111u : 0u;
-                int hr = TrySwca(hwnd, state, flags, grad);
-                string name = stateNames[state];
-                Debug.WriteLine($"[ZenWindow] SWCA {name,-25} flags=0x{flags:X2} → 0x{hr:X8} {(hr == 0 ? "✓" : "✗")}");
+                cbSize = (uint)Marshal.SizeOf<WNDCLASSEX>(),
+                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(WndProcCallback),
+                hInstance = hInst,
+                hbrBackground = GetStockObject(NULL_BRUSH),
+                lpszClassName = className,
+            };
+
+            ushort atom = RegisterClassEx(ref wc);
+            if (atom == 0)
+            {
+                var check = new WNDCLASSEX { cbSize = (uint)Marshal.SizeOf<WNDCLASSEX>() };
+                if (GetClassInfoEx(hInst, className, ref check) != 0)
+                    atom = 1;
+                else
+                    Debug.WriteLine($"[ZenWindow] RegisterClassEx failed: 0x{Marshal.GetLastWin32Error():X8}");
             }
+            _classRegistered = true;
         }
 
-        // Apply best working: BLURBEHIND > HOSTBACKDROP > ACRYLIC > TRANSPARENT
-        foreach (int prefState in new[] { 3, 5, 4, 2 })
+        // WS_OVERLAPPEDWINDOW for proper non-client area
+        const uint WS_OVERLAPPEDWINDOW = 0x00CF0000u;
+        const uint EX_NOACTIVATE = 0x08000000u;
+        const uint EX_TOOLWINDOW = 0x00000080u;
+
+        _hWnd = CreateWindowEx(
+            EX_NOACTIVATE | EX_TOOLWINDOW,
+            className, IntPtr.Zero,
+            WS_OVERLAPPEDWINDOW,
+            0, 0, 100, 100,
+            IntPtr.Zero, IntPtr.Zero, hInst, IntPtr.Zero);
+
+        if (_hWnd == IntPtr.Zero)
         {
-            foreach (int flags in flagSets)
-            {
-                uint gc = (prefState == 4) ? 0x55111111u : 0u;
-                int hr = TrySwca(hwnd, prefState, flags, gc);
-                if (hr == 0)
-                {
-                    Debug.WriteLine($"[ZenWindow] ✓ Applied: {stateNames[prefState]} flags=0x{flags:X2}");
-                    TrySwca(hwnd, prefState, flags, gc); // apply again to be sure
-                    _swcaApplied = true;
-                    return;
-                }
-            }
+            int err = Marshal.GetLastWin32Error();
+            Debug.WriteLine($"[ZenWindow] CreateWindowEx FAILED: 0x{err:X8}");
+            throw new Win32Exception(err, $"CreateWindowEx failed: 0x{err:X8}");
         }
 
-        Debug.WriteLine("[ZenWindow] ✗ ALL accent states failed");
+        Debug.WriteLine($"[ZenWindow] hWnd = 0x{_hWnd.ToString("X8")}");
     }
 
-    private int TrySwca(IntPtr hwnd, int state, int accentFlags, uint gradientColor)
+    private void ApplyBlurBehind()
     {
-        var accent = new AccentPolicy
+        Debug.WriteLine("[ZenWindow] === ApplyBlurBehind ===");
+
+        // ---------- 1. DwmEnableBlurBehindWindow ----------
+        var blur = new DWM_BLURBEHIND
         {
-            AccentState = (AccentState)state,
-            AccentFlags = accentFlags,
-            GradientColor = gradientColor,
-            AnimationId = 0,
+            dwFlags = DWM_BB_ENABLE,
+            fEnable = true,
+            hRgnBlur = IntPtr.Zero,
+            fTransitionOnMaximized = false,
         };
 
-        var data = new WindowCompositionAttributeData
-        {
-            Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
-            Data = Marshal.AllocHGlobal(Marshal.SizeOf<AccentPolicy>()),
-            SizeOfData = Marshal.SizeOf<AccentPolicy>(),
-        };
+        int hr = DwmEnableBlurBehindWindow(_hWnd, ref blur);
+        Debug.WriteLine($"[ZenWindow] DwmEnableBlurBehindWindow → 0x{hr:X8} {(hr == 0 ? "✓" : "✗")}");
 
-        try
+        // ---------- 2. DARK MODE ----------
+        int dark = 1;
+        hr = DwmSetWindowAttribute(_hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+        Debug.WriteLine($"[ZenWindow] DARK_MODE → 0x{hr:X8} {(hr == 0 ? "✓" : "✗")}");
+
+        Debug.WriteLine("[ZenWindow] ✓ BlurBehind configured");
+    }
+
+    // ======================== Window Procedure ========================
+    private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    private const uint WM_ERASEBKGND = 0x0014;
+
+    private static IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    {
+        switch (msg)
         {
-            Marshal.StructureToPtr(accent, data.Data, false);
-            return SetWindowCompositionAttribute(hwnd, ref data);
+            case WM_ERASEBKGND:
+                // Return 1 → DefWindowProc doesn't paint background
+                return (IntPtr)1;
         }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[ZenWindow] SWCA exception: {ex.Message}");
-            return -1;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(data.Data);
-        }
+        return DefWindowProc(hWnd, msg, wParam, lParam);
     }
 }
