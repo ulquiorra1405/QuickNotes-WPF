@@ -105,6 +105,13 @@ public partial class ZenWindow : Window
     {
         _noteHandle = noteWindowHandle;
         InitializeComponent();
+
+        // Subscribe early — before anything touches the HWND
+        SourceInitialized += OnSourceInitialized;
+
+        // Force HWND creation now while we control the flow
+        _ = new WindowInteropHelper(this).Handle;
+        Debug.WriteLine("[ZenWindow] Constructor: HWND created");
     }
 
     public void ShowBehindNote()
@@ -140,11 +147,7 @@ public partial class ZenWindow : Window
         Width = width;
         Height = height;
 
-        // Listen for Hwnd creation so we can apply SWCA
-        SourceInitialized += OnSourceInitialized;
-
-        // Show the window — this triggers SourceInitialized
-        // Then reposition behind NoteWindow
+        // Show the window
         ShowWindow(helper.Handle, SW_SHOWNA);
 
         // Position behind NoteWindow (z-order)
