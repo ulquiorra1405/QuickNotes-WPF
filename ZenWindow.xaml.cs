@@ -2,7 +2,6 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -74,7 +73,10 @@ public partial class ZenWindow : Window
         _noteHandle = noteWindowHandle;
         InitializeComponent();
 
-        // HWND must exist for ShowBehindNote to work; create it now
+        // Don't steal focus when we show via WPF Show()
+        ShowActivated = false;
+
+        // Create HWND early so we can set DWM attributes
         SourceInitialized += OnSourceInitialized;
         _ = new WindowInteropHelper(this).Handle;
     }
@@ -94,22 +96,31 @@ public partial class ZenWindow : Window
         int height = _monitorRect.Bottom - _monitorRect.Top;
         Debug.WriteLine($"[ZenWindow] Capture region: {width}x{height} at ({_monitorRect.Left},{_monitorRect.Top})");
 
-        // 2. Capture the desktop
+        // 2. Set position/size BEFORE showing (avoid flashing at default coords)
+        var hwnd = new WindowInteropHelper(this).Handle;
+
+        // 3. Capture the desktop BEFORE showing (avoid capturing ourselves)
         DesktopImage.Source = CaptureScreen(_monitorRect);
 
-        // 3. Show the window (on first call) or unhide (on subsequent)
-        var hwnd = new WindowInteropHelper(this).Handle;
-        ShowWindow(hwnd, SW_SHOWNA);
+        // 4. Show via WPF Show() (first time) or Win32 ShowWindow (subsequent)
+        if (!_shown)
+        {
+            Left = _monitorRect.Left;
+            Top = _monitorRect.Top;
+            Width = width;
+            Height = height;
+            Show();
+        }
+        else
+        {
+            ShowWindow(hwnd, SW_SHOWNA);
+        }
         _shown = true;
 
-        // 4. Position behind NoteWindow, full monitor size
+        // 5. Position behind NoteWindow, full monitor size
         SetWindowPos(hwnd, _noteHandle,
             _monitorRect.Left, _monitorRect.Top, width, height,
             SWP_NOACTIVATE | SWP_FRAMECHANGED);
-
-        // 5. Force WPF to re-render now (image + blur + tint)
-        Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Background,
-            new Action(() => { /* pump the render pipeline */ }));
 
         Debug.WriteLine("[ZenWindow] ✓ Shown with blurred desktop capture");
     }
@@ -118,9 +129,8 @@ public partial class ZenWindow : Window
     {
         if (_shown)
         {
-            var helper = new WindowInteropHelper(this);
-            ShowWindow(helper.Handle, SW_HIDE);
-            DesktopImage.Source = null; // release captured bitmap memory
+            Visibility = Visibility.Collapsed;
+            DesktopImage.Source = null;
             _shown = false;
             Debug.WriteLine("[ZenWindow] Hidden");
         }
@@ -136,11 +146,9 @@ public partial class ZenWindow : Window
     {
         var hwnd = new WindowInteropHelper(this).Handle;
 
-        // Disable rounded corners so the backdrop fills the screen edge-to-edge
         int cornerPref = DWMWCP_DONOTROUND;
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPref, sizeof(int));
 
-        // Dark mode for the invisible title bar
         int dark = 1;
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
     }
@@ -152,16 +160,14 @@ public partial class ZenWindow : Window
 
         Debug.WriteLine($"[ZenWindow] Capturing screen...");
 
-        using var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+        using var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bitmap);
 
-        // Copy the visible desktop pixels
         g.CopyFromScreen(rect.Left, rect.Top, 0, 0,
             new System.Drawing.Size(width, height), CopyPixelOperation.SourceCopy);
 
         Debug.WriteLine($"[ZenWindow] Capture done, converting to BitmapSource");
 
-        // Convert System.Drawing.Bitmap → WPF BitmapSource
         var hbitmap = bitmap.GetHbitmap();
         try
         {
