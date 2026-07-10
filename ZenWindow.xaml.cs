@@ -13,9 +13,9 @@ namespace QuickNotes;
 ///
 /// Architecture:
 ///   1. WPF Window with AllowsTransparency=True → WS_EX_LAYERED with per-pixel alpha
-///   2. ACCENT_ENABLE_BLURBEHIND applied via SWCA after window is ready
-///   3. TintOverlay (semi-transparent black Rectangle in XAML) provides the dark tint
-///      on top of the blurred desktop
+///   2. TintOverlay Rectangle (semi-transparent black) fills the entire window,
+///      providing alpha pixels so DWM renders the SWCA blur effect on them
+///   3. ACCENT_ENABLE_BLURBEHIND applied via SWCA in SourceInitialized
 ///   4. Positioned behind NoteWindow on the same monitor
 ///   5. No focus stealing
 /// </summary>
@@ -63,7 +63,6 @@ public partial class ZenWindow : Window
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
         int X, int Y, int cx, int cy, uint uFlags);
     private const uint SWP_NOACTIVATE = 0x0010;
-    private const uint SWP_SHOWWINDOW = 0x0040;
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_FRAMECHANGED = 0x0020;
@@ -100,6 +99,7 @@ public partial class ZenWindow : Window
     // ======================== Fields ========================
     private readonly IntPtr _noteHandle;
     private bool _swcaApplied;
+    private bool _hasBeenShown;
 
     public ZenWindow(IntPtr noteWindowHandle)
     {
@@ -111,10 +111,21 @@ public partial class ZenWindow : Window
     {
         Debug.WriteLine("[ZenWindow] === ShowBehindNote ===");
 
-        var helper = new WindowInteropHelper(this);
-        IntPtr hwnd = helper.Handle; // forces creation of the Hwnd
+        if (_hasBeenShown)
+        {
+            // Already created — just reposition and show
+            var hwnd = new WindowInteropHelper(this).Handle;
+            SetWindowPos(hwnd, _noteHandle, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            ShowWindow(hwnd, SW_SHOWNA);
+            Debug.WriteLine("[ZenWindow] Shown again");
+            return;
+        }
 
-        // Position on NoteWindow's monitor BEFORE showing
+        // First time: position via Win32 before WPF measures, then show
+        var helper = new WindowInteropHelper(this);
+
+        // Set the WPF window position for the SourceInitialized callback
         var hMonitor = MonitorFromWindow(_noteHandle, MONITOR_DEFAULTTONEAREST);
         var mi = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
         GetMonitorInfo(hMonitor, ref mi);
@@ -123,26 +134,57 @@ public partial class ZenWindow : Window
         int height = mi.rcMonitor.Bottom - mi.rcMonitor.Top;
         Debug.WriteLine($"[ZenWindow] Placing at ({mi.rcMonitor.Left},{mi.rcMonitor.Top}) size={width}x{height}");
 
-        // Set size/position via SetWindowPos (bypasses WPF layout for speed)
-        SetWindowPos(hwnd, _noteHandle,
+        // Set WPF properties so the initial layout uses correct size
+        Left = mi.rcMonitor.Left;
+        Top = mi.rcMonitor.Top;
+        Width = width;
+        Height = height;
+
+        // Listen for Hwnd creation so we can apply SWCA
+        SourceInitialized += OnSourceInitialized;
+
+        // Show the window — this triggers SourceInitialized
+        // Then reposition behind NoteWindow
+        ShowWindow(helper.Handle, SW_SHOWNA);
+
+        // Position behind NoteWindow (z-order)
+        SetWindowPos(helper.Handle, _noteHandle, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+        _hasBeenShown = true;
+        Debug.WriteLine("[ZenWindow] Window shown");
+    }
+
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        Debug.WriteLine("[ZenWindow] SourceInitialized");
+
+        if (_swcaApplied) return;
+
+        var hwnd = new WindowInteropHelper(this).Handle;
+
+        // Position and size the window using its monitor
+        var hMonitor = MonitorFromWindow(_noteHandle, MONITOR_DEFAULTTONEAREST);
+        var mi = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
+        GetMonitorInfo(hMonitor, ref mi);
+
+        int width = mi.rcMonitor.Right - mi.rcMonitor.Left;
+        int height = mi.rcMonitor.Bottom - mi.rcMonitor.Top;
+
+        SetWindowPos(hwnd, IntPtr.Zero,
             mi.rcMonitor.Left, mi.rcMonitor.Top,
             width, height,
-            SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+            SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
-        // Show without activating
-        ShowWindow(hwnd, SW_SHOWNA);
+        // Apply DWM dark mode
+        int dark = 1;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+        Debug.WriteLine($"[ZenWindow] DARK_MODE set");
 
-        // Apply SWCA blur NOW, after the window is visible
-        if (!_swcaApplied)
-        {
-            ApplySystemBlur(hwnd);
-        }
-
-        // Force WPF to re-render the tint overlay on top of the blur
-        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
-            new Action(() => TintOverlay.InvalidateVisual()));
-
-        Debug.WriteLine("[ZenWindow] Window shown and blur applied");
+        // Apply SWCA BLURBEHIND
+        // The window now has content (TintOverlay with #90000000 = 56% opaque)
+        // DWM will see alpha > 0 pixels and render the blur effect
+        ApplyBlur(hwnd);
     }
 
     public void Hide()
@@ -158,16 +200,10 @@ public partial class ZenWindow : Window
         Close();
     }
 
-    private void ApplySystemBlur(IntPtr hwnd)
+    private void ApplyBlur(IntPtr hwnd)
     {
-        Debug.WriteLine("[ZenWindow] === ApplySystemBlur (WPF layered) ===");
+        Debug.WriteLine("[ZenWindow] === ApplyBlur (WPF layered, with content) ===");
 
-        // Force DWM dark mode on this window for deep dark appearance
-        int dark = 1;
-        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
-        Debug.WriteLine($"[ZenWindow] DARK_MODE → dark mode set");
-
-        // ---- Try all accent states and log ----
         var stateNames = new Dictionary<int, string>
         {
             {1, "GRADIENT"}, {2, "TRANSPARENTGRADIENT"}, {3, "BLURBEHIND"},
@@ -175,6 +211,7 @@ public partial class ZenWindow : Window
         };
         int[] flagSets = { 0x00, 0x20, 0x40, 0x20 | 0x40 };
 
+        // Try all state+flag combos
         foreach (int state in new[] { 1, 2, 3, 4, 5 })
         {
             foreach (int flags in flagSets)
@@ -186,8 +223,7 @@ public partial class ZenWindow : Window
             }
         }
 
-        // ---- Apply best working state ----
-        // Preference: BLURBEHIND > HOSTBACKDROP > ACRYLICBLURBEHIND > TRANSPARENTGRADIENT
+        // Apply best working: BLURBEHIND > HOSTBACKDROP > ACRYLIC > TRANSPARENT
         foreach (int prefState in new[] { 3, 5, 4, 2 })
         {
             foreach (int flags in flagSets)
@@ -197,25 +233,14 @@ public partial class ZenWindow : Window
                 if (hr == 0)
                 {
                     Debug.WriteLine($"[ZenWindow] ✓ Applied: {stateNames[prefState]} flags=0x{flags:X2}");
+                    TrySwca(hwnd, prefState, flags, gc); // apply again to be sure
                     _swcaApplied = true;
                     return;
                 }
             }
         }
 
-        // ---- Fallback: try DISABLED first then BLURBEHIND with no flags ----
-        // Sometimes calling ACCENT_DISABLED resets the state and then BLURBEHIND works
-        Debug.WriteLine("[ZenWindow] Trying reset+apply pattern...");
-        TrySwca(hwnd, 0, 0, 0); // disable first
-        int hr2 = TrySwca(hwnd, 3, 0, 0); // BLURBEHIND with no flags
-        Debug.WriteLine($"[ZenWindow] SWCA reset+BLURBEHIND(flags=0) → 0x{hr2:X8}");
-        if (hr2 == 0)
-        {
-            _swcaApplied = true;
-            return;
-        }
-
-        Debug.WriteLine("[ZenWindow] ✗ ALL accent states failed on WPF layered");
+        Debug.WriteLine("[ZenWindow] ✗ ALL accent states failed");
     }
 
     private int TrySwca(IntPtr hwnd, int state, int accentFlags, uint gradientColor)
