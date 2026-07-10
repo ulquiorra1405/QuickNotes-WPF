@@ -377,6 +377,7 @@ public partial class NoteWindow : Window
         const int resizeBorder = 5;
         if (msg == WM_NCHITTEST)
         {
+            if (_isZenMode) return (IntPtr)HTCLIENT;
             var pt = new Point((short)(lParam.ToInt32() & 0xFFFF), (short)((lParam.ToInt32() >> 16) & 0xFFFF));
             var rc = new RECT();
             GetWindowRect(hwnd, ref rc);
@@ -744,6 +745,7 @@ public partial class NoteWindow : Window
 
     private void TitleBar_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (_isZenMode) return;
         if (e.LeftButton != MouseButtonState.Pressed) return;
         if (e.OriginalSource is DependencyObject src)
         {
@@ -848,13 +850,13 @@ public partial class NoteWindow : Window
         _zenRestoreHeight = Height;
         _zenSavedFontSize = noteText.FontSize;
 
-        // Set up zenWrapper as an opaque card BEFORE maximize
+        // Set up zenCard as an opaque card BEFORE maximize
         var noteHex = _note.Color ?? "#F8F9FA";
         var noteColor = ParseColor(noteHex);
 
-        zenWrapper.Background = new SolidColorBrush(noteColor); // fully opaque
-        zenWrapper.CornerRadius = new CornerRadius(8);
-        zenWrapper.Effect = new DropShadowEffect
+        zenCard.Background = new SolidColorBrush(noteColor); // fully opaque
+        zenCard.CornerRadius = new CornerRadius(8);
+        zenCard.Effect = new DropShadowEffect
         {
             BlurRadius = 20,
             ShadowDepth = 4,
@@ -862,10 +864,8 @@ public partial class NoteWindow : Window
             Color = Colors.Black,
             Direction = 270
         };
-        zenWrapper.MaxWidth = 760;
-        zenWrapper.HorizontalAlignment = HorizontalAlignment.Center;
-        zenWrapper.Padding = new Thickness(24, 12, 24, 12);
-        zenWrapper.Margin = new Thickness(0);
+        zenCard.MaxWidth = 760;
+        zenCard.HorizontalAlignment = HorizontalAlignment.Center;
 
         // Capture the desktop BEFORE showing backdrop to avoid capturing ourselves
         var (monLeft, monTop, monWidth, monHeight) = Helpers.MonitorHelper.GetMonitorPhysicalRect(this);
@@ -874,12 +874,12 @@ public partial class NoteWindow : Window
         // Make content transparent so the backdrop shows through
         micaBackdrop.Background = Brushes.Transparent;
 
-        // Disable corner clipping so bars span full width on the backdrop
-        micaBackdrop.ClipToBounds = false;
+        // Clip content to card's rounded corners
+        zenCard.ClipToBounds = true;
 
-        // Restyle top/bottom bars for backdrop appearance
-        titleBar.Background = new SolidColorBrush(Color.FromArgb(0x30, 0, 0, 0));
-        colorBar.Background = new SolidColorBrush(Color.FromArgb(0x30, 0, 0, 0));
+        // Restyle top/bottom bars to sit on the card background
+        titleBar.Background = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
+        colorBar.Background = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
 
         // Show the backdrop layer (captured desktop + blur + tint)
         zenBackdropLayer.Visibility = Visibility.Visible;
@@ -901,22 +901,21 @@ public partial class NoteWindow : Window
         zenBackdropLayer.Visibility = Visibility.Collapsed;
         zenDesktopImage.Source = null;
 
-        // Restore corner clipping and bar appearance
-        micaBackdrop.ClipToBounds = true;
-        titleBar.Background = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
-        colorBar.Background = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
-
         // Restore normal backdrop
         ApplyMicaBackground();
 
-        // Reset zen wrapper to normal layout
-        zenWrapper.MaxWidth = double.PositiveInfinity;
-        zenWrapper.HorizontalAlignment = HorizontalAlignment.Stretch;
+        // Reset zen card to normal layout
+        zenCard.Background = null;
+        zenCard.CornerRadius = new CornerRadius(0);
+        zenCard.Effect = null;
+        zenCard.MaxWidth = double.PositiveInfinity;
+        zenCard.HorizontalAlignment = HorizontalAlignment.Stretch;
+        titleBar.Background = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
+        colorBar.Background = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
+
+        // Reset zen wrapper to normal layout (no-op but safe)
         zenWrapper.Padding = new Thickness(0);
         zenWrapper.Margin = new Thickness(0);
-        zenWrapper.Background = null;
-        zenWrapper.CornerRadius = new CornerRadius(0);
-        zenWrapper.Effect = null;
 
         // Restore window state BEFORE adjusting bars
         WindowState = WindowState.Normal;

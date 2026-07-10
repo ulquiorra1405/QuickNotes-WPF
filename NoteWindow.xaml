@@ -161,6 +161,11 @@
         <Border x:Name="micaBackdrop" CornerRadius="12" ClipToBounds="True">
         <Grid x:Name="rootContentGrid">
         <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Border x:Name="zenCard" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+        <Grid>
+        <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
@@ -1045,6 +1050,8 @@
         </Popup>
 
         </Grid>
+    </Border>
+    </Grid>
     </Border>
     </Grid>
     </Border>
