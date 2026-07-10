@@ -8,24 +8,49 @@ namespace QuickNotes;
 
 /// <summary>
 /// WPF backdrop window for Zen mode.
-/// Uses AllowsTransparency=True + DWM SystemBackdrop (DWMWA_SYSTEMBACKDROP_TYPE)
-/// for native acrylic blur on Win11 22H2+.
+/// Uses SetWindowCompositionAttribute with ACCENT_ENABLE_ACRYLICBLURBEHIND 
+/// on a layered (AllowsTransparency=True) WPF window.
 /// 
-/// Why WPF instead of pure Win32:
-/// - WPF with AllowsTransparency=True creates a WS_EX_LAYERED window with 
-///   proper per-pixel alpha → the DWM backdrop shows through transparent areas.
-/// - Pure Win32 POPUP windows always paint an opaque surface → they hide the backdrop.
+/// This is the original UWP acrylic approach — it works on layered windows
+/// because WPF's AllowsTransparency=True creates WS_EX_LAYERED, and
+/// SetWindowCompositionAttribute was designed for WS_EX_LAYERED windows.
 /// </summary>
 public partial class ZenWindow : Window
 {
-    // ======================== DWM Backdrop ========================
+    // ======================== SetWindowCompositionAttribute ========================
+    [DllImport("user32.dll")]
+    private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowCompositionAttributeData
+    {
+        public WindowCompositionAttribute Attribute;
+        public IntPtr Data;
+        public int SizeOfData;
+    }
+    private enum WindowCompositionAttribute { WCA_ACCENT_POLICY = 19 }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct AccentPolicy
+    {
+        public AccentState AccentState;
+        public int AccentFlags;
+        public uint GradientColor;
+        public int AnimationId;
+    }
+    private enum AccentState
+    {
+        ACCENT_DISABLED = 0,
+        ACCENT_ENABLE_GRADIENT = 1,
+        ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
+        ACCENT_ENABLE_BLURBEHIND = 3,
+        ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
+        ACCENT_ENABLE_HOSTBACKDROP = 5
+    }
+
+    // ======================== DWM backdrop as fallback ========================
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
-    private const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
-    private const int DWMSBT_TABBEDWINDOW = 3;  // Acrylic blur + tint
-    private const int DWMSBT_FLOATING = 4;      // Acrylic, more pronounced
-    private const int DWMSBT_MAINWINDOW = 2;    // Mica (no blur)
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
     // ======================== Monitor/DPI ========================
@@ -41,7 +66,6 @@ public partial class ZenWindow : Window
         public RECT rcWork;
         public uint dwFlags;
     }
-
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT { public int Left, Top, Right, Bottom; }
 
@@ -67,25 +91,18 @@ public partial class ZenWindow : Window
     {
         _noteHandle = noteWindowHandle;
         InitializeComponent();
+        SourceInitialized += OnSourceInitialized;
     }
 
-    /// <summary>
-    /// Shows the acrylic backdrop on the same monitor as NoteWindow.
-    /// Safe to call multiple times.
-    /// </summary>
     public void ShowBehindNote()
     {
         var handle = new WindowInteropHelper(this).Handle;
 
-        // Init DWM backdrop once
         if (!_dwmInitialized)
         {
-            Debug.WriteLine("[ZenWindow] Init DWM");
-            InitializeDwm(handle);
+            ApplyBackdrop(handle);
             _dwmInitialized = true;
         }
-
-        Debug.WriteLine("[ZenWindow] Positioning to NoteWindow's monitor");
 
         // Position on NoteWindow's monitor
         var hMonitor = MonitorFromWindow(_noteHandle, MONITOR_DEFAULTTONEAREST);
@@ -99,8 +116,6 @@ public partial class ZenWindow : Window
         double sx = 96.0 / dpiX;
         double sy = 96.0 / dpiY;
 
-        Debug.WriteLine($"[ZenWindow] Monitor: L={mi.rcMonitor.Left} T={mi.rcMonitor.Top} R={mi.rcMonitor.Right} B={mi.rcMonitor.Bottom}, DPI={dpiX}x{dpiY}");
-
         Left   = mi.rcMonitor.Left   * sx;
         Top    = mi.rcMonitor.Top    * sy;
         Width  = (mi.rcMonitor.Right - mi.rcMonitor.Left)   * sx;
@@ -108,7 +123,6 @@ public partial class ZenWindow : Window
 
         Show();
 
-        // Behind NoteWindow in z-order
         SetWindowPos(handle, _noteHandle, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
@@ -118,31 +132,76 @@ public partial class ZenWindow : Window
         Close();
     }
 
-    private void InitializeDwm(IntPtr handle)
+    private void OnSourceInitialized(object? sender, EventArgs e)
     {
-        // Try Tabbed (acrylic) → Floating → MainWindow (mica)
-        int[] types = [DWMSBT_TABBEDWINDOW, DWMSBT_FLOATING, DWMSBT_MAINWINDOW];
-        int hr = -1;
-        int applied = -1;
+        var handle = new WindowInteropHelper(this).Handle;
+        ApplyBackdrop(handle);
+        _dwmInitialized = true;
+    }
 
-        foreach (int t in types)
+    private void ApplyBackdrop(IntPtr handle)
+    {
+        // Try acrylic states in order: 4 → 5 → 3 → 2
+        Debug.WriteLine($"[ZenWindow] Applying backdrop on Win11 build {Environment.OSVersion.Version}");
+
+        // ACCENT_ENABLE_ACRYLICBLURBEHIND (4) — real acrylic with tint
+        int result = TryAccent(handle, AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x55111111, 0);
+        Debug.WriteLine($"[ZenWindow] ACRYLICBLURBEHIND → 0x{result:X8}");
+
+        if (result != 0)
         {
-            int typeVal = t;
-            hr = DwmSetWindowAttribute(handle, DWMWA_SYSTEMBACKDROP_TYPE, ref typeVal, sizeof(int));
-            Debug.WriteLine($"[ZenWindow] Backdrop type={t} hResult=0x{hr:X8}");
-            if (hr == 0)
-            {
-                applied = t;
-                break;
-            }
+            // ACCENT_ENABLE_HOSTBACKDROP (5) — Win11 alternative
+            result = TryAccent(handle, AccentState.ACCENT_ENABLE_HOSTBACKDROP, 0x55111111, 0);
+            Debug.WriteLine($"[ZenWindow] HOSTBACKDROP → 0x{result:X8}");
         }
 
-        Debug.WriteLine($"[ZenWindow] Applied backdrop type={applied}, hr={hr}");
+        if (result != 0)
+        {
+            // ACCENT_ENABLE_BLURBEHIND (3) — no tint, just blur
+            result = TryAccent(handle, AccentState.ACCENT_ENABLE_BLURBEHIND, 0, 0);
+            Debug.WriteLine($"[ZenWindow] BLURBEHIND → 0x{result:X8}");
+        }
 
-        // Dark mode
-        int darkMode = 1;
-        hr = DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
-        Debug.WriteLine($"[ZenWindow] Dark mode hResult=0x{hr:X8}");
+        if (result != 0)
+        {
+            // ACCENT_ENABLE_TRANSPARENTGRADIENT (2) — just a tint overlay
+            result = TryAccent(handle, AccentState.ACCENT_ENABLE_TRANSPARENTGRADIENT, 0x88111111, 0);
+            Debug.WriteLine($"[ZenWindow] TRANSPARENTGRADIENT → 0x{result:X8}");
+        }
+
+        Debug.WriteLine($"[ZenWindow] Backdrop result: 0x{result:X8}");
+    }
+
+    private static int TryAccent(IntPtr handle, AccentState state, uint gradientColor, int accentFlags)
+    {
+        var accent = new AccentPolicy
+        {
+            AccentState = state,
+            AccentFlags = accentFlags,
+            GradientColor = gradientColor,
+            AnimationId = 0
+        };
+
+        var data = new WindowCompositionAttributeData
+        {
+            Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
+            Data = Marshal.AllocHGlobal(Marshal.SizeOf<AccentPolicy>()),
+            SizeOfData = Marshal.SizeOf<AccentPolicy>()
+        };
+
+        try
+        {
+            Marshal.StructureToPtr(accent, data.Data, false);
+            return SetWindowCompositionAttribute(handle, ref data);
+        }
+        catch
+        {
+            return -1;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(data.Data);
+        }
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
