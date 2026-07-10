@@ -122,9 +122,9 @@ public partial class ZenWindow : Window
         {
             // Already created — just reposition and show
             var hwnd = new WindowInteropHelper(this).Handle;
+            ShowWindow(hwnd, SW_SHOWNA);
             SetWindowPos(hwnd, _noteHandle, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            ShowWindow(hwnd, SW_SHOWNA);
             Debug.WriteLine("[ZenWindow] Shown again");
             return;
         }
@@ -154,6 +154,15 @@ public partial class ZenWindow : Window
         SetWindowPos(helper.Handle, _noteHandle, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
+        // Apply blur AFTER WPF has rendered the tint overlay
+        // (Dispatcher.Background priority = after layout/render)
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+            new Action(() =>
+            {
+                Debug.WriteLine("[ZenWindow] Dispatcher callback: applying blur");
+                ApplyBlur(helper.Handle);
+            }));
+
         _hasBeenShown = true;
         Debug.WriteLine("[ZenWindow] Window shown");
     }
@@ -166,28 +175,12 @@ public partial class ZenWindow : Window
 
         var hwnd = new WindowInteropHelper(this).Handle;
 
-        // Position and size the window using its monitor
-        var hMonitor = MonitorFromWindow(_noteHandle, MONITOR_DEFAULTTONEAREST);
-        var mi = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
-        GetMonitorInfo(hMonitor, ref mi);
-
-        int width = mi.rcMonitor.Right - mi.rcMonitor.Left;
-        int height = mi.rcMonitor.Bottom - mi.rcMonitor.Top;
-
-        SetWindowPos(hwnd, IntPtr.Zero,
-            mi.rcMonitor.Left, mi.rcMonitor.Top,
-            width, height,
-            SWP_NOACTIVATE | SWP_FRAMECHANGED);
-
-        // Apply DWM dark mode
+        // Apply DWM dark mode early
         int dark = 1;
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
-        Debug.WriteLine($"[ZenWindow] DARK_MODE set");
+        Debug.WriteLine($"[ZenWindow] DARK_MODE set early");
 
-        // Apply SWCA BLURBEHIND
-        // The window now has content (TintOverlay with #90000000 = 56% opaque)
-        // DWM will see alpha > 0 pixels and render the blur effect
-        ApplyBlur(hwnd);
+        // Store HWND for later use
     }
 
     public void Hide()
