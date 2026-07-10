@@ -8,12 +8,12 @@ namespace QuickNotes;
 
 /// <summary>
 /// WPF backdrop window for Zen mode.
-/// Uses SetWindowCompositionAttribute with ACCENT_ENABLE_ACRYLICBLURBEHIND 
-/// on a layered (AllowsTransparency=True) WPF window.
+/// Uses SetWindowCompositionAttribute for native Windows blur on a layered window.
 /// 
-/// This is the original UWP acrylic approach — it works on layered windows
-/// because WPF's AllowsTransparency=True creates WS_EX_LAYERED, and
-/// SetWindowCompositionAttribute was designed for WS_EX_LAYERED windows.
+/// Strategy:
+///   1. ACCENT_ENABLE_BLURBEHIND (3) — pure blur, no tint (works on layered windows, even on 24H2)
+///   2. WPF TintOverlay on top provides the dark frosted tint
+///   3. Fallbacks for systems where blur behind doesn't work
 /// </summary>
 public partial class ZenWindow : Window
 {
@@ -48,11 +48,6 @@ public partial class ZenWindow : Window
         ACCENT_ENABLE_HOSTBACKDROP = 5
     }
 
-    // ======================== DWM backdrop as fallback ========================
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-
     // ======================== Monitor/DPI ========================
     [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
@@ -83,7 +78,7 @@ public partial class ZenWindow : Window
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
 
-    private bool _dwmInitialized;
+    private bool _backdropInitialized;
     private bool _allowClose;
     private readonly IntPtr _noteHandle;
 
@@ -91,17 +86,17 @@ public partial class ZenWindow : Window
     {
         _noteHandle = noteWindowHandle;
         InitializeComponent();
-        SourceInitialized += OnSourceInitialized;
     }
 
     public void ShowBehindNote()
     {
         var handle = new WindowInteropHelper(this).Handle;
 
-        if (!_dwmInitialized)
+        // Init backdrop once
+        if (!_backdropInitialized)
         {
-            ApplyBackdrop(handle);
-            _dwmInitialized = true;
+            TryBackdropBlur(handle);
+            _backdropInitialized = true;
         }
 
         // Position on NoteWindow's monitor
@@ -123,6 +118,7 @@ public partial class ZenWindow : Window
 
         Show();
 
+        // Behind NoteWindow in z-order
         SetWindowPos(handle, _noteHandle, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
@@ -132,47 +128,47 @@ public partial class ZenWindow : Window
         Close();
     }
 
-    private void OnSourceInitialized(object? sender, EventArgs e)
+    /// <summary>
+    /// Try accent states in order: BLURBEHIND (3, pure blur + no tint) →
+    /// ACRYLICBLURBEHIND (4, blur+tint) → HOSTBACKDROP (5) → TRANSPARENTGRADIENT (2).
+    /// 
+    /// With BLURBEHIND we get native OS blur; the WPF TintOverlay provides the tint.
+    /// </summary>
+    private void TryBackdropBlur(IntPtr handle)
     {
-        var handle = new WindowInteropHelper(this).Handle;
-        ApplyBackdrop(handle);
-        _dwmInitialized = true;
+        Debug.WriteLine($"[ZenWindow] Applying backdrop, build {Environment.OSVersion.Version}");
+
+        // --- PRIORITY: pure blur (3) + our own tint overlay ---
+        // BLURBEHIND works on layered windows and gives a crisp blur even on 24H2
+        var states = new[]
+        {
+            (State: AccentState.ACCENT_ENABLE_BLURBEHIND, Color: 0u, Name: "BLURBEHIND"),
+            (State: AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND, Color: 0x55_11_11_11u, Name: "ACRYLICBLURBEHIND"),
+            (State: AccentState.ACCENT_ENABLE_HOSTBACKDROP, Color: 0x55_11_11_11u, Name: "HOSTBACKDROP"),
+            (State: AccentState.ACCENT_ENABLE_TRANSPARENTGRADIENT, Color: 0x88_11_11_11u, Name: "TRANSPARENTGRADIENT"),
+        };
+
+        int hr = -1;
+        int succeededIndex = -1;
+
+        for (int i = 0; i < states.Length; i++)
+        {
+            var (state, color, name) = states[i];
+            hr = SetAccent(handle, state, color, 0);
+            Debug.WriteLine($"[ZenWindow] {name} → 0x{hr:X8}");
+            if (hr == 0)
+            {
+                succeededIndex = i;
+                Debug.WriteLine($"[ZenWindow] Using {name}");
+                break;
+            }
+        }
+
+        if (succeededIndex == -1)
+            Debug.WriteLine("[ZenWindow] ALL accent states FAILED");
     }
 
-    private void ApplyBackdrop(IntPtr handle)
-    {
-        // Try acrylic states in order: 4 → 5 → 3 → 2
-        Debug.WriteLine($"[ZenWindow] Applying backdrop on Win11 build {Environment.OSVersion.Version}");
-
-        // ACCENT_ENABLE_ACRYLICBLURBEHIND (4) — real acrylic with tint
-        int result = TryAccent(handle, AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x55111111, 0);
-        Debug.WriteLine($"[ZenWindow] ACRYLICBLURBEHIND → 0x{result:X8}");
-
-        if (result != 0)
-        {
-            // ACCENT_ENABLE_HOSTBACKDROP (5) — Win11 alternative
-            result = TryAccent(handle, AccentState.ACCENT_ENABLE_HOSTBACKDROP, 0x55111111, 0);
-            Debug.WriteLine($"[ZenWindow] HOSTBACKDROP → 0x{result:X8}");
-        }
-
-        if (result != 0)
-        {
-            // ACCENT_ENABLE_BLURBEHIND (3) — no tint, just blur
-            result = TryAccent(handle, AccentState.ACCENT_ENABLE_BLURBEHIND, 0, 0);
-            Debug.WriteLine($"[ZenWindow] BLURBEHIND → 0x{result:X8}");
-        }
-
-        if (result != 0)
-        {
-            // ACCENT_ENABLE_TRANSPARENTGRADIENT (2) — just a tint overlay
-            result = TryAccent(handle, AccentState.ACCENT_ENABLE_TRANSPARENTGRADIENT, 0x88111111, 0);
-            Debug.WriteLine($"[ZenWindow] TRANSPARENTGRADIENT → 0x{result:X8}");
-        }
-
-        Debug.WriteLine($"[ZenWindow] Backdrop result: 0x{result:X8}");
-    }
-
-    private static int TryAccent(IntPtr handle, AccentState state, uint gradientColor, int accentFlags)
+    private static int SetAccent(IntPtr handle, AccentState state, uint gradientColor, int accentFlags)
     {
         var accent = new AccentPolicy
         {
@@ -194,9 +190,10 @@ public partial class ZenWindow : Window
             Marshal.StructureToPtr(accent, data.Data, false);
             return SetWindowCompositionAttribute(handle, ref data);
         }
-        catch
+        catch (Exception ex)
         {
-            return -1;
+            Debug.WriteLine($"[ZenWindow] Exception: {ex.Message}");
+            return Marshal.GetHRForException(ex);
         }
         finally
         {
