@@ -1103,11 +1103,12 @@ public partial class NoteWindow : Window
             ApplyMicaBackground();
             UpdateDwmTheme();
 
-            // In Zen mode, update the card background to match the new color
+            // In Zen mode, update the card background and keep micaBackdrop transparent
             if (_isZenMode)
             {
                 var noteHex = _note.Color ?? "#F8F9FA";
                 zenCard.Background = new SolidColorBrush(ParseColor(noteHex));
+                micaBackdrop.Background = Brushes.Transparent;
             }
         }
     }
