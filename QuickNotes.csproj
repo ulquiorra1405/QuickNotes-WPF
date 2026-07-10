@@ -8,6 +8,7 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>false</UseWindowsForms>
     <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
