@@ -76,6 +76,9 @@ public partial class NoteWindow : Window
     private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hwnd, ref RECT lpRect);
+
+    [DllImport("gdi32.dll")]
+    private static extern bool DeleteObject(IntPtr hObject);
     private const int WM_NCLBUTTONDOWN = 0x00A1;
     private const int HTCAPTION = 2;
     private const int HTCLIENT = 1;
@@ -154,7 +157,6 @@ public partial class NoteWindow : Window
     private DispatcherTimer? _zenAuroraTimer;
     private Rectangle? _zenFrostOverlay;
     private Style? _savedParaStyle;
-    private ZenWindow? _zenBackdropWindow;
 
     private static readonly Color[] HighlightColors =
     [
@@ -663,13 +665,6 @@ public partial class NoteWindow : Window
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
-        // Close the backdrop window if Zen mode created one
-        if (_zenBackdropWindow != null)
-        {
-            _zenBackdropWindow.ForceClose();
-            _zenBackdropWindow = null;
-        }
-
         SaveRichText();
         _note.IsDirty = false;
 
@@ -872,19 +867,15 @@ public partial class NoteWindow : Window
         zenWrapper.Padding = new Thickness(24, 12, 24, 12);
         zenWrapper.Margin = new Thickness(0);
 
-        // Show the acrylic backdrop window behind NoteWindow, on the same monitor
-        var noteHandle = new WindowInteropHelper(this).Handle;
-        if (_zenBackdropWindow == null)
-        {
-            _zenBackdropWindow = new ZenWindow(noteHandle);
-        }
-        _zenBackdropWindow.ShowBehindNote();
+        // Capture the desktop BEFORE showing backdrop to avoid capturing ourselves
+        var (monLeft, monTop, monWidth, monHeight) = Helpers.MonitorHelper.GetMonitorPhysicalRect(this);
+        zenDesktopImage.Source = CaptureScreen(monLeft, monTop, monWidth, monHeight);
 
-        // Bring focus back to NoteWindow (Show() activates ZenWindow)
-        this.Activate();
-
-        // Make backdrop fully transparent → ZenWindow's acrylic shows through
+        // Make content transparent so the backdrop shows through
         micaBackdrop.Background = Brushes.Transparent;
+
+        // Show the backdrop layer (captured desktop + blur + tint)
+        zenBackdropLayer.Visibility = Visibility.Visible;
 
         // Maximize
         WindowState = WindowState.Maximized;
@@ -899,9 +890,9 @@ public partial class NoteWindow : Window
         if (!_isZenMode) return;
         _isZenMode = false;
 
-        // Hide acrylic backdrop window
-        if (_zenBackdropWindow != null)
-            _zenBackdropWindow.Hide();
+        // Hide the backdrop layer
+        zenBackdropLayer.Visibility = Visibility.Collapsed;
+        zenDesktopImage.Source = null;
 
         // Restore normal backdrop
         ApplyMicaBackground();
@@ -1107,6 +1098,31 @@ public partial class NoteWindow : Window
     {
         if (e.ChangedButton == MouseButton.Left)
             colorPopup.IsOpen = !colorPopup.IsOpen;
+    }
+
+    /// <summary>
+    /// Captures a region of the screen into a WPF BitmapSource.
+    /// Used by Zen mode to snapshot the desktop behind the note.
+    /// </summary>
+    private static BitmapSource CaptureScreen(int left, int top, int width, int height)
+    {
+        using var bitmap = new System.Drawing.Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using var g = System.Drawing.Graphics.FromImage(bitmap);
+
+        g.CopyFromScreen(left, top, 0, 0,
+            new System.Drawing.Size(width, height), System.Drawing.CopyPixelOperation.SourceCopy);
+
+        var hbitmap = bitmap.GetHbitmap();
+        try
+        {
+            return Imaging.CreateBitmapSourceFromHBitmap(
+                hbitmap, IntPtr.Zero, Int32Rect.Empty,
+                BitmapSizeOptions.FromEmptyOptions());
+        }
+        finally
+        {
+            DeleteObject(hbitmap);
+        }
     }
 
     private void BuildEmojiPicker()

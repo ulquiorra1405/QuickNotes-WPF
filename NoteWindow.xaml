@@ -145,6 +145,19 @@
         <Border.Effect>
             <DropShadowEffect ShadowDepth="2" Color="#000000" Opacity="0.4" BlurRadius="12" Direction="270"/>
         </Border.Effect>
+        <Grid>
+        <!-- Zen backdrop layer (captured desktop + blur + tint) -->
+        <Grid x:Name="zenBackdropLayer" Visibility="Collapsed">
+            <Image x:Name="zenDesktopImage" Stretch="Fill"
+                   RenderOptions.BitmapScalingMode="HighQuality"
+                   HorizontalAlignment="Stretch"
+                   VerticalAlignment="Stretch">
+                <Image.Effect>
+                    <BlurEffect Radius="24" KernelType="Gaussian"/>
+                </Image.Effect>
+            </Image>
+            <Rectangle Fill="#90000000"/>
+        </Grid>
         <Border x:Name="micaBackdrop" CornerRadius="12" ClipToBounds="True">
         <Grid x:Name="rootContentGrid">
         <Grid.RowDefinitions>
@@ -1033,6 +1046,7 @@
 
         </Grid>
     </Border>
+    </Grid>
     </Border>
 </Window>
 

@@ -27,6 +27,26 @@ internal static class MonitorHelper
             (info.rcWork.Bottom - info.rcWork.Top) / scale);
     }
 
+    /// <summary>
+    /// Gets the raw physical pixel bounds of the monitor that contains the given window.
+    /// Used by GDI CopyFromScreen (which requires physical pixel coordinates).
+    /// </summary>
+    public static (int Left, int Top, int Width, int Height) GetMonitorPhysicalRect(Window window)
+    {
+        var hwnd = new WindowInteropHelper(window).Handle;
+        var hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+
+        var info = new MONITORINFOEX();
+        info.cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
+
+        if (!GetMonitorInfo(hMonitor, ref info))
+            return (0, 0, 1920, 1080); // fallback
+
+        int w = info.rcMonitor.Right - info.rcMonitor.Left;
+        int h = info.rcMonitor.Bottom - info.rcMonitor.Top;
+        return (info.rcMonitor.Left, info.rcMonitor.Top, w, h);
+    }
+
     private const uint MONITOR_DEFAULTTONEAREST = 2;
     private const int MDT_EFFECTIVE_DPI = 0;
 
