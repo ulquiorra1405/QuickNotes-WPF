@@ -48,6 +48,8 @@ public partial class MainWindow : Window
     private Point _dragStart;
     private bool _isDragging;
     private DockWindow? _dockWindow;
+    private string _viewMode = "list";
+    private Rect _listWindowRect;
     private string _activeSection = "all";
     private string _searchFilter = "";
     private bool _sidebarExpanded;
@@ -122,6 +124,15 @@ public partial class MainWindow : Window
                 store.SaveSettings();
             }
         };
+
+        // Restore view mode
+        _viewMode = store.ViewMode;
+        if (_viewMode == "kanban")
+        {
+            kanbanToggle.IsChecked = true;
+            scrollViewer.Visibility = Visibility.Collapsed;
+            kanbanScroll.Visibility = Visibility.Visible;
+        }
 
         // Restore active section after Load
         Loaded += (_, _) =>
@@ -643,6 +654,7 @@ public partial class MainWindow : Window
 
     private void Card_MouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (_viewMode == "kanban") return; // drag handled by kanban
         if (_activeSection == "timeline") return; // no drag reorder in timeline
         if (e.LeftButton != MouseButtonState.Pressed) return;
         if (e.OriginalSource is ButtonBase or TextBox or TextBlock) return;
@@ -886,6 +898,389 @@ public partial class MainWindow : Window
         return null;
     }
 
+    // === Kanban view ===
+
+    private void KanbanToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        bool isKanban = kanbanToggle.IsChecked == true;
+        _viewMode = isKanban ? "kanban" : "list";
+        store.ViewMode = _viewMode;
+
+        if (isKanban)
+        {
+            // Save current geometry before switching
+            _listWindowRect = new Rect(Left, Top, Width, Height);
+
+            scrollViewer.Visibility = Visibility.Collapsed;
+            kanbanScroll.Visibility = Visibility.Visible;
+            UpdateKanbanColumns();
+
+            // Animate to work area size
+            var workArea = SystemParameters.WorkArea;
+            AnimateWindowRect(workArea.Left, workArea.Top, workArea.Width, workArea.Height);
+        }
+        else
+        {
+            kanbanScroll.Visibility = Visibility.Collapsed;
+            scrollViewer.Visibility = Visibility.Visible;
+
+            // Restore saved geometry
+            if (_listWindowRect.Width > 0 && _listWindowRect.Height > 0)
+                AnimateWindowRect(_listWindowRect.X, _listWindowRect.Y, _listWindowRect.Width, _listWindowRect.Height);
+        }
+    }
+
+    private void AnimateWindowRect(double x, double y, double w, double h)
+    {
+        var dur = TimeSpan.FromMilliseconds(300);
+        var ease = new QuadraticEase { EasingMode = EasingMode.EaseInOut };
+
+        var story = new Storyboard();
+
+        void AddAnim(DependencyProperty prop, double from, double to)
+        {
+            var anim = new DoubleAnimation(from, to, dur) { EasingFunction = ease };
+            Storyboard.SetTarget(anim, this);
+            Storyboard.SetTargetProperty(anim, new PropertyPath(prop));
+            story.Children.Add(anim);
+        }
+
+        AddAnim(Window.LeftProperty, Left, x);
+        AddAnim(Window.TopProperty, Top, y);
+        AddAnim(Window.WidthProperty, Width, w);
+        AddAnim(Window.HeightProperty, Height, h);
+
+        story.Completed += (_, _) =>
+        {
+            Left = x;
+            Top = y;
+            Width = w;
+            Height = h;
+        };
+        story.Begin(this, true);
+    }
+
+    private void UpdateKanbanColumns()
+    {
+        kanbanPanel.Children.Clear();
+
+        // Collect filtered notes from current filter state
+        var allFiltered = store.Notes.Where(n => FilterNote(n)).ToList();
+
+        var isLight = _currentTheme == "light";
+        var colBg = new SolidColorBrush(isLight ? Color.FromRgb(0xE8, 0xE8, 0xE8) : Color.FromRgb(0x2A, 0x2A, 0x2A));
+        var headerFg = new SolidColorBrush(isLight ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xDD, 0xDD, 0xDD));
+        var countFg = new SolidColorBrush(isLight ? Color.FromArgb(0x88, 0x00, 0x00, 0x00) : Color.FromArgb(0x88, 0xBB, 0xBB, 0xBB));
+
+        // "Sin libreta" column (null NotebookId)
+        var unassignedNotes = allFiltered.Where(n => n.NotebookId == null).ToList();
+        int totalUnassigned = store.Notes.Count(n => n.NotebookId == null && !n.IsDeleted && !n.IsArchived);
+        AddKanbanColumn(null, "📄", "Sin libreta", totalUnassigned, unassignedNotes, colBg, headerFg, countFg);
+
+        // One column per notebook
+        foreach (var nb in store.Notebooks)
+        {
+            var notes = allFiltered.Where(n => n.NotebookId == nb.Id).ToList();
+            int total = store.Notes.Count(n => n.NotebookId == nb.Id && !n.IsDeleted && !n.IsArchived);
+            AddKanbanColumn(nb.Id, nb.Icon, nb.Name, total, notes, colBg, headerFg, countFg);
+        }
+    }
+
+    private void AddKanbanColumn(Guid? notebookId, string icon, string name, int total, List<Note> notes,
+        Brush colBg, Brush headerFg, Brush countFg)
+    {
+        var colBorder = new Border
+        {
+            MinWidth = 200,
+            MaxWidth = 280,
+            Width = 240,
+            Margin = new Thickness(4),
+            CornerRadius = new CornerRadius(8),
+            Background = colBg,
+            Tag = notebookId?.ToString() ?? "",
+        };
+
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+        // Header
+        var headerPanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        var headerIcon = new TextBlock
+        {
+            Text = icon,
+            FontSize = 14,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 6, 0),
+        };
+        headerPanel.Children.Add(headerIcon);
+
+        var headerText = new TextBlock
+        {
+            Text = name,
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = headerFg,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        headerPanel.Children.Add(headerText);
+
+        var headerCount = new TextBlock
+        {
+            Text = notes.Count == total ? $"({total})" : $"({notes.Count}/{total})",
+            FontSize = 10,
+            Foreground = countFg,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 0, 0),
+        };
+        headerPanel.Children.Add(headerCount);
+
+        var headerBorder = new Border
+        {
+            Padding = new Thickness(10, 8, 10, 8),
+            Child = headerPanel,
+        };
+        Grid.SetRow(headerBorder, 0);
+        grid.Children.Add(headerBorder);
+
+        // Notes list per column
+        var itemsControl = new ItemsControl
+        {
+            ItemTemplate = (System.Windows.DataTemplate)this.FindResource("kanbanCardTemplate"),
+            Focusable = false,
+        };
+
+        // ObservableCollection wrapper so items control can display them
+        var observableNotes = new System.Collections.ObjectModel.ObservableCollection<Note>(notes);
+        itemsControl.ItemsSource = observableNotes;
+
+        var colContent = new Grid();
+
+        // Drop-zone hint for empty columns
+        var dropHint = new TextBlock
+        {
+            Text = "⤵  Arrastra notas aquí",
+            FontSize = 11,
+            Foreground = countFg,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 20, 0, 0),
+            Visibility = notes.Count == 0 ? Visibility.Visible : Visibility.Collapsed,
+        };
+        colContent.Children.Add(dropHint);
+
+        var scroll = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Padding = new Thickness(0, 0, 0, 8),
+            Margin = new Thickness(0),
+        };
+        if (notes.Count > 0)
+            scroll.Content = itemsControl;
+        Grid.SetRow(scroll, 1);
+        colContent.Children.Add(scroll);
+
+        Grid.SetRow(colContent, 1);
+        grid.Children.Add(colContent);
+
+        colBorder.Child = grid;
+        kanbanPanel.Children.Add(colBorder);
+    }
+
+    private bool FilterNote(Note note)
+    {
+        // Same logic as the list view filter
+        string baseSection = _activeSection;
+        Guid? filterNotebook = null;
+        Guid? filterTag = null;
+
+        if (_activeSection.StartsWith("notebook:"))
+        {
+            baseSection = "notebook";
+            if (Guid.TryParse(_activeSection.AsSpan(9), out var nbId))
+                filterNotebook = nbId;
+        }
+        else if (_activeSection.StartsWith("tag:"))
+        {
+            baseSection = "tag";
+            if (Guid.TryParse(_activeSection.AsSpan(4), out var tId))
+                filterTag = tId;
+        }
+
+        bool baseMatch = baseSection switch
+        {
+            "all" => !note.IsArchived && !note.IsDeleted,
+            "archived" => note.IsArchived && !note.IsDeleted,
+            "trash" => note.IsDeleted,
+            "timeline" => !note.IsArchived && !note.IsDeleted,
+            "notebook" => !note.IsArchived && !note.IsDeleted,
+            "tag" => !note.IsArchived && !note.IsDeleted,
+            _ => !note.IsArchived && !note.IsDeleted
+        };
+        if (!baseMatch) return false;
+
+        if (filterNotebook.HasValue && note.NotebookId != filterNotebook.Value)
+            return false;
+        if (filterTag.HasValue && !note.TagIds.Contains(filterTag.Value))
+            return false;
+
+        if (!string.IsNullOrEmpty(_searchFilter))
+        {
+            bool match = note.Title.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase)
+                || note.PlainText.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase);
+            note.IsSearchMatch = match;
+            return match;
+        }
+
+        note.IsSearchMatch = true;
+        return true;
+    }
+
+    // === Kanban drag & drop ===
+
+    // === Kanban drag & drop ===
+
+    private Note? _kanbanDragNote;
+    private Border? _kanbanDragColumn;
+    private Border? _kanbanDragTargetCol;
+    private Point _kanbanDragStart;
+    private bool _kanbanIsDragging;
+
+    private void Kanban_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        if (e.OriginalSource is ButtonBase or TextBox) return;
+
+        var card = FindParent<NoteCard>(e.OriginalSource as DependencyObject);
+        if (card?.DataContext is Note note)
+        {
+            _kanbanDragNote = note;
+            _kanbanDragColumn = FindKanbanColumn(card);
+            _kanbanDragStart = e.GetPosition(kanbanScroll);
+            _kanbanIsDragging = false;
+        }
+    }
+
+    private void Kanban_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (_kanbanDragNote == null || _kanbanDragColumn == null || e.LeftButton != MouseButtonState.Pressed) return;
+
+        var pos = e.GetPosition(kanbanScroll);
+        var delta = (pos - _kanbanDragStart).Length;
+
+        if (!_kanbanIsDragging && delta > 10)
+        {
+            _kanbanIsDragging = true;
+            // Highlight source column
+            SetColumnDragHighlight(_kanbanDragColumn, true);
+        }
+
+        if (!_kanbanIsDragging) return;
+
+        // Find which column is under the cursor
+        var targetCol = FindKanbanColumnAt(pos);
+
+        // Unhighlight previous target
+        if (_kanbanDragTargetCol != null && _kanbanDragTargetCol != targetCol)
+            SetColumnDragHighlight(_kanbanDragTargetCol, false);
+
+        // Highlight new target
+        if (targetCol != null && targetCol != _kanbanDragColumn)
+        {
+            _kanbanDragTargetCol = targetCol;
+            SetColumnDragHighlight(_kanbanDragTargetCol, true);
+        }
+        else
+        {
+            _kanbanDragTargetCol = null;
+        }
+    }
+
+    private void Kanban_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_kanbanIsDragging)
+        {
+            // Clear all drag highlights
+            if (_kanbanDragColumn != null)
+                SetColumnDragHighlight(_kanbanDragColumn, false);
+            if (_kanbanDragTargetCol != null)
+            {
+                SetColumnDragHighlight(_kanbanDragTargetCol, false);
+
+                var targetIdStr = _kanbanDragTargetCol.Tag?.ToString() ?? "";
+                var sourceIdStr = _kanbanDragColumn?.Tag?.ToString() ?? "";
+
+                if (targetIdStr != sourceIdStr && _kanbanDragNote != null)
+                {
+                    Guid? targetNotebookId = string.IsNullOrEmpty(targetIdStr) ? null : Guid.Parse(targetIdStr);
+
+                    if (_kanbanDragNote.NotebookId != targetNotebookId)
+                    {
+                        _kanbanDragNote.NotebookId = targetNotebookId;
+                        _kanbanDragNote.IsDirty = true;
+                        _kanbanDragNote.LastModified = DateTime.Now;
+                        store.Save();
+                        UpdateKanbanColumns();
+                        ShowStatus($"Nota movida a '{GetColumnName(targetNotebookId)}'", false);
+                    }
+                }
+            }
+        }
+
+        _kanbanIsDragging = false;
+        _kanbanDragNote = null;
+        _kanbanDragColumn = null;
+        _kanbanDragTargetCol = null;
+    }
+
+    private void SetColumnDragHighlight(Border column, bool highlight)
+    {
+        if (highlight)
+        {
+            column.BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0x60, 0xA0, 0xFF));
+            column.BorderThickness = new Thickness(2);
+        }
+        else
+        {
+            column.BorderBrush = Brushes.Transparent;
+            column.BorderThickness = new Thickness(0);
+        }
+    }
+
+    private Border? FindKanbanColumn(DependencyObject? element)
+    {
+        while (element != null)
+        {
+            if (element is Border b && b.Parent == kanbanPanel)
+                return b;
+            element = VisualTreeHelper.GetParent(element);
+        }
+        return null;
+    }
+
+    private Border? FindKanbanColumnAt(Point pos)
+    {
+        foreach (var child in kanbanPanel.Children)
+        {
+            if (child is Border b)
+            {
+                var xform = b.TransformToAncestor(kanbanScroll);
+                var origin = xform.Transform(new Point(0, 0));
+                var rect = new System.Windows.Rect(origin.X, origin.Y, b.ActualWidth, b.ActualHeight);
+                if (rect.Contains(pos))
+                    return b;
+            }
+        }
+        return null;
+    }
+
+    private string GetColumnName(Guid? notebookId)
+    {
+        if (notebookId == null) return "Sin libreta";
+        var nb = store.Notebooks.FirstOrDefault(n => n.Id == notebookId.Value);
+        return nb?.Name ?? "?";
+    }
+
     private void Topmost_Changed(object sender, RoutedEventArgs e)
     {
         Topmost = pinBtn.IsChecked == true;
@@ -904,6 +1299,40 @@ public partial class MainWindow : Window
             var src = e.OriginalSource as DependencyObject;
             if (src is ButtonBase or TextBox) return;
             DragMove();
+        }
+    }
+
+    private void MaximizeRestore_Click(object sender, RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized)
+        {
+            WindowState = WindowState.Normal;
+
+            // If we were in kanban when maximized, restore kanban geometry
+            if (_viewMode == "kanban" && _listWindowRect.Width > 0 && _listWindowRect.Height > 0)
+                AnimateWindowRect(_listWindowRect.X, _listWindowRect.Y, _listWindowRect.Width, _listWindowRect.Height);
+
+            if (maxBtnText != null)
+            {
+                maxBtnText.Text = "□";
+                ToolTipService.SetToolTip(maxBtn, "Maximizar");
+            }
+        }
+        else
+        {
+            // Save geometry before maximizing
+            _listWindowRect = new Rect(Left, Top, Width, Height);
+
+            var workArea = SystemParameters.WorkArea;
+            AnimateWindowRect(workArea.Left, workArea.Top, workArea.Width, workArea.Height);
+
+            WindowState = WindowState.Maximized;
+
+            if (maxBtnText != null)
+            {
+                maxBtnText.Text = "❐";
+                ToolTipService.SetToolTip(maxBtn, "Restaurar");
+            }
         }
     }
 
@@ -1112,6 +1541,7 @@ public partial class MainWindow : Window
         titleBar.Background = new SolidColorBrush(titleBg);
         statusBar.Background = new SolidColorBrush(statusBg);
         scrollViewer.Background = new SolidColorBrush(bg);
+        kanbanScroll.Background = new SolidColorBrush(bg);
 
         // Update foregrounds for all controls in title bar
         foreach (var child in titleBarGrid.Children)
@@ -2042,6 +2472,10 @@ public partial class MainWindow : Window
 
         _view.Refresh();
         UpdateCounters();
+
+        // Refresh kanban columns if visible
+        if (_viewMode == "kanban" && kanbanScroll.Visibility == Visibility.Visible)
+            UpdateKanbanColumns();
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

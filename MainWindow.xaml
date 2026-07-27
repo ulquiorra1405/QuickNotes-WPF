@@ -198,6 +198,9 @@
             </Setter>
         </Style>
 
+        <DataTemplate x:Key="kanbanCardTemplate">
+            <views:NoteCard Margin="0,1"/>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -214,6 +217,8 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
@@ -324,6 +329,16 @@
                               Stretch="Uniform" Width="18" Height="18"
                               Fill="{DynamicResource SidebarIconBrush}"/>
                     </ToggleButton>
+                    <ToggleButton x:Name="kanbanToggle" Grid.Column="4"
+                                  Style="{StaticResource HeaderBtn}"
+                                  Checked="KanbanToggle_Changed"
+                                  Unchecked="KanbanToggle_Changed"
+                                  ToolTip="Vista Kanban">
+                        <Path Data="{StaticResource IconKanban}"
+                              Stretch="Uniform" Width="18" Height="18"
+                              Stroke="{DynamicResource SidebarIconBrush}"
+                              StrokeThickness="1.5"/>
+                    </ToggleButton>
                     <Button x:Name="addBtn" Grid.Column="3"
                             Style="{StaticResource HeaderBtn}"
                             Click="AddNote_Click"
@@ -344,7 +359,7 @@
                             <StackPanel x:Name="templatePanel" />
                         </Border>
                     </Popup>
-                    <Button x:Name="minBtn" Grid.Column="4"
+                    <Button x:Name="minBtn" Grid.Column="5"
                             Style="{StaticResource HeaderBtn}"
                             Click="Minimize_Click"
                             ToolTip="Minimizar al Dock">
@@ -352,6 +367,14 @@
                           Stroke="{DynamicResource SidebarIconBrush}"
                           StrokeThickness="1.5" Width="18" Height="18"/>
                 </Button>
+                    <Button x:Name="maxBtn" Grid.Column="6"
+                            Style="{StaticResource HeaderBtn}"
+                            Click="MaximizeRestore_Click"
+                            ToolTip="Maximizar">
+                        <TextBlock x:Name="maxBtnText" Text="□" FontSize="14"
+                                   Foreground="{DynamicResource SidebarIconBrush}"
+                                   VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </Button>
 
                 </Grid>
             </Border>
@@ -528,6 +551,18 @@
 
                 <!-- Vertical separator -->
                 <Rectangle x:Name="sidebarSepV" Grid.Column="0" HorizontalAlignment="Right" Width="1" Fill="#30FFFFFF" IsHitTestVisible="False"/>
+
+                <!-- Kanban view -->
+                <ScrollViewer x:Name="kanbanScroll" Grid.Column="1"
+                              Visibility="Collapsed"
+                              Background="#1E1E1E"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled"
+                              PreviewMouseLeftButtonDown="Kanban_MouseDown"
+                              PreviewMouseMove="Kanban_MouseMove"
+                              PreviewMouseLeftButtonUp="Kanban_MouseUp">
+                    <StackPanel x:Name="kanbanPanel" Orientation="Horizontal" Margin="8,0"/>
+                </ScrollViewer>
 
                 <!-- Notes list (existing) -->
                 <ScrollViewer x:Name="scrollViewer" Grid.Column="1"

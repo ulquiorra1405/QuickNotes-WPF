@@ -36,6 +36,7 @@ public class NotesStore
     public bool AnimationsEnabled { get; set; } = true;
     public string OpenNoteIds { get; set; } = "";
     public string SidebarSection { get; set; } = "all";
+    public string ViewMode { get; set; } = "list";
 
     public NotesStore()
     {
@@ -426,6 +427,7 @@ public class NotesStore
         SaveSetting(conn, "AnimationsEnabled", AnimationsEnabled ? "1" : "0");
         SaveSetting(conn, "OpenNoteIds", OpenNoteIds ?? "");
         SaveSetting(conn, "SidebarSection", SidebarSection ?? "all");
+        SaveSetting(conn, "ViewMode", ViewMode ?? "list");
     }
 
     private static void SaveSetting(SqliteConnection conn, string key, string? value)
@@ -465,6 +467,7 @@ public class NotesStore
                 case "AnimationsEnabled": AnimationsEnabled = val == "1"; break;
                 case "OpenNoteIds": OpenNoteIds = val; break;
                 case "SidebarSection": SidebarSection = val; break;
+                case "ViewMode": ViewMode = val; break;
             }
         }
     }
