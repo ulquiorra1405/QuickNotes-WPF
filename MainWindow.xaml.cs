@@ -918,6 +918,7 @@ public partial class MainWindow : Window
             // Animate to work area size
             var workArea = SystemParameters.WorkArea;
             AnimateWindowRect(workArea.Left, workArea.Top, workArea.Width, workArea.Height);
+            UpdateMaxBtnState();
         }
         else
         {
@@ -927,6 +928,7 @@ public partial class MainWindow : Window
             // Restore saved geometry
             if (_listWindowRect.Width > 0 && _listWindowRect.Height > 0)
                 AnimateWindowRect(_listWindowRect.X, _listWindowRect.Y, _listWindowRect.Width, _listWindowRect.Height);
+            UpdateMaxBtnState();
         }
     }
 
@@ -1308,32 +1310,40 @@ public partial class MainWindow : Window
         {
             WindowState = WindowState.Normal;
 
-            // If we were in kanban when maximized, restore kanban geometry
+            // If kanban with saved geometry, animate restore
             if (_viewMode == "kanban" && _listWindowRect.Width > 0 && _listWindowRect.Height > 0)
                 AnimateWindowRect(_listWindowRect.X, _listWindowRect.Y, _listWindowRect.Width, _listWindowRect.Height);
 
-            if (maxBtnText != null)
-            {
-                maxBtnText.Text = "□";
-                ToolTipService.SetToolTip(maxBtn, "Maximizar");
-            }
+            UpdateMaxBtnState();
         }
         else
         {
             // Save geometry before maximizing
             _listWindowRect = new Rect(Left, Top, Width, Height);
 
-            var workArea = SystemParameters.WorkArea;
-            AnimateWindowRect(workArea.Left, workArea.Top, workArea.Width, workArea.Height);
-
-            WindowState = WindowState.Maximized;
-
-            if (maxBtnText != null)
+            if (_viewMode == "kanban")
             {
-                maxBtnText.Text = "❐";
-                ToolTipService.SetToolTip(maxBtn, "Restaurar");
+                // Kanban: custom expand to work area (not true WindowState maximize)
+                var workArea = SystemParameters.WorkArea;
+                AnimateWindowRect(workArea.Left, workArea.Top, workArea.Width, workArea.Height);
             }
+            else
+            {
+                // List mode: native WPF maximize — no animation, preserves RestoreBounds
+                WindowState = WindowState.Maximized;
+            }
+
+            UpdateMaxBtnState();
         }
+    }
+
+    private void UpdateMaxBtnState()
+    {
+        if (maxBtnText == null) return;
+
+        bool isExpanded = WindowState == WindowState.Maximized || _viewMode == "kanban";
+        maxBtnText.Text = isExpanded ? "❐" : "□";
+        ToolTipService.SetToolTip(maxBtn, isExpanded ? "Restaurar" : "Maximizar");
     }
 
     private void Minimize_Click(object sender, RoutedEventArgs e)
