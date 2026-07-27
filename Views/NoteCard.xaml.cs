@@ -105,7 +105,7 @@ public partial class NoteCard : UserControl
         {
             var pinBtn = FindVisualChild<Button>(this);
             if (pinBtn != null)
-                UpdatePinVisual(pinBtn, note, false);
+                UpdatePinVisual(pinBtn, note);
         }
 
         UpdateReminderBadge();
@@ -264,26 +264,26 @@ public partial class NoteCard : UserControl
         {
             note.IsPinned = !note.IsPinned;
             note.IsMimetized = false;
-            UpdatePinVisual((Button)sender, note, true);
+            UpdatePinVisual((Button)sender, note);
             RaiseEvent(new RoutedEventArgs(PinToggleEvent));
         }
     }
 
-    private void UpdatePinVisual(Button btn, Note note, bool cardHovered)
+    private void UpdatePinVisual(Button btn, Note note)
     {
         var dash = btn.Template.FindName("dashText", btn) as TextBlock;
         var hover = btn.Template.FindName("pinHoverText", btn) as Path;
         var pin = btn.Template.FindName("pinText", btn) as Path;
         if (dash == null || hover == null || pin == null) return;
 
-        double toDash = 0, toHover = 0, toPin = 0;
-        if (note.IsPinned) { toPin = 1; }
-        else if (cardHovered) { toHover = 1; }
-        else { toDash = 1; }
+        // Opacity logic for pin button
+        dash.Opacity = note.IsPinned ? 0 : 1;
+        pin.Opacity = note.IsPinned ? 1 : 0;
+        hover.Opacity = 0; // Hover is only on mouse over, not a state of the note itself
 
-        dash.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(toDash, 150));
-        hover.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(toHover, 150));
-        pin.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(toPin, 150));
+        // Animate based on actual values (no longer relying on cardHovered)
+        dash.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(note.IsPinned ? 0 : 1, 150));
+        pin.BeginAnimation(OpacityProperty, AnimationHelper.MakeAnimation(note.IsPinned ? 1 : 0, 150));
     }
 
     // === Title ===

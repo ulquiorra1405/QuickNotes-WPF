@@ -223,6 +223,8 @@ public class NotesStore
             addMimetized.ExecuteNonQuery();
         }
 
+
+
         return conn;
     }
 
@@ -511,7 +513,7 @@ public class NotesStore
             WinLeft = r.IsDBNull(idxWl) ? double.NaN : r.GetDouble(idxWl),
             WinTop = r.IsDBNull(idxWt) ? double.NaN : r.GetDouble(idxWt),
             WinWidth = r.IsDBNull(idxWw) ? double.NaN : r.GetDouble(idxWw),
-            WinHeight = r.IsDBNull(idxWh) ? double.NaN : r.GetDouble(idxWh),
+            WinHeight = r.IsDBNull(idxWh) ? double.NaN : r.GetDouble(idxWh)
         };
     }
 
