@@ -1483,6 +1483,10 @@ public partial class NoteWindow : Window
         if (attachIcon != null)
             attachIcon.Stroke = fg;
 
+        // Emoji selector button (not in a named panel, so set Foreground directly)
+        if (emojiBtn != null)
+            emojiBtn.Foreground = fg;
+
         // Dynamic close button
         if (closeBtnPath != null)
             closeBtnPath.Stroke = fg;
@@ -1494,6 +1498,13 @@ public partial class NoteWindow : Window
         // Dynamic minimize button
         if (minBtnPath != null)
             minBtnPath.Stroke = fg;
+
+        // Dynamic attachment bar
+        if (attachmentBarIcon != null)
+            attachmentBarIcon.Stroke = fg;
+        if (attachmentBar != null)
+            attachmentBar.Background = new SolidColorBrush(
+                dark ? Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x14, 0x00, 0x00, 0x00));
 
         // Style search bar dynamically
         var searchIconFg = new SolidColorBrush(
@@ -1516,6 +1527,9 @@ public partial class NoteWindow : Window
         // searchCounter foreground is updated in UpdateSearchCounter
 
         ApplyScrollbarReversal(noteText, _note.Color);
+
+        // Rebuild attachment chips with correct theme colors
+        RefreshAttachments();
     }
 
     private static void SetPanelForeground(Panel panel, Brush brush)
@@ -2535,7 +2549,7 @@ public partial class NoteWindow : Window
 
     private void NoteText_ContextMenuOpening(object? sender, ContextMenuEventArgs e)
     {
-        var menu = BuildStyledContextMenu();
+        var menu = BuildStyledContextMenu(IsDarkColor(_note.Color));
 
         // Standard edit items
         AddStyledItem(menu, "Cortar", cmd: ApplicationCommands.Cut);
@@ -2726,21 +2740,28 @@ public partial class NoteWindow : Window
 
     // ── Styled context menu helper ──
 
-    private ContextMenu BuildStyledContextMenu()
+    private ContextMenu BuildStyledContextMenu(bool isDark)
     {
-        var xaml = @"<ContextMenu xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
+        var bg = isDark ? "#2A2A2A" : "#F0F0F0";
+        var fg = isDark ? "#CCFFFFFF" : "#CC3A3A3A";
+        var border = isDark ? "#40FFFFFF" : "#40000000";
+        var sepFg = isDark ? "40,FF,FF,FF" : "40,00,00,00";
+        var hover = isDark ? "#3FFFFFFF" : "#20000000";
+        var pressed = isDark ? "#6FFFFFFF" : "#40000000";
+
+        var xaml = $@"<ContextMenu xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
                     xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'
-                    Background='#2A2A2A' Foreground='#CCFFFFFF'
-                    BorderBrush='#40FFFFFF' BorderThickness='1'
+                    Background='{bg}' Foreground='{fg}'
+                    BorderBrush='{border}' BorderThickness='1'
                     FontSize='13' HasDropShadow='False'>
   <ContextMenu.Template>
     <ControlTemplate TargetType='ContextMenu'>
-      <Border Background='{TemplateBinding Background}'
-              BorderBrush='{TemplateBinding BorderBrush}'
-              BorderThickness='{TemplateBinding BorderThickness}'
+      <Border Background='{{TemplateBinding Background}}'
+              BorderBrush='{{TemplateBinding BorderBrush}}'
+              BorderThickness='{{TemplateBinding BorderThickness}}'
               CornerRadius='8'
               Padding='4'>
-        <ScrollViewer Style='{x:Null}' Padding='0' Margin='0'
+        <ScrollViewer Style='{{x:Null}}' Padding='0' Margin='0'
                       HorizontalScrollBarVisibility='Hidden'
                       VerticalScrollBarVisibility='Auto'
                       HorizontalContentAlignment='Stretch'>
@@ -2753,7 +2774,7 @@ public partial class NoteWindow : Window
     <Style TargetType='MenuItem'>
       <Setter Property='Background' Value='Transparent'/>
       <Setter Property='BorderThickness' Value='0'/>
-      <Setter Property='Foreground' Value='#CCFFFFFF'/>
+      <Setter Property='Foreground' Value='{fg}'/>
       <Setter Property='FontSize' Value='13'/>
       <Setter Property='Height' Value='30'/>
       <Setter Property='Padding' Value='10,0'/>
@@ -2761,9 +2782,9 @@ public partial class NoteWindow : Window
         <Setter.Value>
           <ControlTemplate TargetType='MenuItem'>
             <Border x:Name='bg'
-                    Background='{TemplateBinding Background}'
+                    Background='{{TemplateBinding Background}}'
                     CornerRadius='4'
-                    Padding='{TemplateBinding Padding}'
+                    Padding='{{TemplateBinding Padding}}'
                     SnapsToDevicePixels='True'
                     HorizontalAlignment='Stretch'>
               <ContentPresenter ContentSource='Header'
@@ -2773,10 +2794,10 @@ public partial class NoteWindow : Window
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property='IsHighlighted' Value='True'>
-                <Setter TargetName='bg' Property='Background' Value='#3FFFFFFF'/>
+                <Setter TargetName='bg' Property='Background' Value='{hover}'/>
               </Trigger>
               <Trigger Property='IsPressed' Value='True'>
-                <Setter TargetName='bg' Property='Background' Value='#6FFFFFFF'/>
+                <Setter TargetName='bg' Property='Background' Value='{pressed}'/>
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -2792,7 +2813,7 @@ public partial class NoteWindow : Window
 
     private void SetupEditorContextMenu()
     {
-        var menu = BuildStyledContextMenu();
+        var menu = BuildStyledContextMenu(IsDarkColor(_note.Color));
 
         var cut = new MenuItem { Header = "Cortar" }; cut.Click += (_, _) => noteText.Cut();
         var copy = new MenuItem { Header = "Copiar" }; copy.Click += (_, _) => noteText.Copy();
@@ -2815,9 +2836,14 @@ public partial class NoteWindow : Window
 
     private Border BuildAttachmentChip(NoteAttachment att)
     {
+        var isDark = IsDarkColor(_note.Color);
+        var fg = isDark ? Colors.White : Color.FromArgb(0xCC, 0x3A, 0x3A, 0x3A);
+        var chipBg = isDark ? Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x20, 0x00, 0x00, 0x00);
+        var hoverBg = isDark ? Color.FromArgb(0x50, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x35, 0x00, 0x00, 0x00);
+
         var border = new Border
         {
-            Background = new SolidColorBrush(Color.FromArgb(0x30, 0x00, 0x00, 0x00)),
+            Background = new SolidColorBrush(chipBg),
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(4, 1, 4, 1),
             Margin = new Thickness(2, 0, 2, 0),
@@ -2826,7 +2852,11 @@ public partial class NoteWindow : Window
             ToolTip = $"{att.FileName} ({att.SizeDisplay})",
         };
 
-        var ctxMenu = BuildStyledContextMenu();
+        // Hover states
+        border.MouseEnter += (_, _) => border.Background = new SolidColorBrush(hoverBg);
+        border.MouseLeave += (_, _) => border.Background = new SolidColorBrush(chipBg);
+
+        var ctxMenu = BuildStyledContextMenu(isDark);
 
         void AddAttItem(string header, string action)
         {
@@ -2837,7 +2867,7 @@ public partial class NoteWindow : Window
 
         AddAttItem("Abrir archivo", "Open");
         AddAttItem("Abrir ubicación", "OpenLocation");
-        ctxMenu.Items.Add(new Separator { Background = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)) });
+        ctxMenu.Items.Add(new Separator { Background = new SolidColorBrush(Color.FromArgb(0x40, fg.R, fg.G, fg.B)) });
         AddAttItem("Quitar adjunto", "Remove");
 
         border.ContextMenu = ctxMenu;
@@ -2850,18 +2880,28 @@ public partial class NoteWindow : Window
         };
 
         var stack = new StackPanel { Orientation = Orientation.Horizontal };
-        stack.Children.Add(new TextBlock
+
+        // SVG icon (replaces emoji)
+        if (FindResource(att.IconKey) is StreamGeometry geo)
         {
-            Text = att.Icon,
-            FontSize = 10,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 2, 0),
-        });
+            stack.Children.Add(new System.Windows.Shapes.Path
+            {
+                Data = geo,
+                Stretch = Stretch.Uniform,
+                Width = 10,
+                Height = 10,
+                Stroke = new SolidColorBrush(fg),
+                StrokeThickness = 1.5,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 3, 0),
+            });
+        }
+
         stack.Children.Add(new TextBlock
         {
             Text = att.FileName,
             FontSize = 10,
-            Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
+            Foreground = new SolidColorBrush(fg),
             VerticalAlignment = VerticalAlignment.Center,
             MaxWidth = 100,
             TextTrimming = TextTrimming.CharacterEllipsis,

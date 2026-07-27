@@ -132,7 +132,6 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <Button Grid.Column="0" Width="16" Height="18"
                         Background="Transparent" Cursor="Hand"
@@ -303,16 +302,26 @@
                         </WrapPanel.Style>
                     </WrapPanel>
 
-                    <!-- Attachment indicator -->
+                    <!-- Reminder + Attachment indicators + separator + buttons -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
-                        <Path Data="{StaticResource IconLink}"
-                              Stretch="Uniform" Width="10" Height="10"
-                              VerticalAlignment="Center"
-                              Margin="0,0,4,0"
-                              Fill="{Binding TextForeground}"
-                              ToolTip="Tiene adjuntos">
-                            <Path.Style>
-                                <Style TargetType="Path">
+                        <!-- Reminder indicator -->
+                        <Border Width="26" Height="26" CornerRadius="4"
+                                Background="Transparent" VerticalAlignment="Center"
+                                ToolTip="Tiene recordatorio">
+                            <Path x:Name="reminderBadge"
+                                  Data="{StaticResource IconBell}"
+                                  Stretch="Uniform" Width="14" Height="14"
+                                  VerticalAlignment="Center" HorizontalAlignment="Center"
+                                  Stroke="{Binding TextForeground}"
+                                  StrokeThickness="1.5"
+                                  Visibility="Collapsed"/>
+                        </Border>
+                        <!-- Attachment indicator -->
+                        <Border Width="26" Height="26" CornerRadius="4"
+                                Background="Transparent" VerticalAlignment="Center"
+                                ToolTip="Tiene adjuntos">
+                            <Border.Style>
+                                <Style TargetType="Border">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding HasAttachments}" Value="True">
@@ -320,8 +329,17 @@
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </Path.Style>
-                        </Path>
+                            </Border.Style>
+                            <Path Data="{StaticResource IconPaperclip}"
+                                  Stretch="Uniform" Width="14" Height="14"
+                                  VerticalAlignment="Center" HorizontalAlignment="Center"
+                                  Stroke="{Binding TextForeground}"
+                                  StrokeThickness="1.0"/>
+                        </Border>
+                        <!-- Separator -->
+                        <Rectangle Width="1" Height="16" Fill="{Binding TextForeground}"
+                                   Opacity="0.25" VerticalAlignment="Center" Margin="2,0"/>
+                        <!-- Action buttons -->
                         <Button Style="{DynamicResource CardBtn}"
                                 Foreground="{Binding TextForeground}"
                                 ToolTip="Abrir nota"

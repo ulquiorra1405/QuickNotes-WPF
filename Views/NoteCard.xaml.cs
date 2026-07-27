@@ -116,35 +116,20 @@ public partial class NoteCard : UserControl
     private void UpdateReminderBadge()
     {
         if (DataContext is not Note note) return;
-        if (Application.Current.MainWindow is MainWindow mw)
+        if (Application.Current.MainWindow is not MainWindow mw) return;
+
+        var reminder = mw.GetStore().GetRemindersForNote(note.Id).FirstOrDefault(r => !r.IsCompleted);
+        var badge = FindVisualChild<System.Windows.Shapes.Path>(this, p => p.Name == "reminderBadge");
+        if (badge != null)
         {
-            var hasReminder = mw.GetStore().GetRemindersForNote(note.Id).Any(r => !r.IsCompleted);
-            // Find or create the badge Path in the card
-            var badge = FindVisualChild<System.Windows.Shapes.Path>(this, p => p.Name == "reminderBadge");
-            if (badge == null)
+            badge.Visibility = reminder != null ? Visibility.Visible : Visibility.Collapsed;
+            if (reminder != null)
             {
-                // Create programmatically — attach to the header grid
-                if (FindVisualChild<Ellipse>(this) is Ellipse ellipse && VisualTreeHelper.GetParent(ellipse) is Grid headerGrid)
-                {
-                    badge = new System.Windows.Shapes.Path
-                    {
-                        Name = "reminderBadge",
-                        Data = (System.Windows.Media.StreamGeometry)FindResource("IconBell"),
-                        Stretch = System.Windows.Media.Stretch.Uniform,
-                        Width = 10,
-                        Height = 10,
-                        VerticalAlignment = VerticalAlignment.Center,
-                        Margin = new Thickness(0, 0, 4, 0),
-                        IsHitTestVisible = false,
-                        Fill = (System.Windows.Media.Brush)FindResource("SidebarIconBrush"),
-                        Visibility = Visibility.Collapsed,
-                    };
-                    Grid.SetColumn(badge, 1);
-                    headerGrid.Children.Add(badge);
-                }
+                var border = VisualTreeHelper.GetParent(badge) as FrameworkElement;
+                if (border != null)
+                    border.ToolTip = reminder.DueAt.ToString("dd MMM yyyy, HH:mm",
+                        new System.Globalization.CultureInfo("es-ES"));
             }
-            if (badge != null)
-                badge.Visibility = hasReminder ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 

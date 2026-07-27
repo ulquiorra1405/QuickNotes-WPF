@@ -728,18 +728,18 @@
 
         <!-- Attachment bar -->
         <Border Grid.Row="2" x:Name="attachmentBar"
-                Background="#14000000" Padding="6,2"
+                Padding="6,2"
                 Height="28" Visibility="Collapsed">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <Path Grid.Column="0"
+                <Path Grid.Column="0" x:Name="attachmentBarIcon"
                       Data="{StaticResource IconPaperclip}"
                       Stretch="Uniform" Width="12" Height="12"
                       VerticalAlignment="Center" Margin="2,0,4,0"
-                      Fill="#88DDDDDD"/>
+                      StrokeThickness="1.5"/>
                 <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Hidden"
                               HorizontalScrollBarVisibility="Auto"
                               VerticalAlignment="Center">
@@ -802,16 +802,11 @@
                         </Border>
                     </Popup>
                     <Rectangle Width="1" Fill="{Binding TextForeground}" Opacity="0.25" Margin="3,2"/>
-                    <Button x:Name="emojiBtn" Width="24" Height="24"
+                    <Button x:Name="emojiBtn" Width="24" Height="22"
                             Style="{StaticResource TitleBtn}"
-                            FontSize="16"
-                            Foreground="{Binding TextForeground}"
+                            FontSize="14"
                             ToolTip="Icono para el dock"
-                            Click="EmojiBtn_Click">
-                        <Path Data="{StaticResource IconMask}"
-                              Stretch="Uniform" Width="18" Height="18"
-                              Fill="{Binding TextForeground}"/>
-                    </Button>
+                            Click="EmojiBtn_Click"/>
                     <Popup x:Name="emojiPopup" Placement="Top"
                            PlacementTarget="{Binding ElementName=emojiBtn}"
                            StaysOpen="True" AllowsTransparency="True"

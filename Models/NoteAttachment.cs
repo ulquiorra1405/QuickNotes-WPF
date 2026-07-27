@@ -45,4 +45,22 @@ public class NoteAttachment
             };
         }
     }
+
+    /// <summary>SVG icon key for the attachment type (used in chip rendering).</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string IconKey
+    {
+        get
+        {
+            var ext = Path.GetExtension(FileName).ToLowerInvariant();
+            return ext switch
+            {
+                ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp" => "IconImage",
+                ".mp3" or ".wav" or ".flac" or ".ogg" or ".m4a" => "IconAudio",
+                ".mp4" or ".avi" or ".mkv" or ".mov" or ".webm" => "IconOther",
+                ".pdf" or ".doc" or ".docx" or ".xls" or ".xlsx" or ".txt" or ".md" => "IconText",
+                _ => "IconOther"
+            };
+        }
+    }
 }
