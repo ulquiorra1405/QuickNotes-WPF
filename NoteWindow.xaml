@@ -865,6 +865,14 @@
                               Stretch="Uniform" Width="14" Height="14"
                               StrokeThickness="1.5"/>
                     </Button>
+                    <Button x:Name="attachBtn"
+                            Width="24" Height="22" Cursor="Hand" ToolTip="Adjuntar archivo"
+                            Style="{StaticResource TitleBtn}"
+                            Click="AttachBtn_Click">
+                        <Path x:Name="attachIcon" Data="{StaticResource IconPaperclip}"
+                              Stretch="Uniform" Width="14" Height="14"
+                              StrokeThickness="1.5"/>
+                    </Button>
                 </StackPanel>
 
                 <StackPanel x:Name="bottomRightPanel" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">

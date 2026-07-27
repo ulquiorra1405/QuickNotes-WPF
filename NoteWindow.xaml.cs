@@ -1479,6 +1479,10 @@ public partial class NoteWindow : Window
         if (hideCompletedIcon != null)
             hideCompletedIcon.Stroke = fg;
 
+        // Dynamic attach button
+        if (attachIcon != null)
+            attachIcon.Stroke = fg;
+
         // Dynamic close button
         if (closeBtnPath != null)
             closeBtnPath.Stroke = fg;
@@ -3426,6 +3430,35 @@ public partial class NoteWindow : Window
     {
         var iconKey = _hideCompleted ? "IconEyeClose" : "IconEye";
         hideCompletedIcon.Data = (System.Windows.Media.StreamGeometry)FindResource(iconKey);
+    }
+
+    private void AttachBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "All files (*.*)|*.*",
+            Multiselect = true,
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        var imgExts = new HashSet<string> { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
+        bool any = false;
+        foreach (var file in dlg.FileNames)
+        {
+            var ext = Path.GetExtension(file).ToLowerInvariant();
+            if (imgExts.Contains(ext))
+            {
+                InsertImageFromFile(file);
+                any = true;
+            }
+            else
+            {
+                if (_store.AddAttachment(_note.Id, file))
+                    any = true;
+            }
+        }
+        if (any)
+            RefreshAttachments();
     }
 
     private void ApplyHideCompleted()
